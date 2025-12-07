@@ -1,0 +1,25 @@
+import express, { Request, Response } from "express";
+import cors from "cors";
+
+const app = express();
+
+// Render envia a porta em process.env.PORT; localmente usamos 3000
+const PORT = process.env.PORT || 3000;
+
+// Middlewares básicos
+app.use(cors());
+app.use(express.json());
+
+// Rota principal: GET /
+app.get("/", (req: Request, res: Response) => {
+  res.json({
+    status: "ok",
+    message: "Backend do monitor rodando no Render 🚀",
+    version: "1.0.0",
+  });
+});
+
+// Sobe o servidor
+app.listen(PORT, () => {
+  console.log(`✅ monitor-backend rodando na porta ${PORT}`);
+});
