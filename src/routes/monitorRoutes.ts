@@ -1,20 +1,18 @@
 // src/routes/monitorRoutes.ts
 import { Router } from "express";
-import { assignFirmware, AssignFirmwarePayload } from "../services/monitorService";
+import {
+  assignFirmware,
+  AssignFirmwarePayload
+} from "../services/monitorService";
+import {
+  runSchemeBuilderBackend,
+  SchemeBuilderParams
+} from "../services/schemeBuilderService";
 
 const router = Router();
 
 /**
  * POST /api/monitor/assign-firmware
- * Exemplo de payload:
- * {
- *   "clientId": 37,
- *   "vehicleId": 1940478,
- *   "serial": "913018234",
- *   "firmwareId": 2681,
- *   "firmwareHex": "0A79.35",
- *   "requestedBy": "Marcus_Prod"
- * }
  */
 router.post("/assign-firmware", async (req, res) => {
   const body = req.body as Partial<AssignFirmwarePayload>;
@@ -37,6 +35,47 @@ router.post("/assign-firmware", async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Erro interno ao processar comando de firmware."
+    });
+  }
+});
+
+/**
+ * POST /api/monitor/scheme-builder
+ * Exemplo de body:
+ * {
+ *   "clientId": 218572,
+ *   "clientName": "TRANSLIMA",
+ *   "vehicleId": 1940478,
+ *   "vehicleSettingId": 5592,
+ *   "comment": "Comentário opcional"
+ * }
+ */
+router.post("/scheme-builder", async (req, res) => {
+  const body = req.body as Partial<SchemeBuilderParams>;
+
+  if (
+    !body.clientId ||
+    !body.clientName ||
+    !body.vehicleId ||
+    !body.vehicleSettingId
+  ) {
+    return res.status(400).json({
+      status: "error",
+      message:
+        "Campos obrigatórios: clientId, clientName, vehicleId, vehicleSettingId."
+    });
+  }
+
+  try {
+    const result = await runSchemeBuilderBackend(body as SchemeBuilderParams);
+    const httpStatus = result.status === "ok" ? 200 : 502;
+
+    res.status(httpStatus).json(result);
+  } catch (err: any) {
+    console.error("[POST /api/monitor/scheme-builder] Erro inesperado:", err);
+    res.status(500).json({
+      status: "error",
+      message: "Erro interno ao executar SchemeBuilder no backend."
     });
   }
 });
