@@ -1,0 +1,30 @@
+// src/clients/monitorClient.ts
+import axios, { AxiosRequestConfig } from "axios";
+import { getTraffiToken } from "../services/tokenCache";
+
+const baseURL = process.env.MONITOR_BASE_URL || "";
+
+if (!baseURL) {
+  console.warn(
+    "[monitorClient] MONITOR_BASE_URL não configurado. Configure nas variáveis de ambiente."
+  );
+}
+
+export const monitorApi = axios.create({
+  baseURL,
+  timeout: 15000
+});
+
+// Usamos "as any" aqui porque a definição antiga de tipos do axios
+// não entende bem funções async nos interceptors.
+(monitorApi.interceptors.request as any).use(
+  async (config: AxiosRequestConfig) => {
+    const tokenInfo = await getTraffiToken();
+
+    config.headers = config.headers ?? {};
+    (config.headers as any).Authorization = `Bearer ${tokenInfo.accessToken}`;
+
+    return config;
+  },
+  (error: any) => Promise.reject(error)
+);

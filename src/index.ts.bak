@@ -1,25 +1,33 @@
-import express, { Request, Response } from "express";
+// src/index.ts
+import express from "express";
 import cors from "cors";
+import authRoutes from "./routes/authRoutes";
 
 const app = express();
+const port = process.env.PORT || 3000;
 
-// Render envia a porta em process.env.PORT; localmente usamos 3000
-const PORT = process.env.PORT || 3000;
-
-// Middlewares básicos
 app.use(cors());
 app.use(express.json());
 
-// Rota principal: GET /
-app.get("/", (req: Request, res: Response) => {
+// rota raiz opcional (pra não dar "Cannot GET /")
+app.get("/", (_req, res) => {
+  res.send(
+    "Monitor backend online. Use /health para status ou /api/... para as APIs."
+  );
+});
+
+// healthcheck
+app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    message: "Backend do monitor rodando no Render 🚀",
-    version: "1.0.0",
+    service: "monitor-backend",
+    timestamp: new Date().toISOString()
   });
 });
 
-// Sobe o servidor
-app.listen(PORT, () => {
-  console.log(`✅ monitor-backend rodando na porta ${PORT}`);
+// rotas de autenticação
+app.use("/api/auth", authRoutes);
+
+app.listen(port, () => {
+  console.log(`✅ monitor-backend rodando na porta ${port}`);
 });

@@ -7,15 +7,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
-// rota raiz opcional (pra não dar "Cannot GET /")
 app.get("/", (_req, res) => {
     res.send("Monitor backend online. Use /health para status ou /api/... para as APIs.");
 });
-// healthcheck
 app.get("/health", (_req, res) => {
     res.json({
         status: "ok",
@@ -23,8 +22,10 @@ app.get("/health", (_req, res) => {
         timestamp: new Date().toISOString()
     });
 });
-// rotas de autenticação
+// auth
 app.use("/api/auth", authRoutes_1.default);
+// monitor commands
+app.use("/api/monitor", monitorRoutes_1.default);
 app.listen(port, () => {
     console.log(`✅ monitor-backend rodando na porta ${port}`);
 });
