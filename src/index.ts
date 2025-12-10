@@ -1,8 +1,9 @@
-// src/index.ts
 import express from "express";
 import cors from "cors";
+
 import authRoutes from "./routes/authRoutes";
 import monitorRoutes from "./routes/monitorRoutes";
+import jobRoutes from "./routes/jobRoutes";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -10,26 +11,24 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-app.get("/", (_req, res) => {
-  res.send(
-    "Monitor backend online. Use /health para status ou /api/... para as APIs."
-  );
-});
-
+// Healthcheck
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "monitor-backend",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
-// auth
+// Rotas existentes
 app.use("/api/auth", authRoutes);
-
-// monitor commands
 app.use("/api/monitor", monitorRoutes);
 
+// NOVO: rotas de jobs
+app.use("/api/jobs", jobRoutes);
+
 app.listen(port, () => {
-  console.log(`✅ monitor-backend rodando na porta ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
+
+export default app;
