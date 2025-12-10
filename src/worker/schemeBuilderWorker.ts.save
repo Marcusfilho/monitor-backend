@@ -1,0 +1,151 @@
+// src/worker/schemeBuilderWorker.ts
+import axios from "axios";
+import { runSchemeBuilderBackend } from "../services/monitorService";
+
+const RENDER_BASE_URL =
+  process.env.RENDER_BASE_URL || "https://seu-servico-no-render.onrender.com";
+
+const WORKER_ID = process.env.WORKER_ID || "vm-worker-01";
+
+// você pode ajustar o intervalo via variável de ambiente.
+// para uso real, dá pra ir pra 2000 ms (2s) ou até menos.
+// aqui deixo 5000 ms de padrão, mas é configurável.
+const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS || "5000");
+
+interface SchemeBuilderPayload {
+  clientId: number;
+  clientName: string;
+  vehicleId: number;
+  vehicleSettingId: number;
+  comment?: string;
+}
+
+interface SchemeBuilderJob {
+  id: string;
+  type: string;
+  payload: SchemeBuilderPayload;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchNextJob(): Promise<SchemeBuilderJob | null> {
+  try {
+    console.log(
+      `[worker] Buscando job em ${RENDER_BASE_URL}/api/jobs/next?type=scheme_builder&worker=${WORKER_ID}`
+    );
+
+    const resp = await axios.get(`${RENDER_BASE_URL}/api/jobs/next`, {
+      params: {
+        type: "scheme_builder",
+        worker: WORKER_ID,
+      },
+      timeout: 10000,
+    });
+
+    if (resp.status === 204 || !resp.data || !resp.data.job) {
+      // 204 ou payload vazio = nenhuma tarefa
+      console.log("[worker] Nenhum job disponível.");
+      return null;
+    }
+
+    const job = resp.data.job as SchemeBuilderJob;
+    console.log(
+      `[worker] Job recebido: id=${job.id}, vehicleId=${job.payload.vehicleId}`
+    );
+    return job;
+  } catch (err: any) {
+    if (err.response) {
+      console.error(
+        `[worker] Erro ao buscar job: status=${err.response.status}`,
+        err.response.data
+      );
+    } else {
+      console.error("[worker] Erro ao buscar job:", err.message || err);
+    }
+    return null;
+  }
+}
+
+async function completeJob(jobId: string, status: string, result: any) {
+  try {
+    console.log(`[worker] Enviando resultado do job ${jobId} para o Render...`);
+    await axios.post(
+      `${RENDER_BASE_URL}/api/jobs/${jobId}/complete`,
+      {
+        status,
+        result,
+        workerId: WORKER_ID,
+      },
+      { timeout: 10000 }
+    );
+    console.log(`[worker] Resultado do job ${jobId} enviado com sucesso.`);
+  } catch (err: any) {
+    if (err.response) {
+      console.error(
+        `[worker] Erro ao enviar resultado do job ${jobId}: status=${err.response.status}`,
+        err.response.data
+      );
+    } else {
+      console.error(
+        `[worker] Erro ao enviar resultado do job ${jobId}:`,
+        err.message || err
+      );
+    }
+  }
+}
+
+async function processJob(job: SchemeBuilderJob) {
+  console.log(
+    `[worker] Processando job ${job.id} (vehicleId=${job.payload.vehicleId})...`
+  );
+
+  try {
+    // usa a mesma função que a rota /api/monitor/scheme-builder
+    const result = await runSchemeBuilderBackend({
+      clientId: job.payload.clientId,
+      clientName: job.payload.clientName,
+      vehicleId: job.payload.vehicleId,
+      vehicleSettingId: job.payload.vehicleSettingId,
+      comment: job.payload.comment || "",
+    });
+
+    const status = (result && (result as any).status) || "ok";
+    console.log(`[worker] Job ${job.id} finalizado com status ${status}.`);
+
+    await completeJob(job.id, status, result);
+  } catch (err: any) {
+    console.error(
+      `[worker] Erro ao processar job ${job.id}:`,
+      err.message || err
+    );
+    await completeJob(job.id, "error", {
+      message: err.message || "Erro desconhecido no worker",
+    });
+  }
+}
+
+async function mainLoop() {
+  console.log(
+    `[worker] Iniciando worker SchemeBuilder. RENDER_BASE_URL=${RENDER_BASE_URL}, WORKER_ID=${WORKER_ID}, POLL_INTERVAL_MS=${POLL_INTERVAL_MS}`
+  );
+
+  // loop infinito simples
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const job = await fetchNextJob();
+    if (job) {
+      await processJob(job);
+    }
+    await sleep(POLL_INTERVAL_MS);
+  }
+}
+
+// Só executa o loop se esse arquivo for o entrypoint
+if (require.main === module) {
+  mainLoop().catch((err) => {
+    console.error("[worker] Erro fatal no mainLoop:", err);
+    process.exit(1);
+  });
+}
