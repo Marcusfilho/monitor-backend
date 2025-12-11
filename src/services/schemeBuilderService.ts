@@ -2,6 +2,7 @@
 import WebSocket, { RawData } from "ws";
 import { openMonitorWebSocket } from "../ws/wsClient";
 
+
 export interface SchemeBuilderParams {
   clientId: number;
   clientName: string;
@@ -87,11 +88,12 @@ async function wsSendActionFire(
   return mtkn;
 }
 
+
 async function wsSendActionRow(
   ws: WebSocket,
   sessionToken: string,
   actionName: string,
-  params: Record<string, any>,
+  params: Record<string, string>,
   timeoutMs = 8000
 ): Promise<any> {
   const { payload, mtkn } = buildActionPayload(sessionToken, actionName, params);
@@ -99,49 +101,54 @@ async function wsSendActionRow(
   console.log("[SchemeBuilder][WS] >> (aguardando row)", actionName, payload);
 
   return new Promise((resolve, reject) => {
-    let finished = false;
-
-    function cleanup() {
-      ws.removeListener("message", onMessage);
-      clearTimeout(timer);
-    }
+    const timeout = setTimeout(() => {
+      ws.off("message", onMessage);
+      reject(new Error("Timeout aguardando resposta para " + actionName));
+    }, timeoutMs);
 
     function onMessage(data: RawData) {
-      if (finished) return;
+      let text = decodeWsText(data);
 
-      const text = decodeWsText(data);
+      if (text.startsWith("%7B")) {
+        try {
+          text = decodeURIComponent(text);
+        } catch {
+          /* ignore */
+        }
+      }
+
       if (!text.includes(mtkn)) return;
+
+      console.log(
+        "[SchemeBuilder][WS][ROW RAW]",
+        text.slice(0, 200) + (text.length > 200 ? "..." : "")
+      );
 
       try {
         const obj = JSON.parse(text);
 
-        const row =
-          obj?.response?.properties?.data?.[0] ||
-          obj?.response?.properties?.row ||
-          null;
-
-        finished = true;
-        cleanup();
-        console.log("[SchemeBuilder][WS] << row", row);
-        resolve(row);
-      } catch (err) {
-        finished = true;
-        cleanup();
-        reject(err);
+        // >>> CÓPIA DO COMPORTAMENTO DO TAMPERMONKEY <<<
+        // Só resolvemos quando NÃO tiver "response" no topo.
+        if (obj && !(obj as any).response) {
+          clearTimeout(timeout);
+          ws.off("message", onMessage);
+          console.log("[SchemeBuilder][WS] <<", actionName, obj);
+          resolve(obj);
+        } else {
+          // Tem "response"? Ignora e continua esperando o push.
+          return;
+        }
+      } catch {
+        // JSON inválido? Ignora.
+        return;
       }
     }
-
-    const timer = setTimeout(() => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      reject(new Error(`Timeout aguardando row de ${actionName}`));
-    }, timeoutMs);
 
     ws.on("message", onMessage);
     ws.send(JSON.stringify(payload));
   });
 }
+
 
 /**
  * Implementação back-end do fluxo de Scheme Builder.

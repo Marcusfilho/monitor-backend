@@ -59,40 +59,43 @@ async function wsSendActionRow(ws, sessionToken, actionName, params, timeoutMs =
     const { payload, mtkn } = buildActionPayload(sessionToken, actionName, params);
     console.log("[SchemeBuilder][WS] >> (aguardando row)", actionName, payload);
     return new Promise((resolve, reject) => {
-        let finished = false;
-        function cleanup() {
-            ws.removeListener("message", onMessage);
-            clearTimeout(timer);
-        }
+        const timeout = setTimeout(() => {
+            ws.off("message", onMessage);
+            reject(new Error("Timeout aguardando resposta para " + actionName));
+        }, timeoutMs);
         function onMessage(data) {
-            if (finished)
-                return;
-            const text = decodeWsText(data);
+            let text = decodeWsText(data);
+            if (text.startsWith("%7B")) {
+                try {
+                    text = decodeURIComponent(text);
+                }
+                catch {
+                    /* ignore */
+                }
+            }
             if (!text.includes(mtkn))
                 return;
+            console.log("[SchemeBuilder][WS][ROW RAW]", text.slice(0, 200) + (text.length > 200 ? "..." : ""));
             try {
                 const obj = JSON.parse(text);
-                const row = obj?.response?.properties?.data?.[0] ||
-                    obj?.response?.properties?.row ||
-                    null;
-                finished = true;
-                cleanup();
-                console.log("[SchemeBuilder][WS] << row", row);
-                resolve(row);
+                // >>> CÓPIA DO COMPORTAMENTO DO TAMPERMONKEY <<<
+                // Só resolvemos quando NÃO tiver "response" no topo.
+                if (obj && !obj.response) {
+                    clearTimeout(timeout);
+                    ws.off("message", onMessage);
+                    console.log("[SchemeBuilder][WS] <<", actionName, obj);
+                    resolve(obj);
+                }
+                else {
+                    // Tem "response"? Ignora e continua esperando o push.
+                    return;
+                }
             }
-            catch (err) {
-                finished = true;
-                cleanup();
-                reject(err);
+            catch {
+                // JSON inválido? Ignora.
+                return;
             }
         }
-        const timer = setTimeout(() => {
-            if (finished)
-                return;
-            finished = true;
-            cleanup();
-            reject(new Error(`Timeout aguardando row de ${actionName}`));
-        }, timeoutMs);
         ws.on("message", onMessage);
         ws.send(JSON.stringify(payload));
     });
