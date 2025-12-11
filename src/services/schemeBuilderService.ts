@@ -109,6 +109,7 @@ async function wsSendActionRow(
     function onMessage(data: RawData) {
       let text = decodeWsText(data);
 
+      // Trata payload URL-encoded (%7B...%7D)
       if (text.startsWith("%7B")) {
         try {
           text = decodeURIComponent(text);
@@ -117,7 +118,10 @@ async function wsSendActionRow(
         }
       }
 
-      if (!text.includes(mtkn)) return;
+      // Se não tem o mtkn certo, ignora
+      if (!text.includes(mtkn)) {
+        return;
+      }
 
       console.log(
         "[SchemeBuilder][WS][ROW RAW]",
@@ -125,21 +129,40 @@ async function wsSendActionRow(
       );
 
       try {
-        const obj = JSON.parse(text);
+        const obj: any = JSON.parse(text);
 
-        // >>> CÓPIA DO COMPORTAMENTO DO TAMPERMONKEY <<<
-        // Só resolvemos quando NÃO tiver "response" no topo.
-        if (obj && !(obj as any).response) {
+        // 1) Caso clássico Tampermonkey: objeto "solto", sem 'response'
+        if (obj && !obj.response) {
           clearTimeout(timeout);
           ws.off("message", onMessage);
           console.log("[SchemeBuilder][WS] <<", actionName, obj);
           resolve(obj);
-        } else {
-          // Tem "response"? Ignora e continua esperando o push.
           return;
         }
+
+        // 2) Caso Monitor oficial: vem dentro de response.properties.data[0]
+        const props = obj?.response?.properties;
+        if (
+          props &&
+          props.mtkn === mtkn &&
+          Array.isArray(props.data) &&
+          props.data.length > 0
+        ) {
+          const row = props.data[0];
+          clearTimeout(timeout);
+          ws.off("message", onMessage);
+          console.log("[SchemeBuilder][WS] <<", actionName, row);
+          resolve(row);
+          return;
+        }
+
+        // Se chegou aqui:
+        // - ou é 'response' com data vazio
+        // - ou outro mtkn/action_name
+        // -> ignorar e seguir esperando.
+        return;
       } catch {
-        // JSON inválido? Ignora.
+        // JSON inválido, ignora
         return;
       }
     }
@@ -148,6 +171,7 @@ async function wsSendActionRow(
     ws.send(JSON.stringify(payload));
   });
 }
+
 
 
 /**

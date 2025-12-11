@@ -1,5 +1,7 @@
 // src/services/schemeBuilderService.ts
 import WebSocket, { RawData } from "ws";
+import { openMonitorWebSocket } from "../ws/wsClient";
+
 
 export interface SchemeBuilderParams {
   clientId: number;
