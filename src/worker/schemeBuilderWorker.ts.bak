@@ -1,6 +1,5 @@
 // src/worker/schemeBuilderWorker.ts
 import axios from "axios";
-import { runSchemeBuilderBackend } from "../services/schemeBuilderService";
 
 const RENDER_BASE_URL =
   process.env.RENDER_BASE_URL || "https://seu-servico-no-render.onrender.com";
@@ -104,31 +103,22 @@ async function processJob(job: SchemeBuilderJob) {
     `[worker] Processando job ${job.id} (vehicleId=${job.payload.vehicleId})...`
   );
 
-  try {
-    const result = await runSchemeBuilderBackend({
-      clientId: job.payload.clientId,
-      clientName: job.payload.clientName,
-      vehicleId: job.payload.vehicleId,
-      vehicleSettingId: job.payload.vehicleSettingId,
-      comment: job.payload.comment,
-    });
+  // Simulação de processamento rápido
+  await sleep(500);
 
-    await completeJob(job.id, result.status, result);
-  } catch (err: any) {
-    console.error(
-      `[worker] Erro ao processar job ${job.id}:`,
-      err?.message || err
-    );
+  const fakeResult = {
+    status: "ok",
+    message: "Processamento stub executado na VM",
+    vehicleId: job.payload.vehicleId,
+    clientId: job.payload.clientId,
+    workerId: WORKER_ID,
+  };
 
-    await completeJob(job.id, "error", {
-      message:
-        err?.message ||
-        "Erro desconhecido ao processar job SchemeBuilder no worker.",
-      rawError: err,
-    });
-  }
+  console.log(
+    `[worker] Job ${job.id} finalizado (stub) com status ${fakeResult.status}.`
+  );
+  await completeJob(job.id, fakeResult.status, fakeResult);
 }
-
 
 async function mainLoop() {
   console.log(

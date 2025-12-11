@@ -1,5 +1,4 @@
 // src/services/schemeBuilderService.ts
-import WebSocket, { RawData } from "ws";
 import { openMonitorWebSocket } from "../ws/wsClient";
 
 export interface SchemeBuilderParams {
@@ -61,7 +60,7 @@ function buildActionPayload(
   return { payload, mtkn };
 }
 
-function decodeWsText(data: RawData): string {
+function decodeWsText(data: WebSocket.RawData): string {
   let text =
     typeof data === "string" ? data : (data as Buffer).toString("utf8");
 
@@ -102,11 +101,11 @@ async function wsSendActionRow(
     let finished = false;
 
     function cleanup() {
-      ws.removeListener("message", onMessage);
+      ws.off("message", onMessage);
       clearTimeout(timer);
     }
 
-    function onMessage(data: RawData) {
+    function onMessage(data: WebSocket.RawData) {
       if (finished) return;
 
       const text = decodeWsText(data);
@@ -164,12 +163,12 @@ export async function runSchemeBuilderBackend(
 
   try {
     const { socket, sessionToken } = await openMonitorWebSocket();
-    ws = socket;
+    ws = socket as any;
 
     console.log("[SchemeBuilder] session_token:", sessionToken);
 
     // 1) Marca veículo
-    await wsSendActionFire(ws!, sessionToken, "vcls_check_opr", {
+    await wsSendActionFire(ws, sessionToken, "vcls_check_opr", {
       client_id: String(clientId),
       vehicle_id: String(vehicleId),
       client_name: String(clientName),
@@ -178,7 +177,7 @@ export async function runSchemeBuilderBackend(
     await sleep(300);
 
     // 2) Prepara Assign Setting (call_num = 0)
-    await wsSendActionFire(ws!, sessionToken, "associate_vehicles_actions_opr", {
+    await wsSendActionFire(ws, sessionToken, "associate_vehicles_actions_opr", {
       tag: "loading_screen",
       client_id: String(clientId),
       client_name: String(clientName),
@@ -189,7 +188,7 @@ export async function runSchemeBuilderBackend(
     await sleep(300);
 
     // 3) Define vehicle_setting_id (call_num = 1)
-    await wsSendActionFire(ws!, sessionToken, "associate_vehicles_actions_opr", {
+    await wsSendActionFire(ws, sessionToken, "associate_vehicles_actions_opr", {
       client_id: String(clientId),
       client_name: String(clientName),
       vehicle_setting_id: String(vehicleSettingId),
@@ -200,14 +199,14 @@ export async function runSchemeBuilderBackend(
     await sleep(500);
 
     // 4) review_process_attributes
-    await wsSendActionFire(ws!, sessionToken, "review_process_attributes", {
+    await wsSendActionFire(ws, sessionToken, "review_process_attributes", {
       client_id: String(clientId),
     });
     await sleep(200);
 
     // 5) Busca process_id
     const reviewRow = await wsSendActionRow(
-      ws!,
+      ws,
       sessionToken,
       "get_vcls_action_review_opr",
       {
@@ -234,7 +233,7 @@ export async function runSchemeBuilderBackend(
     console.log("[SchemeBuilder] process_id detectado:", processId);
 
     // 6) Executa ação com Scheme builder ligado
-    await wsSendActionFire(ws!, sessionToken, "execute_action_opr", {
+    await wsSendActionFire(ws, sessionToken, "execute_action_opr", {
       tag: "loading_screen",
       client_id: String(clientId),
       action_source: "0",
@@ -261,7 +260,7 @@ export async function runSchemeBuilderBackend(
       details: err?.message || err,
     };
   } finally {
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === 1) {
       ws.close();
     }
   }

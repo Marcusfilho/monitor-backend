@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 // src/worker/schemeBuilderWorker.ts
 const axios_1 = __importDefault(require("axios"));
+const schemeBuilderService_1 = require("../services/schemeBuilderService");
 const RENDER_BASE_URL = process.env.RENDER_BASE_URL || "https://seu-servico-no-render.onrender.com";
 const WORKER_ID = process.env.WORKER_ID || "vm-worker-01";
 // Para o app dos instaladores, queremos algo rápido.
@@ -66,17 +67,24 @@ async function completeJob(jobId, status, result) {
 // Por enquanto, só simulamos um processamento rápido para validar o worker.
 async function processJob(job) {
     console.log(`[worker] Processando job ${job.id} (vehicleId=${job.payload.vehicleId})...`);
-    // Simulação de processamento rápido
-    await sleep(500);
-    const fakeResult = {
-        status: "ok",
-        message: "Processamento stub executado na VM",
-        vehicleId: job.payload.vehicleId,
-        clientId: job.payload.clientId,
-        workerId: WORKER_ID,
-    };
-    console.log(`[worker] Job ${job.id} finalizado (stub) com status ${fakeResult.status}.`);
-    await completeJob(job.id, fakeResult.status, fakeResult);
+    try {
+        const result = await (0, schemeBuilderService_1.runSchemeBuilderBackend)({
+            clientId: job.payload.clientId,
+            clientName: job.payload.clientName,
+            vehicleId: job.payload.vehicleId,
+            vehicleSettingId: job.payload.vehicleSettingId,
+            comment: job.payload.comment,
+        });
+        await completeJob(job.id, result.status, result);
+    }
+    catch (err) {
+        console.error(`[worker] Erro ao processar job ${job.id}:`, err?.message || err);
+        await completeJob(job.id, "error", {
+            message: err?.message ||
+                "Erro desconhecido ao processar job SchemeBuilder no worker.",
+            rawError: err,
+        });
+    }
 }
 async function mainLoop() {
     console.log(`[worker] Iniciando worker SchemeBuilder. RENDER_BASE_URL=${RENDER_BASE_URL}, WORKER_ID=${WORKER_ID}, POLL_INTERVAL_MS=${POLL_INTERVAL_MS}`);

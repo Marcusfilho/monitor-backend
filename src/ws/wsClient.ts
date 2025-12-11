@@ -8,6 +8,10 @@ export interface OpenWsResult {
 
 /**
  * Abre o WebSocket do Monitor e espera até receber um session_token em alguma mensagem.
+ *
+ * Requer:
+ *  - MONITOR_WS_URL          = URL completa do WebSocket (copiada do DevTools)
+ *  - MONITOR_WS_COOKIE (opt) = Cookie da sessão, se o servidor exigir
  */
 export async function openMonitorWebSocket(): Promise<OpenWsResult> {
   const url = process.env.MONITOR_WS_URL;
@@ -16,61 +20,76 @@ export async function openMonitorWebSocket(): Promise<OpenWsResult> {
     throw new Error("MONITOR_WS_URL não configurada nas variáveis de ambiente.");
   }
 
-  return new Promise((resolve, reject) => {
+  const headers: Record<string, string> = {};
+  if (process.env.MONITOR_WS_COOKIE) {
+    headers["Cookie"] = process.env.MONITOR_WS_COOKIE;
+  }
+
+  console.log("[WS] Conectando ao Monitor em:", url);
+
+  return new Promise<OpenWsResult>((resolve, reject) => {
     let resolved = false;
-    let sessionToken: string | null = null;
 
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, {
+      headers: Object.keys(headers).length ? headers : undefined,
+    });
 
-    const timeoutMs = 15000; // 15s pra achar um session_token
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        try {
-          ws.close();
-        } catch {
-          // ignore
-        }
-        reject(new Error("Timeout esperando session_token no WebSocket."));
+        ws.close();
+        reject(new Error("Timeout ao conectar ao WebSocket ou obter session_token."));
       }
-    }, timeoutMs);
+    }, 15000);
 
     ws.on("open", () => {
-      console.log("[WS] Conectado ao Monitor:", url);
+      console.log("[WS] Conexão aberta.");
     });
 
     ws.on("message", (data) => {
       if (resolved) return;
 
+      let text: string;
+      if (typeof data === "string") {
+        text = data;
+      } else {
+        text = data.toString("utf8");
+      }
+
+      if (text.startsWith("%7B")) {
+        try {
+          text = decodeURIComponent(text);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (!text.includes('"session_token"')) {
+        return;
+      }
+
       try {
-        const text =
-          typeof data === "string" ? data : data.toString("utf8");
-        // console.log("[WS] msg:", text); // se quiser debugar
+        const obj = JSON.parse(text);
 
-        const json = JSON.parse(text);
+        const sessionToken =
+          (obj.action && obj.action.session_token) ||
+          (obj.response &&
+            obj.response.properties &&
+            obj.response.properties.session_token);
 
-        const tokenFromResponse =
-          json?.response?.properties?.session_token as string | undefined;
-        const tokenFromAction =
-          json?.action?.session_token as string | undefined;
-
-        const token = tokenFromResponse || tokenFromAction;
-
-        if (token) {
-          sessionToken = token;
+        if (sessionToken) {
+          console.log("[WS] session_token detectado.");
           resolved = true;
           clearTimeout(timeout);
-          console.log("[WS] session_token capturado:", token);
-          return resolve({ socket: ws, sessionToken: token });
+          resolve({ socket: ws, sessionToken });
         }
-      } catch (e) {
-        // Mensagens que não forem JSON, ignoramos silenciosamente
-        // console.warn("[WS] Mensagem não-JSON:", e);
+      } catch (err) {
+        console.error("[WS] Erro ao parsear mensagem com session_token:", err);
       }
     });
 
     ws.on("error", (err) => {
-      console.error("[WS] Erro:", err);
+      console.error("[WS] Erro na conexão:", err);
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
