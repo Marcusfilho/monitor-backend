@@ -1,5 +1,7 @@
 // src/ws/wsClient.ts
 import WebSocket from "ws";
+import { getSessionToken, refreshSessionTokenFromDisk } from "../services/sessionTokenStore";
+
 
 export interface OpenWsResult {
   socket: WebSocket;
@@ -20,7 +22,8 @@ export interface OpenWsResult {
  */
 export async function openMonitorWebSocket(): Promise<OpenWsResult> {
   const url = process.env.MONITOR_WS_URL;
-  const configuredToken = process.env.MONITOR_SESSION_TOKEN;
+  await refreshSessionTokenFromDisk().catch(() => {});
+  const configuredToken = getSessionToken();
 
   if (!url) {
     throw new Error("MONITOR_WS_URL não configurada nas variáveis de ambiente.");
@@ -31,7 +34,7 @@ export async function openMonitorWebSocket(): Promise<OpenWsResult> {
     headers["Cookie"] = process.env.MONITOR_WS_COOKIE;
   }
 
-  console.log("[WS] Conectando ao Monitor em:", url);
+  console.log("[WS] Usando session token do store (SESSION_TOKEN_PATH).");
 
   return new Promise<OpenWsResult>((resolve, reject) => {
     let resolved = false;

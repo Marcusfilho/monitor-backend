@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.openMonitorWebSocket = openMonitorWebSocket;
 // src/ws/wsClient.ts
 const ws_1 = __importDefault(require("ws"));
+const sessionTokenStore_1 = require("../services/sessionTokenStore");
 /**
  * Abre o WebSocket do Monitor.
  *
@@ -20,7 +21,8 @@ const ws_1 = __importDefault(require("ws"));
  */
 async function openMonitorWebSocket() {
     const url = process.env.MONITOR_WS_URL;
-    const configuredToken = process.env.MONITOR_SESSION_TOKEN;
+    await (0, sessionTokenStore_1.refreshSessionTokenFromDisk)().catch(() => { });
+    const configuredToken = (0, sessionTokenStore_1.getSessionToken)();
     if (!url) {
         throw new Error("MONITOR_WS_URL não configurada nas variáveis de ambiente.");
     }
@@ -28,7 +30,7 @@ async function openMonitorWebSocket() {
     if (process.env.MONITOR_WS_COOKIE) {
         headers["Cookie"] = process.env.MONITOR_WS_COOKIE;
     }
-    console.log("[WS] Conectando ao Monitor em:", url);
+    console.log("[WS] Usando session token do store (SESSION_TOKEN_PATH).");
     return new Promise((resolve, reject) => {
         let resolved = false;
         const ws = new ws_1.default(url, {

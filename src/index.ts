@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import schemeBuilderRoutes from "./routes/schemeBuilderRoutes";
+import adminRoutes from "./routes/adminRoutes";
+import { initSessionTokenStore } from "./services/sessionTokenStore";
+
 
 
 import authRoutes from "./routes/authRoutes";
@@ -32,8 +35,19 @@ app.use("/api/jobs", jobRoutes);
 // nova rota mais “amigável” para o app dos instaladores
 app.use("/api/scheme-builder", schemeBuilderRoutes);
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+async function main() {
+  await initSessionTokenStore();
+
+  app.use(adminRoutes);
+
+  const PORT = Number(process.env.PORT || 3000);
+  app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+}
+
+main().catch((err) => {
+  console.error("[boot] failed:", err);
+  process.exit(1);
 });
+
 
 export default app;

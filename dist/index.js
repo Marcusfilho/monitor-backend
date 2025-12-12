@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const schemeBuilderRoutes_1 = __importDefault(require("./routes/schemeBuilderRoutes"));
+const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
+const sessionTokenStore_1 = require("./services/sessionTokenStore");
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
@@ -28,7 +30,14 @@ app.use("/api/monitor", monitorRoutes_1.default);
 app.use("/api/jobs", jobRoutes_1.default);
 // nova rota mais “amigável” para o app dos instaladores
 app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+async function main() {
+    await (0, sessionTokenStore_1.initSessionTokenStore)();
+    app.use(adminRoutes_1.default);
+    const PORT = Number(process.env.PORT || 3000);
+    app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+}
+main().catch((err) => {
+    console.error("[boot] failed:", err);
+    process.exit(1);
 });
 exports.default = app;
