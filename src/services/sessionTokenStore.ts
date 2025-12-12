@@ -65,4 +65,3 @@ export async function setSessionToken(newToken: string) {
   await fs.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
   await fs.rename(tmp, tokenPath);
 }
-EOF

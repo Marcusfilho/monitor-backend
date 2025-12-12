@@ -28,4 +28,3 @@ router.post("/admin/session-token", requireAdminKey, async (req, res) => {
 });
 
 export default router;
-EOF
