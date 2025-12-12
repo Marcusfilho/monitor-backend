@@ -1,8 +1,5 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-mkdir - p;
-src / routes;
-cat > src / routes / adminRoutes.ts << 'EOF';
 const express_1 = require("express");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
 const router = (0, express_1.Router)();

@@ -1,5 +1,3 @@
-mkdir -p src/services
-cat > src/services/sessionTokenStore.ts <<'EOF'
 import fs from "fs/promises";
 import path from "path";
 
