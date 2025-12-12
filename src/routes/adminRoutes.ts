@@ -1,5 +1,3 @@
-mkdir -p src/routes
-cat > src/routes/adminRoutes.ts <<'EOF'
 import { Router } from "express";
 import { getSessionTokenStatus, setSessionToken } from "../services/sessionTokenStore";
 
