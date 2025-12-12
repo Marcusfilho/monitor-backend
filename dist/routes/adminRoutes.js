@@ -24,4 +24,3 @@ router.post("/admin/session-token", requireAdminKey, async (req, res) => {
     res.json({ ok: true, ...(0, sessionTokenStore_1.getSessionTokenStatus)() });
 });
 exports.default = router;
-EOF;

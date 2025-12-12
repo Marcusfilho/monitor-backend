@@ -70,4 +70,3 @@ async function setSessionToken(newToken) {
     await promises_1.default.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
     await promises_1.default.rename(tmp, tokenPath);
 }
-EOF;
