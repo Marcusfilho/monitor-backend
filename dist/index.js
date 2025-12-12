@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const schemeBuilderRoutes_1 = __importDefault(require("./routes/schemeBuilderRoutes"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
@@ -25,6 +26,8 @@ app.use("/api/auth", authRoutes_1.default);
 app.use("/api/monitor", monitorRoutes_1.default);
 // NOVO: rotas de jobs
 app.use("/api/jobs", jobRoutes_1.default);
+// nova rota mais “amigável” para o app dos instaladores
+app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });

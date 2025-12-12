@@ -140,27 +140,46 @@ async function wsSendActionRow(
           return;
         }
 
-        // 2) Caso Monitor oficial: vem dentro de response.properties.data[0]
-        const props = obj?.response?.properties;
-        if (
-          props &&
-          props.mtkn === mtkn &&
-          Array.isArray(props.data) &&
-          props.data.length > 0
-        ) {
-          const row = props.data[0];
-          clearTimeout(timeout);
-          ws.off("message", onMessage);
-          console.log("[SchemeBuilder][WS] <<", actionName, row);
-          resolve(row);
-          return;
-        }
+       // 2) Caso Monitor oficial: vem dentro de response.properties
+const props = obj?.response?.properties;
 
-        // Se chegou aqui:
-        // - ou é 'response' com data vazio
-        // - ou outro mtkn/action_name
-        // -> ignorar e seguir esperando.
-        return;
+if (props && props.mtkn === mtkn) {
+  // Chegou resposta do nosso mtkn, mas sem rows -> falha rápido (não é timeout)
+  if (Array.isArray(props.data) && props.data.length === 0) {
+    clearTimeout(timeout);
+    ws.off("message", onMessage);
+
+    const actionValue = props.action_value ?? "";
+    const desc = props.description ?? "";
+    const requestId = props.request_id ?? "";
+    const actName = props.action_name ?? actionName;
+
+    reject(
+      new Error(
+        `Resposta vazia para ${actName}. ` +
+          `Provável vehicleId/setting inválido ou sem permissão. ` +
+          `action_value=${actionValue} request_id=${requestId} description=${desc}`
+      )
+    );
+    return;
+  }
+
+  // Se tem row, segue o fluxo normal
+  if (Array.isArray(props.data) && props.data.length > 0) {
+    const row = props.data[0];
+    clearTimeout(timeout);
+    ws.off("message", onMessage);
+    console.log("[SchemeBuilder][WS] <<", actionName, row);
+    resolve(row);
+    return;
+  }
+}
+
+// Se chegou aqui:
+// - ou é outro mtkn/action
+// -> ignorar e seguir esperando.
+return;
+
       } catch {
         // JSON inválido, ignora
         return;
@@ -283,15 +302,29 @@ export async function runSchemeBuilderBackend(
       processId: String(processId),
       details: { reviewRow },
     };
-  } catch (err: any) {
-    console.error("[runSchemeBuilderBackend] Erro:", err?.message || err);
-    return {
-      status: "error",
-      message:
-        "Falha ao executar o fluxo de Scheme Builder via WebSocket no Monitor.",
-      details: err?.message || err,
-    };
-  } finally {
+} catch (err: any) {
+  const errorMessage = err?.message || String(err);
+  console.error("[runSchemeBuilderBackend] Erro:", errorMessage);
+
+  return {
+    status: "error",
+    message:
+      "Falha ao executar o fluxo de Scheme Builder via WebSocket no Monitor.",
+    details: {
+      error: errorMessage,
+      stack: err?.stack || null,
+      params: {
+        clientId,
+        clientName,
+        vehicleId,
+        vehicleSettingId,
+        comment,
+      },
+    },
+  };
+}
+ 
+finally {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
     }

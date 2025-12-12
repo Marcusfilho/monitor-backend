@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import schemeBuilderRoutes from "./routes/schemeBuilderRoutes";
+
 
 import authRoutes from "./routes/authRoutes";
 import monitorRoutes from "./routes/monitorRoutes";
@@ -26,6 +28,9 @@ app.use("/api/monitor", monitorRoutes);
 
 // NOVO: rotas de jobs
 app.use("/api/jobs", jobRoutes);
+
+// nova rota mais “amigável” para o app dos instaladores
+app.use("/api/scheme-builder", schemeBuilderRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
