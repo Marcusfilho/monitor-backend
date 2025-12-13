@@ -69,4 +69,5 @@ async function setSessionToken(newToken) {
     const tmp = `${tokenPath}.tmp`;
     await promises_1.default.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
     await promises_1.default.rename(tmp, tokenPath);
+    await promises_1.default.chmod(tokenPath, 0o600).catch(() => { });
 }

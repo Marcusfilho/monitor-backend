@@ -62,6 +62,8 @@ export async function setSessionToken(newToken: string) {
   const payload: TokenFile = { token: newToken, updatedAt };
   const tmp = `${tokenPath}.tmp`;
 
-  await fs.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
+   await fs.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
   await fs.rename(tmp, tokenPath);
+  await fs.chmod(tokenPath, 0o600).catch(() => {});
+
 }

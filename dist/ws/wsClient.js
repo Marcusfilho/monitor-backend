@@ -53,7 +53,7 @@ async function openMonitorWebSocket() {
                 resolve({ socket: ws, sessionToken: configuredToken });
             }
         });
-        ws.on("message", (data) => {
+        ws.on("message", async (data) => {
             let text;
             if (typeof data === "string") {
                 text = data;
@@ -62,7 +62,9 @@ async function openMonitorWebSocket() {
                 text = data.toString("utf8");
             }
             // Log de debug (pode comentar depois se ficar verboso)
-            console.log("[WS] Mensagem recebida:", text.slice(0, 200));
+            if (process.env.WS_DEBUG === "1") {
+                console.log("[WS] Mensagem recebida:", text.slice(0, 200));
+            }
             if (resolved)
                 return;
             if (text.startsWith("%7B")) {
@@ -83,7 +85,14 @@ async function openMonitorWebSocket() {
                         obj.response.properties &&
                         obj.response.properties.session_token);
                 if (sessionToken) {
-                    console.log("[WS] session_token detectado da mensagem.");
+                    console.log("[WS] session_token detectado da mensagem. Salvando no store...");
+                    try {
+                        // salva no disco pra sobreviver a restart
+                        await (0, sessionTokenStore_1.setSessionToken)(sessionToken);
+                    }
+                    catch (e) {
+                        console.error("[WS] Falha ao salvar session_token no store:", e);
+                    }
                     resolved = true;
                     clearTimeout(timeout);
                     resolve({ socket: ws, sessionToken });

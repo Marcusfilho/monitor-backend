@@ -1,0 +1,34 @@
+[0;1;34m# /etc/systemd/system/monitor-schemebuilder-worker.service[0m
+[Unit]
+Description=Worker SchemeBuilder - monitor-backend
+After=network-online.target monitor-backend.service
+Wants=network-online.target monitor-backend.service
+BindsTo=monitor-backend.service
+PartOf=monitor-backend.service
+
+
+[Service]
+User=questar
+WorkingDirectory=/home/questar/monitor-backend
+EnvironmentFile=/etc/monitor-backend/worker.env
+Environment=HOME=/home/questar
+ExecStartPre=/bin/bash -lc 'for i in {1..30}; do curl --max-time 2 -fsS http://127.0.0.1:3000/health >/dev/null && exit 0; sleep 1; done; echo "backend not ready" >&2; exit 1'
+ExecStart=/home/questar/monitor-backend/worker_start.sh
+Restart=always
+RestartSec=5
+# Opcional: garantir que a VPN já está conectada antes (a gente pode melhorar isso depois)
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+
+
+[0;1;34m# /etc/systemd/system/monitor-schemebuilder-worker.service.d/override.conf[0m
+[Service]
+# Worker só pode falar com localhost (backend local)
+IPAddressDeny=any
+IPAddressAllow=127.0.0.1/8
+IPAddressAllow=::1/128
+
+# Evita proxy do ambiente “roubar” localhost (se existir)
+Environment=NO_PROXY=127.0.0.1,localhost

@@ -1,6 +1,10 @@
 // src/ws/wsClient.ts
 import WebSocket from "ws";
-import { getSessionToken, refreshSessionTokenFromDisk } from "../services/sessionTokenStore";
+import {
+  getSessionToken,
+  refreshSessionTokenFromDisk,
+  setSessionToken,
+} from "../services/sessionTokenStore";
 
 
 export interface OpenWsResult {
@@ -65,7 +69,7 @@ export async function openMonitorWebSocket(): Promise<OpenWsResult> {
       }
     });
 
-    ws.on("message", (data) => {
+    ws.on("message", async (data) => {
       let text: string;
 
       if (typeof data === "string") {
@@ -75,7 +79,10 @@ export async function openMonitorWebSocket(): Promise<OpenWsResult> {
       }
 
       // Log de debug (pode comentar depois se ficar verboso)
-      console.log("[WS] Mensagem recebida:", text.slice(0, 200));
+      if (process.env.WS_DEBUG === "1") {
+       console.log("[WS] Mensagem recebida:", text.slice(0, 200));
+      }
+
 
       if (resolved) return;
 
@@ -100,12 +107,22 @@ export async function openMonitorWebSocket(): Promise<OpenWsResult> {
             obj.response.properties &&
             obj.response.properties.session_token);
 
-        if (sessionToken) {
-          console.log("[WS] session_token detectado da mensagem.");
-          resolved = true;
-          clearTimeout(timeout);
-          resolve({ socket: ws, sessionToken });
-        }
+       if (sessionToken) {
+  console.log("[WS] session_token detectado da mensagem. Salvando no store...");
+
+  try {
+    // salva no disco pra sobreviver a restart
+    await setSessionToken(sessionToken);
+  } catch (e) {
+    console.error("[WS] Falha ao salvar session_token no store:", e);
+  }
+
+  resolved = true;
+  clearTimeout(timeout);
+  resolve({ socket: ws, sessionToken });
+}
+ 
+
       } catch (err) {
         console.error("[WS] Erro ao parsear mensagem com session_token:", err);
       }

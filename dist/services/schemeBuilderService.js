@@ -3,30 +3,89 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildActionPayload = buildActionPayload;
+exports.wsSendActionRow = wsSendActionRow;
+exports.wsSendActionFire = wsSendActionFire;
+exports.runSchemeBuilder = runSchemeBuilder;
 exports.runSchemeBuilderBackend = runSchemeBuilderBackend;
 // src/services/schemeBuilderService.ts
 const ws_1 = __importDefault(require("ws"));
 const wsClient_1 = require("../ws/wsClient");
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+const wsManager_1 = require("../ws/wsManager");
+function pickWs(conn) {
+    if (!conn)
+        return null;
+    // caso getWsConn() retorne o próprio WebSocket
+    if (typeof conn === "object" && typeof conn.send === "function" && typeof conn.on === "function") {
+        return conn;
+    }
+    // caso retorne { ws: WebSocket, ... }
+    if (conn.ws && typeof conn.ws.send === "function" && typeof conn.ws.on === "function") {
+        return conn.ws;
+    }
+    return null;
 }
-function genMtkn() {
-    return (Date.now().toString() +
-        Math.floor(Math.random() * 1e15).toString() +
-        Math.floor(Math.random() * 1e15).toString());
+function pickSessionToken(conn) {
+    if (!conn)
+        return null;
+    // padrões comuns
+    const candidates = [
+        conn.sessionToken,
+        conn.session_token,
+        conn.token,
+        conn?.auth?.sessionToken,
+        conn?.auth?.session_token,
+    ].filter(Boolean);
+    if (candidates.length > 0)
+        return String(candidates[0]);
+    // às vezes o token fica “anexado” no ws
+    const ws = pickWs(conn);
+    if (ws) {
+        const anyWs = ws;
+        if (anyWs.sessionToken)
+            return String(anyWs.sessionToken);
+        if (anyWs.session_token)
+            return String(anyWs.session_token);
+    }
+    return null;
+}
+function isWsOpen(ws) {
+    return !!ws && ws.readyState === ws_1.default.OPEN;
+}
+async function ensureWsConn() {
+    const existing = (0, wsManager_1.getWsConn)?.();
+    const wsExisting = pickWs(existing);
+    if (isWsOpen(wsExisting)) {
+        const token = pickSessionToken(existing);
+        if (!token) {
+            throw new Error("[WS] conexão existe, mas sessionToken não foi encontrado em getWsConn()");
+        }
+        return { ws: wsExisting, sessionToken: token };
+    }
+    const opened = await Promise.resolve((0, wsClient_1.openMonitorWebSocket)?.());
+    const wsOpened = pickWs(opened);
+    if (!isWsOpen(wsOpened)) {
+        throw new Error("[WS] falha ao abrir conexão (openMonitorWebSocket não retornou WS OPEN)");
+    }
+    const token = pickSessionToken(opened);
+    if (!token) {
+        throw new Error("[WS] conexão aberta, mas sessionToken não foi encontrado no retorno do openMonitorWebSocket()");
+    }
+    return { ws: wsOpened, sessionToken: token };
 }
 function genFlowId() {
-    return Math.floor(Math.random() * 1e12).toString();
+    // simples e suficiente: timestamp + aleatório
+    return `flow_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+function genMtkn() {
+    return `mtkn_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 function buildActionPayload(sessionToken, actionName, params) {
     const mtkn = genMtkn();
-    const parameters = {};
-    for (const k of Object.keys(params)) {
-        parameters[k] = params[k];
-    }
+    const parameters = { ...params };
     parameters._action_name = actionName;
     parameters.mtkn = mtkn;
-    const payload = {
+    return {
         action: {
             flow_id: genFlowId(),
             name: actionName,
@@ -35,207 +94,227 @@ function buildActionPayload(sessionToken, actionName, params) {
             mtkn,
         },
     };
-    return { payload, mtkn };
 }
-function decodeWsText(data) {
-    let text = typeof data === "string" ? data : data.toString("utf8");
-    if (text.startsWith("%7B")) {
-        try {
-            text = decodeURIComponent(text);
-        }
-        catch {
-            /* ignore */
-        }
+/**
+ * Compat: aceita dois jeitos de chamada:
+ *   - wsSendActionRow(actionRow, timeoutMs?)
+ *   - wsSendActionRow(ws, actionRow, timeoutMs?)
+ */
+async function wsSendActionRow(a, b, c) {
+    let ws;
+    let actionRow;
+    let timeoutMs;
+    // detecta assinatura
+    if (a && typeof a.send === "function" && typeof a.on === "function") {
+        ws = a;
+        actionRow = b;
+        timeoutMs = typeof c === "number" ? c : 25000;
     }
-    return text;
-}
-async function wsSendActionFire(ws, sessionToken, actionName, params) {
-    const { payload, mtkn } = buildActionPayload(sessionToken, actionName, params);
-    console.log("[SchemeBuilder][WS] >>", actionName, payload);
-    ws.send(JSON.stringify(payload));
-    return mtkn;
-}
-async function wsSendActionRow(ws, sessionToken, actionName, params, timeoutMs = 8000) {
-    const { payload, mtkn } = buildActionPayload(sessionToken, actionName, params);
-    console.log("[SchemeBuilder][WS] >> (aguardando row)", actionName, payload);
-    return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            ws.off("message", onMessage);
-            reject(new Error("Timeout aguardando resposta para " + actionName));
-        }, timeoutMs);
-        function onMessage(data) {
-            let text = decodeWsText(data);
-            // Trata payload URL-encoded (%7B...%7D)
-            if (text.startsWith("%7B")) {
-                try {
-                    text = decodeURIComponent(text);
-                }
-                catch {
-                    /* ignore */
-                }
-            }
-            // Se não tem o mtkn certo, ignora
-            if (!text.includes(mtkn)) {
+    else {
+        const conn = await ensureWsConn();
+        ws = conn.ws;
+        actionRow = a;
+        timeoutMs = typeof b === "number" ? b : 25000;
+    }
+    if (!actionRow) {
+        throw new Error("[WS] actionRow ausente em wsSendActionRow()");
+    }
+    if (ws.readyState !== ws_1.default.OPEN) {
+        throw new Error(`[WS] conexão não está OPEN (readyState=${ws.readyState})`);
+    }
+    const expected = {
+        mtkn: actionRow?.action?.mtkn ?? actionRow?.action?.parameters?.mtkn,
+        flowId: actionRow?.action?.flow_id,
+        actionName: actionRow?.action?.name,
+    };
+    return await new Promise((resolve, reject) => {
+        let done = false;
+        let timeout;
+        // helper compatível (Node 16 tem .off; fallback removeListener)
+        const wsOff = (event, fn) => {
+            const anyWs = ws;
+            if (typeof anyWs.off === "function")
+                anyWs.off(event, fn);
+            else
+                anyWs.removeListener(event, fn);
+        };
+        const cleanup = () => {
+            if (timeout)
+                clearTimeout(timeout);
+            wsOff("message", onMessage);
+            wsOff("close", onClose);
+            wsOff("error", onError);
+        };
+        const finish = (err, data) => {
+            // --- PATCH: cleanup listeners + timeout (anti vazamento) ---
+            if (timeout)
+                clearTimeout(timeout);
+            // remove listeners deste request (message/close/error)
+            ws.off?.("message", onMessage);
+            ws.removeListener?.("message", onMessage);
+            ws.off?.("close", onClose);
+            ws.removeListener?.("close", onClose);
+            ws.off?.("error", onError);
+            ws.removeListener?.("error", onError);
+            // --- /PATCH ---
+            if (done)
                 return;
-            }
-            console.log("[SchemeBuilder][WS][ROW RAW]", text.slice(0, 200) + (text.length > 200 ? "..." : ""));
+            done = true;
+            cleanup();
+            if (err)
+                reject(err);
+            else
+                resolve(data);
+        };
+        const matches = (msg) => {
+            const props = msg?.response?.properties ?? msg?.properties ?? {};
+            const mtkn = props?.mtkn ?? msg?.mtkn;
+            const flowId = props?.flow_id ?? msg?.flow_id;
+            const actionName = props?.action_name ??
+                props?.actionName ??
+                msg?.action_name ??
+                msg?.actionName;
+            // regra: se eu tiver mtkn, ele manda; senão flowId; senão actionName
+            if (expected.mtkn != null)
+                return mtkn === expected.mtkn;
+            if (expected.flowId != null)
+                return flowId === expected.flowId;
+            if (expected.actionName != null)
+                return actionName === expected.actionName;
+            return true;
+        };
+        const onMessage = (raw) => {
+            let text;
             try {
-                const obj = JSON.parse(text);
-                // 1) Caso clássico Tampermonkey: objeto "solto", sem 'response'
-                if (obj && !obj.response) {
-                    clearTimeout(timeout);
-                    ws.off("message", onMessage);
-                    console.log("[SchemeBuilder][WS] <<", actionName, obj);
-                    resolve(obj);
-                    return;
-                }
-                // 2) Caso Monitor oficial: vem dentro de response.properties
-                const props = obj?.response?.properties;
-                if (props && props.mtkn === mtkn) {
-                    // Chegou resposta do nosso mtkn, mas sem rows -> falha rápido (não é timeout)
-                    if (Array.isArray(props.data) && props.data.length === 0) {
-                        clearTimeout(timeout);
-                        ws.off("message", onMessage);
-                        const actionValue = props.action_value ?? "";
-                        const desc = props.description ?? "";
-                        const requestId = props.request_id ?? "";
-                        const actName = props.action_name ?? actionName;
-                        reject(new Error(`Resposta vazia para ${actName}. ` +
-                            `Provável vehicleId/setting inválido ou sem permissão. ` +
-                            `action_value=${actionValue} request_id=${requestId} description=${desc}`));
-                        return;
-                    }
-                    // Se tem row, segue o fluxo normal
-                    if (Array.isArray(props.data) && props.data.length > 0) {
-                        const row = props.data[0];
-                        clearTimeout(timeout);
-                        ws.off("message", onMessage);
-                        console.log("[SchemeBuilder][WS] <<", actionName, row);
-                        resolve(row);
-                        return;
-                    }
-                }
-                // Se chegou aqui:
-                // - ou é outro mtkn/action
-                // -> ignorar e seguir esperando.
-                return;
+                if (typeof raw === "string")
+                    text = raw;
+                else if (Buffer.isBuffer(raw))
+                    text = raw.toString("utf8");
+                else if (Array.isArray(raw))
+                    text = Buffer.concat(raw).toString("utf8");
+                else
+                    text = Buffer.from(raw).toString("utf8");
+            }
+            catch {
+                return; // payload estranho, ignora
+            }
+            let msg;
+            try {
+                msg = JSON.parse(text);
             }
             catch {
                 // JSON inválido, ignora
                 return;
             }
-        }
+            if (!matches(msg)) {
+                // -> ignorar e seguir esperando.
+                return;
+            }
+            const props = msg?.response?.properties ?? msg?.properties ?? {};
+            const errMsg = props?.error_msg ??
+                props?.error ??
+                msg?.error_msg ??
+                msg?.error ??
+                (props?.status &&
+                    String(props.status).toLowerCase().includes("error")
+                    ? String(props.status)
+                    : null);
+            if (errMsg) {
+                finish(new Error(`[WS] erro na resposta: ${errMsg}`), msg);
+                return;
+            }
+            finish(undefined, msg);
+        };
+        const onClose = (code, reason) => {
+            const r = reason ? reason.toString("utf8") : "";
+            finish(new Error(`[WS] close code=${code} reason=${r}`));
+        };
+        const onError = (err) => {
+            finish(err instanceof Error ? err : new Error(String(err)));
+        };
+        // 1) arma listeners primeiro (pra não perder resposta rápida)
         ws.on("message", onMessage);
-        ws.send(JSON.stringify(payload));
+        ws.once("close", onClose);
+        ws.once("error", onError);
+        // 2) timeout único
+        timeout = setTimeout(() => {
+            finish(new Error(`[WS] timeout ${timeoutMs}ms aguardando resposta (action=${expected.actionName ?? "?"}, flow=${expected.flowId ?? "?"}, mtkn=${expected.mtkn ?? "?"})`));
+        }, timeoutMs);
+        // 3) envia depois de armar listeners
+        try {
+            ws.send(JSON.stringify(actionRow), (err) => {
+                if (err)
+                    finish(err);
+            });
+        }
+        catch (e) {
+            finish(e);
+        }
     });
 }
 /**
- * Implementação back-end do fluxo de Scheme Builder.
+ * Fire-and-forget (não espera resposta).
+ * Compat: wsSendActionFire(actionRow) ou wsSendActionFire(ws, actionRow)
  */
-async function runSchemeBuilderBackend(params) {
-    const { clientId, clientName, vehicleId, vehicleSettingId } = params;
-    const comment = params.comment || "Comentario via backend";
-    if (!clientId || !clientName || !vehicleId || !vehicleSettingId) {
-        return {
-            status: "error",
-            message: "Parâmetros obrigatórios faltando: clientId, clientName, vehicleId, vehicleSettingId.",
-        };
+async function wsSendActionFire(a, b) {
+    let ws;
+    let actionRow;
+    if (a && typeof a.send === "function" && typeof a.on === "function") {
+        ws = a;
+        actionRow = b;
     }
-    let ws = null;
+    else {
+        const conn = await ensureWsConn();
+        ws = conn.ws;
+        actionRow = a;
+    }
+    if (!actionRow)
+        throw new Error("[WS] actionRow ausente em wsSendActionFire()");
+    if (ws.readyState !== ws_1.default.OPEN) {
+        throw new Error(`[WS] conexão não está OPEN (readyState=${ws.readyState})`);
+    }
+    ws.send(JSON.stringify(actionRow));
+}
+/**
+ * Fluxo principal: Assign Setting + Scheme Builder
+ * (Se os nomes de action forem diferentes no seu Monitor, ajuste aqui.)
+ */
+async function runSchemeBuilder(params) {
     try {
-        const { socket, sessionToken } = await (0, wsClient_1.openMonitorWebSocket)();
-        ws = socket;
-        console.log("[SchemeBuilder] session_token:", sessionToken);
-        // 1) Marca veículo
-        await wsSendActionFire(ws, sessionToken, "vcls_check_opr", {
-            client_id: String(clientId),
-            vehicle_id: String(vehicleId),
-            client_name: String(clientName),
-            is_checked: "1",
+        const { ws, sessionToken } = await ensureWsConn();
+        // ⚠️ Ajuste os nomes se necessário:
+        const ACTION_ASSIGN_SETTING = "assign_setting_to_vehicle";
+        const ACTION_SCHEME_BUILDER = "scheme_builder";
+        const responses = [];
+        // 1) Assign Setting
+        const action1 = buildActionPayload(sessionToken, ACTION_ASSIGN_SETTING, {
+            client_id: params.clientId,
+            client_name: params.clientName,
+            vehicle_id: params.vehicleId,
+            vehicle_setting_id: params.vehicleSettingId,
+            comment: params.comment ?? "",
         });
-        await sleep(300);
-        // 2) Prepara Assign Setting (call_num = 0)
-        await wsSendActionFire(ws, sessionToken, "associate_vehicles_actions_opr", {
-            tag: "loading_screen",
-            client_id: String(clientId),
-            client_name: String(clientName),
-            action_source: "0",
-            action_id: "1",
-            call_num: "0",
+        responses.push(await wsSendActionRow(ws, action1, 30000));
+        // 2) Scheme Builder
+        const action2 = buildActionPayload(sessionToken, ACTION_SCHEME_BUILDER, {
+            client_id: params.clientId,
+            client_name: params.clientName,
+            vehicle_id: params.vehicleId,
+            vehicle_setting_id: params.vehicleSettingId,
+            comment: params.comment ?? "",
         });
-        await sleep(300);
-        // 3) Define vehicle_setting_id (call_num = 1)
-        await wsSendActionFire(ws, sessionToken, "associate_vehicles_actions_opr", {
-            client_id: String(clientId),
-            client_name: String(clientName),
-            vehicle_setting_id: String(vehicleSettingId),
-            action_source: "0",
-            action_id: "1",
-            call_num: "1",
-        });
-        await sleep(500);
-        // 4) review_process_attributes
-        await wsSendActionFire(ws, sessionToken, "review_process_attributes", {
-            client_id: String(clientId),
-        });
-        await sleep(200);
-        // 5) Busca process_id
-        const reviewRow = await wsSendActionRow(ws, sessionToken, "get_vcls_action_review_opr", {
-            client_id: String(clientId),
-            client_name: String(clientName),
-            action_source: "0",
-        });
-        const processId = reviewRow && reviewRow.process_id;
-        if (!processId) {
-            console.error("[SchemeBuilder] Não consegui obter process_id. Resposta:", reviewRow);
-            return {
-                status: "error",
-                message: "Não consegui obter process_id do Monitor.",
-                sessionToken,
-                details: reviewRow,
-            };
-        }
-        console.log("[SchemeBuilder] process_id detectado:", processId);
-        // 6) Executa ação com Scheme builder ligado
-        await wsSendActionFire(ws, sessionToken, "execute_action_opr", {
-            tag: "loading_screen",
-            client_id: String(clientId),
-            action_source: "0",
-            process_id: String(processId),
-            comment,
-            toggle_check: "1",
-        });
-        console.log("[SchemeBuilder] Comando enviado. Acompanhe o processo na tela.");
-        return {
-            status: "ok",
-            message: "Scheme Builder disparado com sucesso.",
-            sessionToken,
-            processId: String(processId),
-            details: { reviewRow },
-        };
+        responses.push(await wsSendActionRow(ws, action2, 60000));
+        return { status: "ok", responses };
     }
     catch (err) {
-        const errorMessage = err?.message || String(err);
-        console.error("[runSchemeBuilderBackend] Erro:", errorMessage);
         return {
             status: "error",
-            message: "Falha ao executar o fluxo de Scheme Builder via WebSocket no Monitor.",
-            details: {
-                error: errorMessage,
-                stack: err?.stack || null,
-                params: {
-                    clientId,
-                    clientName,
-                    vehicleId,
-                    vehicleSettingId,
-                    comment,
-                },
-            },
+            message: err?.message ? String(err.message) : String(err),
+            details: err,
         };
     }
-    finally {
-        if (ws && ws.readyState === ws_1.default.OPEN) {
-            ws.close();
-        }
-    }
+}
+// Alias para manter compatibilidade com imports antigos:
+async function runSchemeBuilderBackend(params) {
+    return runSchemeBuilder(params);
 }
