@@ -1,0 +1,11 @@
+
+# local backups
+*.bak
+*.save
+*_bak/
+_bak/
+
+# env
+.env
+worker_env.sh
+

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Normaliza o intervalo de polling (aceita POLL_INTERVAL_MS ou WORKER_POLL_INTERVAL_MS)
+: "${WORKER_POLL_INTERVAL_MS:=${POLL_INTERVAL_MS:-10000}}"
+export WORKER_POLL_INTERVAL_MS
+
 
 cd /home/questar/monitor-backend
 source ./worker_env.sh

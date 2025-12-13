@@ -32,7 +32,7 @@ app.use("/api/jobs", jobRoutes_1.default);
 app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 async function main() {
     await (0, sessionTokenStore_1.initSessionTokenStore)();
-    app.use(adminRoutes_1.default);
+    app.use("/api", adminRoutes_1.default);
     const PORT = Number(process.env.PORT || 3000);
     app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
 }

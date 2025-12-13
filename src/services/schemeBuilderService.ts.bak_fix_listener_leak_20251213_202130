@@ -177,20 +177,6 @@ export async function wsSendActionRow(
     };
 
     const finish = (err?: any, data?: any) => {
-      // --- PATCH: cleanup listeners + timeout (anti vazamento) ---
-     if (timeout) clearTimeout(timeout);
-
-     // remove listeners deste request (message/close/error)
-     (ws as any).off?.("message", onMessage);
-     (ws as any).removeListener?.("message", onMessage);
-
-     (ws as any).off?.("close", onClose);
-     (ws as any).removeListener?.("close", onClose);
-
-     (ws as any).off?.("error", onError);
-     (ws as any).removeListener?.("error", onError);
-     // --- /PATCH ---
-
       if (done) return;
       done = true;
       cleanup();

@@ -6,65 +6,98 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/worker/schemeBuilderWorker.ts
 const axios_1 = __importDefault(require("axios"));
 const schemeBuilderService_1 = require("../services/schemeBuilderService");
-const RENDER_BASE_URL = process.env.RENDER_BASE_URL || "https://seu-servico-no-render.onrender.com";
 const WORKER_ID = process.env.WORKER_ID || "vm-worker-01";
-// Para o app dos instaladores, queremos algo rápido.
-// Aqui deixamos 2000 ms, mas isso é ajustável via env.
-const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS || "2000");
+// ✅ Use um nome mais claro: este é o servidor de jobs (seu backend do monitor)
+// Compatível com seu env antigo RENDER_BASE_URL (não quebra seu deploy)
+const JOB_SERVER_BASE_URL = process.env.JOB_SERVER_BASE_URL ||
+    process.env.RENDER_BASE_URL ||
+    "http://127.0.0.1:3000";
+// Poll base (quando tem job ou acabou de ter job)
+const BASE_POLL_INTERVAL_MS = Number(process.env.BASE_POLL_INTERVAL_MS ||
+    process.env.WORKER_POLL_INTERVAL_MS ||
+    "5000");
+// Quando NÃO tem job, o worker entra em “modo silêncio” (backoff)
+const MAX_IDLE_POLL_INTERVAL_MS = Number(process.env.WORKER_MAX_IDLE_POLL_MS || "60000");
+const IDLE_BACKOFF_FACTOR = Number(process.env.WORKER_IDLE_BACKOFF_FACTOR || "1.6");
+// Timeouts curtos pra evitar pendurar em rede
+const REQUEST_TIMEOUT_MS = Number(process.env.WORKER_HTTP_TIMEOUT_MS || "10000");
+// ✅ Segurança: por padrão o worker NÃO aceita falar com host remoto.
+// Se você realmente quiser apontar pra Render, precisa setar ALLOW_REMOTE_JOB_SERVER=1
+const ALLOW_REMOTE_JOB_SERVER = process.env.ALLOW_REMOTE_JOB_SERVER === "1";
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+function isLoopbackHost(host) {
+    return host === "127.0.0.1" || host === "localhost" || host === "::1";
+}
+function assertJobServerIsSafe(baseUrl) {
+    try {
+        const u = new URL(baseUrl);
+        if (!ALLOW_REMOTE_JOB_SERVER && !isLoopbackHost(u.hostname)) {
+            throw new Error(`[worker] BLOQUEADO: JOB_SERVER_BASE_URL/RENDER_BASE_URL não é localhost (${baseUrl}).\n` +
+                `[worker] Isso evita tráfego externo quando estiver sem job.\n` +
+                `[worker] Se você REALMENTE quiser usar host remoto, exporte ALLOW_REMOTE_JOB_SERVER=1.`);
+        }
+    }
+    catch (e) {
+        // mantém a mensagem original quando der
+        if (e?.message?.includes("[worker] BLOQUEADO"))
+            throw e;
+        throw new Error(`[worker] URL inválida em JOB_SERVER_BASE_URL: ${baseUrl}`);
+    }
+}
+function jitter(ms) {
+    // até 10% ou 800ms, o menor deles (pra não sincronizar múltiplos workers)
+    const j = Math.min(800, Math.floor(ms * 0.1));
+    return Math.floor(Math.random() * (j + 1));
+}
+// Axios “blindado” (proxy: false evita env http_proxy/https_proxy atrapalhar)
+const http = axios_1.default.create({
+    baseURL: JOB_SERVER_BASE_URL,
+    timeout: REQUEST_TIMEOUT_MS,
+});
 async function fetchNextJob() {
     try {
-        console.log(`[worker] Buscando job em ${RENDER_BASE_URL}/api/jobs/next?type=scheme_builder&worker=${WORKER_ID}`);
-        const resp = await axios_1.default.get(`${RENDER_BASE_URL}/api/jobs/next`, {
-            params: {
-                type: "scheme_builder",
-                worker: WORKER_ID,
-            },
-            timeout: 10000,
+        const resp = await http.get(`/api/jobs/next`, {
+            params: { type: "scheme_builder", worker: WORKER_ID },
         });
-        const data = resp.data;
-        if (resp.status === 204 || !data || !data.job) {
-            console.log("[worker] Nenhum job disponível.");
+        if (resp.status === 204)
             return null;
-        }
-        const job = data.job;
+        const job = resp.data?.job;
+        if (!job)
+            return null;
         console.log(`[worker] Job recebido: id=${job.id}, vehicleId=${job.payload.vehicleId}`);
         return job;
     }
     catch (err) {
-        if (err.response) {
-            console.error(`[worker] Erro ao buscar job: status=${err.response.status}`, err.response.data);
+        const status = err?.response?.status;
+        if (status) {
+            console.error(`[worker] Erro ao buscar job: status=${status}`, err.response?.data);
         }
         else {
-            console.error("[worker] Erro ao buscar job:", err.message || err);
+            console.error("[worker] Erro ao buscar job:", err?.message || err);
         }
         return null;
     }
 }
 async function completeJob(jobId, status, result) {
     try {
-        console.log(`[worker] Enviando resultado do job ${jobId} para o Render...`);
-        await axios_1.default.post(`${RENDER_BASE_URL}/api/jobs/${jobId}/complete`, {
+        await http.post(`/api/jobs/${jobId}/complete`, {
             status,
             result,
             workerId: WORKER_ID,
-        }, { timeout: 10000 });
-        console.log(`[worker] Resultado do job ${jobId} enviado com sucesso.`);
+        });
     }
     catch (err) {
-        if (err.response) {
-            console.error(`[worker] Erro ao enviar resultado do job ${jobId}: status=${err.response.status}`, err.response.data);
+        const statusCode = err?.response?.status;
+        if (statusCode) {
+            console.error(`[worker] Erro ao enviar resultado do job ${jobId}: status=${statusCode}`, err.response?.data);
         }
         else {
-            console.error(`[worker] Erro ao enviar resultado do job ${jobId}:`, err.message || err);
+            console.error(`[worker] Erro ao enviar resultado do job ${jobId}:`, err?.message || err);
         }
     }
 }
-// === STUB por enquanto ===
-// Aqui, no futuro, vamos chamar o fluxo real do Monitor (via WebSocket).
-// Por enquanto, só simulamos um processamento rápido para validar o worker.
 async function processJob(job) {
     console.log(`[worker] Processando job ${job.id} (vehicleId=${job.payload.vehicleId})...`);
     try {
@@ -80,28 +113,52 @@ async function processJob(job) {
     catch (err) {
         console.error(`[worker] Erro ao processar job ${job.id}:`, err?.message || err);
         await completeJob(job.id, "error", {
-            message: err?.message ||
-                "Erro desconhecido ao processar job SchemeBuilder no worker.",
+            message: err?.message || "Erro desconhecido ao processar job SchemeBuilder no worker.",
             rawError: err,
         });
     }
 }
 async function mainLoop() {
-    console.log(`[worker] Iniciando worker SchemeBuilder. RENDER_BASE_URL=${RENDER_BASE_URL}, WORKER_ID=${WORKER_ID}, POLL_INTERVAL_MS=${POLL_INTERVAL_MS}`);
+    assertJobServerIsSafe(JOB_SERVER_BASE_URL);
+    console.log(`[worker] Iniciando SchemeBuilder. JOB_SERVER_BASE_URL=${JOB_SERVER_BASE_URL}, WORKER_ID=${WORKER_ID}, BASE_POLL_INTERVAL_MS=${BASE_POLL_INTERVAL_MS}`);
+    let pollMs = BASE_POLL_INTERVAL_MS;
     // loop infinito simples
     // eslint-disable-next-line no-constant-condition
     while (true) {
         const job = await fetchNextJob();
         if (job) {
+            pollMs = BASE_POLL_INTERVAL_MS; // voltou a ter job → volta rápido
             await processJob(job);
         }
-        await sleep(POLL_INTERVAL_MS);
+        else {
+            // sem job → entra em modo silêncio (reduz tráfego)
+            pollMs = Math.min(MAX_IDLE_POLL_INTERVAL_MS, Math.round(pollMs * IDLE_BACKOFF_FACTOR));
+        }
+        await sleep(pollMs + jitter(pollMs));
     }
 }
-// Só executa o loop se esse arquivo for o entrypoint
+const FATAL_RETRY_MS = Number(process.env.WORKER_FATAL_RETRY_MS || "15000");
+process.on("unhandledRejection", (reason) => {
+    console.error("[worker] unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+    console.error("[worker] uncaughtException:", err);
+    // não derruba o processo; o loop continua e o systemd não entra em restart loop
+});
+async function runForever() {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        try {
+            await mainLoop(); // idealmente nunca retorna
+        }
+        catch (err) {
+            console.error("[worker] mainLoop caiu (vou continuar):", err);
+            await sleep(FATAL_RETRY_MS);
+        }
+    }
+}
 if (require.main === module) {
-    mainLoop().catch((err) => {
-        console.error("[worker] Erro fatal no mainLoop:", err);
-        process.exit(1);
+    runForever().catch((err) => {
+        console.error("[worker] Erro inesperado no runForever:", err);
     });
 }

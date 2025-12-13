@@ -1,0 +1,409 @@
+// src/services/schemeBuilderService.ts
+import WebSocket, { RawData } from "ws";
+import { openMonitorWebSocket } from "../ws/wsClient";
+import { getWsConn } from "../ws/wsManager";
+
+
+export interface SchemeBuilderParams {
+  clientId: number;
+  clientName: string;
+  vehicleId: number;
+  vehicleSettingId: number;
+  comment?: string;
+}
+
+export interface SchemeBuilderResult {
+  status: "ok" | "error";
+  message: string;
+  sessionToken?: string;
+  processId?: string;
+  details?: any;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function genMtkn(): string {
+  return (
+    Date.now().toString() +
+    Math.floor(Math.random() * 1e15).toString() +
+    Math.floor(Math.random() * 1e15).toString()
+  );
+}
+
+function genFlowId(): string {
+  return Math.floor(Math.random() * 1e12).toString();
+}
+
+function buildActionPayload(
+  sessionToken: string,
+  actionName: string,
+  params: Record<string, any>
+) {
+  const mtkn = genMtkn();
+
+  const parameters: Record<string, any> = {};
+  for (const k of Object.keys(params)) {
+    parameters[k] = params[k];
+  }
+  parameters._action_name = actionName;
+  parameters.mtkn = mtkn;
+
+  const payload = {
+    action: {
+      flow_id: genFlowId(),
+      name: actionName,
+      parameters,
+      session_token: sessionToken,
+      mtkn,
+    },
+  };
+
+  return { payload, mtkn };
+}
+
+function decodeWsText(data: RawData): string {
+  let text =
+    typeof data === "string" ? data : (data as Buffer).toString("utf8");
+
+  if (text.startsWith("%7B")) {
+    try {
+      text = decodeURIComponent(text);
+    } catch {
+      /* ignore */
+    }
+  }
+  return text;
+}
+
+async function wsSendActionFire(
+  ws: WebSocket,
+  sessionToken: string,
+  actionName: string,
+  params: Record<string, any>
+): Promise<string> {
+  const { payload, mtkn } = buildActionPayload(sessionToken, actionName, params);
+  console.log("[SchemeBuilder][WS] >>", actionName, payload);
+  ws.send(JSON.stringify(payload));
+  return mtkn;
+}
+
+async function wsSendActionRow(
+async function wsSendActionRow(
+  ws: WebSocket,
+  actionRow: any,
+  timeoutMs = 25000
+): Promise<any> {
+  if (ws.readyState !== WebSocket.OPEN) {
+    throw new Error(`[WS] conexão não está OPEN (readyState=${ws.readyState})`);
+  }
+
+  const expected = {
+    mtkn: actionRow?.action?.mtkn ?? actionRow?.action?.parameters?.mtkn,
+    flowId: actionRow?.action?.flow_id,
+    actionName: actionRow?.action?.name,
+  };
+
+  return await new Promise((resolve, reject) => {
+    let done = false;
+    let timeout: NodeJS.Timeout | undefined;
+
+    // helper compatível (Node 16 tem .off; fallback para removeListener)
+    const wsOff = (event: string, fn: (...args: any[]) => void) => {
+      const anyWs: any = ws as any;
+      if (typeof anyWs.off === "function") anyWs.off(event, fn);
+      else anyWs.removeListener(event, fn);
+    };
+
+    const cleanup = () => {
+      if (timeout) clearTimeout(timeout);
+      wsOff("message", onMessage);
+      wsOff("close", onClose);
+      wsOff("error", onError);
+    };
+
+    const finish = (err?: any, data?: any) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (err) reject(err);
+      else resolve(data);
+    };
+
+    const matches = (msg: any) => {
+      const props = msg?.response?.properties ?? msg?.properties ?? {};
+      const mtkn = props?.mtkn ?? msg?.mtkn;
+      const flowId = props?.flow_id ?? msg?.flow_id;
+      const actionName = props?.action_name ?? props?.actionName ?? msg?.action_name;
+
+      // regra: se eu tiver mtkn, ele manda; senão flowId; senão actionName
+      if (expected.mtkn != null) return mtkn === expected.mtkn;
+      if (expected.flowId != null) return flowId === expected.flowId;
+      if (expected.actionName != null) return actionName === expected.actionName;
+      return true;
+    };
+
+    const onMessage = (raw: RawData) => {
+      let text: string;
+
+      try {
+        if (typeof raw === "string") text = raw;
+        else if (Buffer.isBuffer(raw)) text = raw.toString("utf8");
+        else if (Array.isArray(raw)) text = Buffer.concat(raw).toString("utf8");
+        else text = Buffer.from(raw as ArrayBuffer).toString("utf8");
+      } catch {
+        return; // payload estranho, ignora
+      }
+
+      let msg: any;
+      try {
+        msg = JSON.parse(text);
+      } catch {
+        // JSON inválido, ignora
+        return;
+      }
+
+      if (!matches(msg)) {
+        // -> ignorar e seguir esperando.
+        return;
+      }
+
+      const props = msg?.response?.properties ?? msg?.properties ?? {};
+      const errMsg =
+        props?.error_msg ??
+        props?.error ??
+        msg?.error_msg ??
+        msg?.error ??
+        (props?.status && String(props.status).toLowerCase().includes("error") ? String(props.status) : null);
+
+      if (errMsg) {
+        finish(new Error(`[WS] erro na resposta: ${errMsg}`), msg);
+        return;
+      }
+
+      finish(undefined, msg);
+    };
+
+    const onClose = (code: number, reason: Buffer) => {
+      const r = reason ? reason.toString("utf8") : "";
+      finish(new Error(`[WS] close code=${code} reason=${r}`));
+    };
+
+    const onError = (err: any) => {
+      finish(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    // 1) arma listeners primeiro (pra não perder resposta rápida)
+    ws.on("message", onMessage);
+    ws.once("close", onClose);
+    ws.once("error", onError);
+
+    // 2) timeout único
+    timeout = setTimeout(() => {
+      finish(
+        new Error(
+          `[WS] timeout ${timeoutMs}ms aguardando resposta (action=${expected.actionName ?? "?"}, flow=${expected.flowId ?? "?"}, mtkn=${expected.mtkn ?? "?"})`
+        )
+      );
+    }, timeoutMs);
+
+    // 3) envia depois de armar listeners
+    try {
+      ws.send(JSON.stringify(actionRow), (err) => {
+        if (err) finish(err);
+      });
+    } catch (e) {
+      finish(e);
+    }
+  });
+}
+
+
+// Se chegou aqui:
+// - ou é outro mtkn/action
+// -> ignorar e seguir esperando.
+return;
+
+      } catch {
+        // JSON inválido, ignora
+        return;
+      }
+    }
+
+   // helper compatível (Node 16 tem .off; mas deixo fallback)
+const wsOff = (event: string, fn: (...args: any[]) => void) => {
+  const anyWs: any = ws as any;
+  if (typeof anyWs.off === "function") anyWs.off(event, fn);
+  else anyWs.removeListener(event, fn);
+};
+
+let settled = false;
+let timeout: NodeJS.Timeout | undefined;
+
+const cleanup = () => {
+  wsOff("message", onMessage);
+  wsOff("close", onClose);
+  wsOff("error", onError);
+  if (timeout) clearTimeout(timeout);
+};
+
+const finish = (err?: any, value?: any) => {
+  if (settled) return;
+  settled = true;
+  cleanup();
+  if (err) reject(err);
+  else resolve(value);
+};
+
+const onClose = () => finish(new Error("WS fechou enquanto aguardava resposta"));
+const onError = (e: any) => finish(e);
+
+// >>> AQUI onde hoje está ws.on("message", onMessage);
+ws.on("message", onMessage);
+ws.once("close", onClose);
+ws.once("error", onError);
+
+timeout = setTimeout(() => {
+  finish(new Error(`Timeout aguardando resposta do WS (${timeoutMs ?? 25000}ms)`));
+}, timeoutMs ?? 25000);
+
+// Se você usa ws.send com callback, também finalize erro por aqui:
+ws.send(JSON.stringify(payload), (err) => {
+  if (err) finish(err);
+});
+
+  });
+}
+
+
+
+/**
+ * Implementação back-end do fluxo de Scheme Builder.
+ */
+export async function runSchemeBuilderBackend(
+  params: SchemeBuilderParams
+): Promise<SchemeBuilderResult> {
+  const { clientId, clientName, vehicleId, vehicleSettingId } = params;
+  const comment = params.comment || "Comentario via backend";
+
+  if (!clientId || !clientName || !vehicleId || !vehicleSettingId) {
+    return {
+      status: "error",
+      message:
+        "Parâmetros obrigatórios faltando: clientId, clientName, vehicleId, vehicleSettingId.",
+    };
+  }
+
+  let ws: WebSocket | null = null;
+
+  try {
+    const { socket, sessionToken } = await getWsConn();
+    ws = socket;
+
+    // 1) Marca veículo
+    await wsSendActionFire(ws!, sessionToken, "vcls_check_opr", {
+      client_id: String(clientId),
+      vehicle_id: String(vehicleId),
+      client_name: String(clientName),
+      is_checked: "1",
+    });
+    await sleep(300);
+
+    // 2) Prepara Assign Setting (call_num = 0)
+    await wsSendActionFire(ws!, sessionToken, "associate_vehicles_actions_opr", {
+      tag: "loading_screen",
+      client_id: String(clientId),
+      client_name: String(clientName),
+      action_source: "0",
+      action_id: "1",
+      call_num: "0",
+    });
+    await sleep(300);
+
+    // 3) Define vehicle_setting_id (call_num = 1)
+    await wsSendActionFire(ws!, sessionToken, "associate_vehicles_actions_opr", {
+      client_id: String(clientId),
+      client_name: String(clientName),
+      vehicle_setting_id: String(vehicleSettingId),
+      action_source: "0",
+      action_id: "1",
+      call_num: "1",
+    });
+    await sleep(500);
+
+    // 4) review_process_attributes
+    await wsSendActionFire(ws!, sessionToken, "review_process_attributes", {
+      client_id: String(clientId),
+    });
+    await sleep(200);
+
+    // 5) Busca process_id
+    const reviewRow = await wsSendActionRow(
+      ws!,
+      sessionToken,
+      "get_vcls_action_review_opr",
+      {
+        client_id: String(clientId),
+        client_name: String(clientName),
+        action_source: "0",
+      }
+    );
+
+    const processId = reviewRow && reviewRow.process_id;
+    if (!processId) {
+      console.error(
+        "[SchemeBuilder] Não consegui obter process_id. Resposta:",
+        reviewRow
+      );
+      return {
+        status: "error",
+        message: "Não consegui obter process_id do Monitor.",
+        details: reviewRow,
+      };
+    }
+
+    console.log("[SchemeBuilder] process_id detectado:", processId);
+
+    // 6) Executa ação com Scheme builder ligado
+    await wsSendActionFire(ws!, sessionToken, "execute_action_opr", {
+      tag: "loading_screen",
+      client_id: String(clientId),
+      action_source: "0",
+      process_id: String(processId),
+      comment,
+      toggle_check: "1",
+    });
+
+    console.log("[SchemeBuilder] Comando enviado. Acompanhe o processo na tela.");
+
+    return {
+      status: "ok",
+      message: "Scheme Builder disparado com sucesso.",
+      sessionToken,
+      processId: String(processId),
+      details: { reviewRow },
+    };
+} catch (err: any) {
+  const errorMessage = err?.message || String(err);
+  console.error("[runSchemeBuilderBackend] Erro:", errorMessage);
+
+  return {
+    status: "error",
+    message:
+      "Falha ao executar o fluxo de Scheme Builder via WebSocket no Monitor.",
+    details: {
+      error: errorMessage,
+      stack: err?.stack || null,
+      params: {
+        clientId,
+        clientName,
+        vehicleId,
+        vehicleSettingId,
+        comment,
+      },
+    },
+  };
+}
+ 
+}
