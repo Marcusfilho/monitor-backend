@@ -2,24 +2,6 @@ import WebSocket from "ws";
 import { getSessionToken, refreshSessionTokenFromDisk } from "../services/sessionTokenStore";
 import { buildEncodedWsFrameFromPayload } from "./wsFrame";
 
-
-function buildEncodedWsFrame(actionName: string, params: any, sessionToken: string): string {
-  // payload "flat" mínimo (wrapMonitorFrame já cria { action: {...} })
-  const payload = { tag: "loading_screen", parameters: params ?? {} };
-
-  // NÃO embrulhar novamente em { action: ... }
-  let frame: any = wrapMonitorFrame(actionName, payload, sessionToken);
-
-  // SAFETY: se em algum lugar alguém criou { action: { action: {...} } }, achata aqui
-  if (frame?.action?.action?.name) {
-    frame.action = frame.action.action;
-  }
-
-  return encodeURIComponent(JSON.stringify(frame));
-}
-
-
-
 function patchWsPrototypeSendForMonitorV3() {
   const proto: any = (WebSocket as any)?.prototype;
   if (!proto) return;
@@ -94,7 +76,7 @@ function patchWsPrototypeSendForMonitorV3() {
             const params = obj.action.action.parameters || {};
             const storeToken = (typeof getSessionToken === "function") ? getSessionToken() : "";
             const token = obj.action.session_token || storeToken || "";
-            const wire = buildEncodedWsFrame(actionName, (params || {}), token);
+            const wire = buildEncodedWsFrame(actionName, params, token);
             console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
             return orig.call(this, wire, ...args);
           }

@@ -4,20 +4,25 @@ import { buildEncodedWsFrameFromPayload } from "./wsFrame";
 
 
 function buildEncodedWsFrame(actionName: string, params: any, sessionToken: string): string {
-  // payload "flat" mínimo (wrapMonitorFrame já cria { action: {...} })
-  const payload = { tag: "loading_screen", parameters: params ?? {} };
+  // Frame v2 (validado no WS): { action:{ name, parameters }, session_token?, mtkn }
+  const mtkn =
+    String(Math.floor(Math.random() * 1e18)).padStart(18, "0") + String(Date.now());
 
-  // NÃO embrulhar novamente em { action: ... }
-  let frame: any = wrapMonitorFrame(actionName, payload, sessionToken);
+  const frame: any = {
+    action: {
+      name: actionName,
+      parameters: { ...(params || {}), _action_name: actionName, mtkn },
+    },
+    mtkn,
+  };
 
-  // SAFETY: se em algum lugar alguém criou { action: { action: {...} } }, achata aqui
-  if (frame?.action?.action?.name) {
-    frame.action = frame.action.action;
+  // No user_login NÃO manda session_token
+  if (sessionToken && actionName !== "user_login") {
+    frame.session_token = sessionToken;
   }
 
   return encodeURIComponent(JSON.stringify(frame));
 }
-
 
 
 function patchWsPrototypeSendForMonitorV3() {
@@ -94,7 +99,7 @@ function patchWsPrototypeSendForMonitorV3() {
             const params = obj.action.action.parameters || {};
             const storeToken = (typeof getSessionToken === "function") ? getSessionToken() : "";
             const token = obj.action.session_token || storeToken || "";
-            const wire = buildEncodedWsFrame(actionName, (params || {}), token);
+            const wire = buildEncodedWsFrame(actionName, params, token);
             console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
             return orig.call(this, wire, ...args);
           }

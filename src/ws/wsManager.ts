@@ -1,52 +1,57 @@
 // src/ws/wsManager.ts
 import WebSocket from "ws";
-import { openMonitorWebSocket } from "./wsClient";
+import { openMonitorWebSocket, OpenWsResult } from "./wsClient";
 
-type Conn = { socket: WebSocket; sessionToken: string };
+export type Conn = {
+  ws: WebSocket;
+  sessionToken: string;
+};
 
 let current: Conn | null = null;
 let connecting: Promise<Conn> | null = null;
 
-const PING_INTERVAL_MS = Number(process.env.WS_PING_INTERVAL_MS ?? 30000);
-const RECONNECT_MIN_MS = Number(process.env.WS_RECONNECT_MIN_MS ?? 600000); // 10 min
-
-let lastFailAt = 0;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-function attachKeepAlive(ws: WebSocket) {
-  const t = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      try { ws.ping(); } catch {}
-    }
-  }, PING_INTERVAL_MS);
-
-  ws.on("close", () => clearInterval(t));
+function normalizeConn(r: OpenWsResult): Conn {
+  const ws = (r.ws || r.socket) as WebSocket;
+  const sessionToken = (r.sessionToken || "").trim(); // sempre string
+  return { ws, sessionToken };
 }
 
-export async function getWsConn(): Promise<Conn> {
-  if (current && current.socket.readyState === WebSocket.OPEN) return current;
+export function getConn(): Promise<Conn> {
+  if (current) return Promise.resolve(current);
   if (connecting) return connecting;
 
-  const now = Date.now();
-  const wait = Math.max(0, RECONNECT_MIN_MS - (now - lastFailAt));
-  if (wait) await sleep(wait);
+  const p = (async () => {
+    const r = await openMonitorWebSocket();
+    const conn = normalizeConn(r);
 
-  connecting = (async () => {
-    try {
-      const conn = await openMonitorWebSocket();
-      attachKeepAlive(conn.socket);
-      current = conn;
-      return conn;
-    } catch (e) {
-      lastFailAt = Date.now();
+    current = conn;
+
+    // quando fechar, invalida o cache
+    conn.ws.once("close", () => {
       current = null;
-      throw e;
-    } finally {
-      connecting = null;
-    }
-  })();
+    });
 
-  return connecting;
+    return conn;
+  })().finally(() => {
+    connecting = null;
+  });
+
+  connecting = p;
+  return p; // <- nunca null
 }
 
+export async function getWs(): Promise<WebSocket> {
+  const c = await getConn();
+  return c.ws;
+}
+
+export function dropConn(): void {
+  try { current?.ws?.close(); } catch {}
+  current = null;
+  connecting = null;
+}
+
+/** Compat: nome antigo usado por services */
+export function getWsConn(): Promise<Conn> {
+  return getConn();
+}

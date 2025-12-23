@@ -1,0 +1,193 @@
+import WebSocket from "ws";
+import { getSessionToken, refreshSessionTokenFromDisk } from "../services/sessionTokenStore";
+
+export interface OpenWsResult {
+  socket: WebSocket;
+  ws: WebSocket;
+  sessionToken: string;
+}
+
+let cached: OpenWsResult | null = null;
+let connecting: Promise<OpenWsResult> | null = null;
+let seq = 0;
+
+const WS_DEBUG = (process.env.WS_DEBUG || "").trim() === "1";
+
+function pickToken(): string {
+  const envToken = (process.env.MONITOR_SESSION_TOKEN || "").trim();
+  if (envToken) return envToken;
+  return (getSessionToken() || "").trim();
+}
+
+function tryJson(x: any) {
+  try {
+    const s = Buffer.isBuffer(x) ? x.toString("utf8") : (typeof x === "string" ? x : null);
+    if (!s) return null;
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function mask(obj: any) {
+  const S = new Set(["password", "mtkn", "session_token", "token", "cookie"]);
+  const walk = (v: any): any => {
+    if (v && typeof v === "object") {
+      if (Array.isArray(v)) return v.map(walk);
+      const out: any = {};
+      for (const [k, val] of Object.entries(v)) out[k] = S.has(k) ? "***" : walk(val);
+      return out;
+    }
+    return v;
+  };
+  return walk(obj);
+}
+
+/**
+ * Converte { action:{ name, parameters, mtkn, session_token } }
+ * para formato aceito pelo Monitor.
+ *
+ * Para assign_setting_to_vehicle: envia SOMENTE os campos mínimos (sem duplicatas, sem client_name, sem mtkn).
+ */
+function normalizeOutgoing(data: any) {
+  const obj = tryJson(data);
+  if (!obj || typeof obj !== "object") return { out: data, parsed: null, note: "" };
+
+  const a = (obj as any).action;
+  if (!a || typeof a !== "object") return { out: data, parsed: obj, note: "" };
+
+  const params0 = a.parameters && typeof a.parameters === "object" ? { ...a.parameters } : {};
+
+  const actionName =
+    a._action_name ||
+    a.name ||
+    a.action_name ||
+    (obj as any)._action_name ||
+    (obj as any).action_name ||
+    (params0 as any)._action_name ||
+    (params0 as any).action_name;
+
+  const session_token =
+    a.session_token || (obj as any).session_token || (params0 as any).session_token;
+
+  const tag = (obj as any).tag || a.tag || (params0 as any).tag || "loading_screen";
+
+  // limpa tokens/ruído dentro dos params
+  delete (params0 as any).mtkn;
+  delete (params0 as any).session_token;
+  delete (params0 as any)._action_name;
+  delete (params0 as any).action_name;
+  delete (params0 as any).tag;
+
+  let outObj: any;
+
+  if (actionName === "user_login") {
+    outObj = { ...params0, tag, _action_name: "user_login" };
+    // mtkn no login às vezes é usado, mas se vier dentro do wrapper, fica em params0
+  } else if (actionName === "assign_setting_to_vehicle") {
+    // PAYLOAD MÍNIMO (sem extras)
+    const client_id = params0.client_id ?? params0.clientId;
+    const vehicle_id = params0.vehicle_id ?? params0.vehicleId;
+    const vehicle_setting_id = params0.vehicle_setting_id ?? params0.vehicleSettingId;
+    const comment = params0.comment != null ? String(params0.comment) : "";
+
+    outObj = {
+      tag,
+      _action_name: "assign_setting_to_vehicle",
+      parameters: { client_id, vehicle_id, vehicle_setting_id, comment },
+    };
+
+    // para essa ação: NÃO manda mtkn (pode estar causando 400)
+    if (session_token) outObj.session_token = session_token;
+  } else {
+    // default: mantém wrapper em parameters (genérico)
+    const mtkn = a.mtkn || (obj as any).mtkn;
+    outObj = { tag, _action_name: actionName, parameters: params0 };
+    if (mtkn) outObj.mtkn = mtkn;
+    if (session_token) outObj.session_token = session_token;
+  }
+
+  return { out: JSON.stringify(outObj), parsed: outObj, note: "normalized(minimal)" };
+}
+
+async function doConnect(): Promise<OpenWsResult> {
+  const url = (process.env.MONITOR_WS_URL || "").trim();
+  if (!url) throw new Error("MONITOR_WS_URL não definido.");
+
+  const cookie = (process.env.MONITOR_WS_COOKIE || "").trim();
+  const origin = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
+
+  if (!(process.env.MONITOR_SESSION_TOKEN || "").trim()) {
+    await refreshSessionTokenFromDisk().catch(() => {});
+  }
+
+  const sessionToken = pickToken();
+  const id = ++seq;
+
+  const headers = cookie ? { Cookie: cookie } : undefined;
+
+  const ws = new WebSocket(url, {
+    headers,
+    origin,
+    handshakeTimeout: 15000,
+    perMessageDeflate: false,
+  });
+
+  const origSend = ws.send.bind(ws);
+  (ws as any).send = (data: any, cb?: any) => {
+    const norm = normalizeOutgoing(data);
+    if (WS_DEBUG) {
+      const p = norm.parsed || tryJson(norm.out);
+      console.log(`[WS] (#${id}) SEND ${norm.note} action=${p?._action_name || ""} tag=${p?.tag || ""} payload=`, mask(p ?? {}));
+    }
+    return origSend(norm.out, cb);
+  };
+
+  if (WS_DEBUG) {
+    ws.on("message", (buf: any) => {
+      const j = tryJson(buf);
+      if (j) console.log(`[WS] (#${id}) RECV payload=`, mask(j));
+    });
+  }
+
+  return await new Promise<OpenWsResult>((resolve, reject) => {
+    let opened = false;
+
+    ws.once("open", () => {
+      opened = true;
+      console.log(`[WS] (#${id}) Conexão aberta.`);
+      resolve({ socket: ws, ws, sessionToken });
+    });
+
+    ws.once("error", (err: any) => {
+      console.log(`[WS] (#${id}) Erro:`, err?.message || String(err));
+      if (!opened) reject(err);
+    });
+
+    ws.once("close", (code: number, reason: Buffer) => {
+      const msg = reason ? reason.toString() : "";
+      console.log(`[WS] (#${id}) Conexão fechada. code=${code} reason=${msg}`);
+      if (cached?.ws === ws) cached = null;
+      if (!opened) reject(new Error(`WS fechou antes do open. code=${code} reason=${msg}`));
+    });
+  });
+}
+
+export async function openMonitorWebSocket(): Promise<OpenWsResult> {
+  if (cached && cached.ws.readyState === WebSocket.OPEN) return cached;
+  if (connecting) return connecting;
+
+  connecting = (async () => {
+    const r = await doConnect();
+    cached = r;
+    return r;
+  })().finally(() => {
+    connecting = null;
+  });
+
+  return connecting;
+}
+
+export async function openWs(): Promise<OpenWsResult> {
+  return openMonitorWebSocket();
+}

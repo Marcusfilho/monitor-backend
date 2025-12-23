@@ -1,0 +1,19 @@
+JOB_SERVER_BASE_URL="http://127.0.0.1:3000"
+ALLOW_REMOTE_JOB_SERVER=1
+WORKER_ID=vm-tunel-01
+BASE_POLL_INTERVAL_MS=2000
+
+MONITOR_SESSION_TOKEN="$(tr -d '\r\n' < /home/questar/monitor-backend/.session_token)"
+MONITOR_SESSION_TOKEN="${MONITOR_SESSION_TOKEN%%#*}"
+
+# MONITOR_WS_URL="wss://websocket.traffilog.com:8182/7E65FBE2-993A-489E-A445-13E9E5CBFF02/${MONITOR_SESSION_TOKEN}/json?defragment=1"
+# MONITOR_WS_URL="${MONITOR_WS_URL%%#*}
+
+MONITOR_WS_ORIGIN="https://operation.traffilog.com"
+#MONITOR_WS_PROTOCOL="json"
+MONITOR_WS_COOKIE=
+SESSION_TOKEN_PATH="/home/questar/monitor-backend/.session_token"
+WS_DEBUG=1
+MONITOR_LOGIN_NAME="Marcus_Prod"
+WS_PASSWORD="Questar@2025!"
+MONITOR_WS_COOKIE_FILE="/home/questar/.secrets/monitor_cookie"
