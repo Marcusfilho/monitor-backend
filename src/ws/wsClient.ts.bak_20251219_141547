@@ -3,120 +3,90 @@ import { getSessionToken, refreshSessionTokenFromDisk } from "../services/sessio
 import { buildEncodedWsFrameFromPayload } from "./wsFrame";
 
 
-function buildEncodedWsFrame(actionName: string, params: any, sessionToken: string): string {
-  // payload "flat" mínimo (wrapMonitorFrame já cria { action: {...} })
-  const payload = { tag: "loading_screen", parameters: params ?? {} };
-
-  // NÃO embrulhar novamente em { action: ... }
-  let frame: any = wrapMonitorFrame(actionName, payload, sessionToken);
-
-  // SAFETY: se em algum lugar alguém criou { action: { action: {...} } }, achata aqui
-  if (frame?.action?.action?.name) {
-    frame.action = frame.action.action;
-  }
-
-  return encodeURIComponent(JSON.stringify(frame));
-}
-
-
-
-function patchWsPrototypeSendForMonitorV3() {
+function patchWsPrototypeSendForMonitor() {
   const proto: any = (WebSocket as any)?.prototype;
   if (!proto) return;
-  if (proto.__patched_monitor_encode_v3) return;
-  proto.__patched_monitor_encode_v3 = true;
 
-  console.log("[WS] proto-send wrapper INSTALLED (v3)");
+  // evita patch duplicado
+  if (proto.__patched_monitor_encode_v2) return;
+  proto.__patched_monitor_encode_v2 = true;
 
   const orig = proto.send;
 
-  function toUtf8String(data: any): { raw: string | null; kind: string } {
-    const B: any = (globalThis as any).Buffer;
+  function toUtf8String(data: any): string | null {
     try {
-      if (typeof data === "string") return { raw: data, kind: "string" };
-      if (B && B.isBuffer && B.isBuffer(data)) return { raw: data.toString("utf8"), kind: "buffer" };
-      if (typeof ArrayBuffer !== "undefined" && data instanceof ArrayBuffer)
-        return { raw: (B ? B.from(data).toString("utf8") : null), kind: "arraybuffer" };
-      if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView?.(data)) {
-        const view: any = data;
-        const buf = B ? B.from(view.buffer, view.byteOffset ?? 0, view.byteLength ?? view.length ?? undefined) : null;
-        return { raw: buf ? buf.toString("utf8") : null, kind: "typedarray" };
+      // string
+      if (typeof data === "string") return data;
+
+      // Buffer (Node)
+      if (typeof Buffer !== "undefined" && Buffer.isBuffer(data)) {
+        return data.toString("utf8");
       }
-      if (data && typeof data === "object") {
-        // caso extremo: alguém chama send(obj)
-        try { return { raw: JSON.stringify(data), kind: "object-json" }; } catch {}
+
+      // ArrayBuffer
+      if (typeof ArrayBuffer !== "undefined" && data instanceof ArrayBuffer) {
+        return Buffer.from(data).toString("utf8");
+      }
+
+      // TypedArray / DataView
+      if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView?.(data)) {
+        const view = data as any;
+        return Buffer.from(view.buffer, view.byteOffset ?? 0, view.byteLength ?? view.length ?? undefined).toString("utf8");
       }
     } catch {}
-    return { raw: null, kind: typeof data };
+    return null;
   }
 
   proto.send = function (data: any, ...args: any[]) {
     try {
-      const { raw, kind } = toUtf8String(data);
-
-      if (raw) {
+      const raw = toUtf8String(data);
+      if (raw != null) {
         const t = raw.trimStart();
-        const isEnc = t.startsWith("%7B%22action%22");
 
-        // Log mínimo do que está indo pro send (sem vazar token)
-        if (t.includes("_action_name") || t.includes("action_name") || t.includes("assign_setting_to_vehicle") || isEnc) {
-          console.log(`[WS] WIRE kind=${kind} enc=${isEnc} prefix=${t.slice(0, 60)}`);
+        // já encoded no padrão Firefox
+        if (t.startsWith("%7B%22action%22%3A%7B%22action%22")) {
+          return orig.call(this, data, ...args);
         }
 
-        // 1) Se já vier encoded, tenta validar shape; se estiver errado, re-encoda
-        if (isEnc) {
-          try {
-            const obj = JSON.parse(decodeURIComponent(t));
-            const hasMonitorShape = !!(obj?.action?.action?.name);
-            if (hasMonitorShape) {
-              // já no shape certo: deixa passar como está (não re-encoda)
-              return orig.call(this, t, ...args);
-            } else {
-              // encoded mas shape estranho -> tenta tratar como payload
-              const storeToken = (typeof getSessionToken === "function") ? getSessionToken() : "";
-              const wire = buildEncodedWsFrameFromPayload(obj, storeToken || obj?.session_token || "");
-              console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
-              return orig.call(this, wire, ...args);
-            }
-          } catch {
-            // se não deu pra parsear, manda como estava
-            return orig.call(this, data, ...args);
-          }
-        }
-
-        // 2) Se vier JSON puro, converte para o frame Firefox
+        // se for JSON, tenta converter
         if (t.startsWith("{")) {
           const obj = JSON.parse(t);
 
-          // Caso já seja o frame do monitor em JSON (não encoded):
-          if (obj?.action?.action?.name) {
-            const actionName = obj.action.action.name;
-            const params = obj.action.action.parameters || {};
-            const storeToken = (typeof getSessionToken === "function") ? getSessionToken() : "";
-            const token = obj.action.session_token || storeToken || "";
-            const wire = buildEncodedWsFrame(actionName, (params || {}), token);
-            console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
+          const looksLikeAction =
+            obj && typeof obj === "object" &&
+            (
+              obj._action_name || obj.action_name || obj.actionName ||
+              obj.action_parameters || obj.parameters ||
+              (obj.action && (obj.action.name || obj.action.action))
+            );
+
+          if (looksLikeAction) {
+            const storeToken =
+              (typeof getSessionToken === "function") ? getSessionToken() : "";
+
+            const token =
+              storeToken || obj.session_token || obj.sessionToken || "";
+
+            const wire = buildEncodedWsFrameFromPayload(obj, token);
+
+            console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)} rawKind=${typeof data}`);
             return orig.call(this, wire, ...args);
           }
+        }
 
-          // Caso payload “flat” (_action_name, parameters, session_token...)
-          const storeToken = (typeof getSessionToken === "function") ? getSessionToken() : "";
-          const token = storeToken || obj.session_token || "";
-          const wire = buildEncodedWsFrameFromPayload(obj, token);
-          console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
-          return orig.call(this, wire, ...args);
+        // debug leve: se parecer action mas não converteu
+        if (t.includes("_action_name") || t.includes("action_name") || t.includes("assign_setting_to_vehicle")) {
+          console.log(`[WS] DEBUG rawSendPrefix=${t.slice(0, 120)}`);
         }
       }
     } catch (e: any) {
-      console.log(`[WS] sendWrapErr=${String(e).slice(0, 120)}`);
+      console.log(`[WS] DEBUG sendWrapErr=${String(e).slice(0, 120)}`);
     }
 
     return orig.call(this, data, ...args);
   };
 }
-patchWsPrototypeSendForMonitorV3();
-
-
+patchWsPrototypeSendForMonitor();
 
 function patchWsSendToFirefox(ws: any) {
   try {

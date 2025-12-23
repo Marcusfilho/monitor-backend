@@ -4,119 +4,347 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.openMonitorWebSocket = openMonitorWebSocket;
-// src/ws/wsClient.ts
+exports.openWs = openWs;
 const ws_1 = __importDefault(require("ws"));
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
-/**
- * Abre o WebSocket do Monitor.
- *
- * Estratégia:
- *  - Se MONITOR_SESSION_TOKEN estiver definido: usa esse token direto, assim que a conexão abrir.
- *  - Caso contrário: tenta extrair session_token de alguma mensagem recebida.
- *
- * Requer:
- *  - MONITOR_WS_URL          = URL completa do WebSocket (copiada do DevTools)
- *  - MONITOR_WS_COOKIE (opt) = Cookie da sessão, se o servidor exigir
- *  - MONITOR_SESSION_TOKEN (opt) = session_token lido do tráfego WS do browser
- */
-async function openMonitorWebSocket() {
-    const url = process.env.MONITOR_WS_URL;
-    await (0, sessionTokenStore_1.refreshSessionTokenFromDisk)().catch(() => { });
-    const configuredToken = (0, sessionTokenStore_1.getSessionToken)();
-    if (!url) {
-        throw new Error("MONITOR_WS_URL não configurada nas variáveis de ambiente.");
+const wsFrame_1 = require("./wsFrame");
+function buildEncodedWsFrame(actionName, params, sessionToken) {
+    // payload "flat" mínimo (wrapMonitorFrame já cria { action: {...} })
+    const payload = { tag: "loading_screen", parameters: params ?? {} };
+    // NÃO embrulhar novamente em { action: ... }
+    let frame = wrapMonitorFrame(actionName, payload, sessionToken);
+    // SAFETY: se em algum lugar alguém criou { action: { action: {...} } }, achata aqui
+    if (frame?.action?.action?.name) {
+        frame.action = frame.action.action;
     }
-    const headers = {};
-    if (process.env.MONITOR_WS_COOKIE) {
-        headers["Cookie"] = process.env.MONITOR_WS_COOKIE;
-    }
-    console.log("[WS] Usando session token do store (SESSION_TOKEN_PATH).");
-    return new Promise((resolve, reject) => {
-        let resolved = false;
-        const ws = new ws_1.default(url, {
-            headers: Object.keys(headers).length ? headers : undefined,
-        });
-        const timeout = setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                ws.close();
-                reject(new Error("Timeout ao conectar ao WebSocket ou obter session_token."));
+    return encodeURIComponent(JSON.stringify(frame));
+}
+function patchWsPrototypeSendForMonitorV3() {
+    const proto = ws_1.default?.prototype;
+    if (!proto)
+        return;
+    if (proto.__patched_monitor_encode_v3)
+        return;
+    proto.__patched_monitor_encode_v3 = true;
+    console.log("[WS] proto-send wrapper INSTALLED (v3)");
+    const orig = proto.send;
+    function toUtf8String(data) {
+        const B = globalThis.Buffer;
+        try {
+            if (typeof data === "string")
+                return { raw: data, kind: "string" };
+            if (B && B.isBuffer && B.isBuffer(data))
+                return { raw: data.toString("utf8"), kind: "buffer" };
+            if (typeof ArrayBuffer !== "undefined" && data instanceof ArrayBuffer)
+                return { raw: (B ? B.from(data).toString("utf8") : null), kind: "arraybuffer" };
+            if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView?.(data)) {
+                const view = data;
+                const buf = B ? B.from(view.buffer, view.byteOffset ?? 0, view.byteLength ?? view.length ?? undefined) : null;
+                return { raw: buf ? buf.toString("utf8") : null, kind: "typedarray" };
             }
-        }, 15000);
-        ws.on("open", () => {
-            console.log("[WS] Conexão aberta.");
-            // Se já temos um session_token configurado no ambiente, usamos ele direto
-            if (configuredToken && !resolved) {
-                console.log("[WS] Usando MONITOR_SESSION_TOKEN vindo do ambiente.");
-                resolved = true;
-                clearTimeout(timeout);
-                resolve({ socket: ws, sessionToken: configuredToken });
-            }
-        });
-        ws.on("message", async (data) => {
-            let text;
-            if (typeof data === "string") {
-                text = data;
-            }
-            else {
-                text = data.toString("utf8");
-            }
-            // Log de debug (pode comentar depois se ficar verboso)
-            if (process.env.WS_DEBUG === "1") {
-                console.log("[WS] Mensagem recebida:", text.slice(0, 200));
-            }
-            if (resolved)
-                return;
-            if (text.startsWith("%7B")) {
+            if (data && typeof data === "object") {
+                // caso extremo: alguém chama send(obj)
                 try {
-                    text = decodeURIComponent(text);
+                    return { raw: JSON.stringify(data), kind: "object-json" };
                 }
-                catch {
-                    /* ignore */
+                catch { }
+            }
+        }
+        catch { }
+        return { raw: null, kind: typeof data };
+    }
+    proto.send = function (data, ...args) {
+        try {
+            const { raw, kind } = toUtf8String(data);
+            if (raw) {
+                const t = raw.trimStart();
+                const isEnc = t.startsWith("%7B%22action%22");
+                // Log mínimo do que está indo pro send (sem vazar token)
+                if (t.includes("_action_name") || t.includes("action_name") || t.includes("assign_setting_to_vehicle") || isEnc) {
+                    console.log(`[WS] WIRE kind=${kind} enc=${isEnc} prefix=${t.slice(0, 60)}`);
                 }
-            }
-            if (!text.includes('"session_token"')) {
-                return;
-            }
-            try {
-                const obj = JSON.parse(text);
-                const sessionToken = (obj.action && obj.action.session_token) ||
-                    (obj.response &&
-                        obj.response.properties &&
-                        obj.response.properties.session_token);
-                if (sessionToken) {
-                    console.log("[WS] session_token detectado da mensagem. Salvando no store...");
+                // 1) Se já vier encoded, tenta validar shape; se estiver errado, re-encoda
+                if (isEnc) {
                     try {
-                        // salva no disco pra sobreviver a restart
-                        await (0, sessionTokenStore_1.setSessionToken)(sessionToken);
+                        const obj = JSON.parse(decodeURIComponent(t));
+                        const hasMonitorShape = !!(obj?.action?.action?.name);
+                        if (hasMonitorShape) {
+                            // já no shape certo: deixa passar como está (não re-encoda)
+                            return orig.call(this, t, ...args);
+                        }
+                        else {
+                            // encoded mas shape estranho -> tenta tratar como payload
+                            const storeToken = (typeof sessionTokenStore_1.getSessionToken === "function") ? (0, sessionTokenStore_1.getSessionToken)() : "";
+                            const wire = (0, wsFrame_1.buildEncodedWsFrameFromPayload)(obj, storeToken || obj?.session_token || "");
+                            console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
+                            return orig.call(this, wire, ...args);
+                        }
                     }
-                    catch (e) {
-                        console.error("[WS] Falha ao salvar session_token no store:", e);
+                    catch {
+                        // se não deu pra parsear, manda como estava
+                        return orig.call(this, data, ...args);
                     }
-                    resolved = true;
-                    clearTimeout(timeout);
-                    resolve({ socket: ws, sessionToken });
+                }
+                // 2) Se vier JSON puro, converte para o frame Firefox
+                if (t.startsWith("{")) {
+                    const obj = JSON.parse(t);
+                    // Caso já seja o frame do monitor em JSON (não encoded):
+                    if (obj?.action?.action?.name) {
+                        const actionName = obj.action.action.name;
+                        const params = obj.action.action.parameters || {};
+                        const storeToken = (typeof sessionTokenStore_1.getSessionToken === "function") ? (0, sessionTokenStore_1.getSessionToken)() : "";
+                        const token = obj.action.session_token || storeToken || "";
+                        const wire = buildEncodedWsFrame(actionName, (params || {}), token);
+                        console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
+                        return orig.call(this, wire, ...args);
+                    }
+                    // Caso payload “flat” (_action_name, parameters, session_token...)
+                    const storeToken = (typeof sessionTokenStore_1.getSessionToken === "function") ? (0, sessionTokenStore_1.getSessionToken)() : "";
+                    const token = storeToken || obj.session_token || "";
+                    const wire = (0, wsFrame_1.buildEncodedWsFrameFromPayload)(obj, token);
+                    console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
+                    return orig.call(this, wire, ...args);
                 }
             }
-            catch (err) {
-                console.error("[WS] Erro ao parsear mensagem com session_token:", err);
+        }
+        catch (e) {
+            console.log(`[WS] sendWrapErr=${String(e).slice(0, 120)}`);
+        }
+        return orig.call(this, data, ...args);
+    };
+}
+patchWsPrototypeSendForMonitorV3();
+function patchWsSendToFirefox(ws) {
+    try {
+        if (ws && ws.__patched_firefox_send)
+            return;
+        if (ws)
+            ws.__patched_firefox_send = true;
+    }
+    catch { }
+    const orig = ws.send.bind(ws);
+    ws.send = (data, ...args) => {
+        try {
+            // Já URL-encoded? deixa passar
+            if (typeof data === "string" && data.startsWith("%7B%22action%22")) {
+                return orig(data, ...args);
             }
+            // Se for JSON string, converte para frame Firefox
+            if (typeof data === "string" && data.trim().startsWith("{")) {
+                const obj = JSON.parse(data);
+                // token atual do store (já existe no seu wsClient.ts)
+                const token = (0, sessionTokenStore_1.getSessionToken)();
+                const wire = (0, wsFrame_1.buildEncodedWsFrameFromPayload)(obj, token);
+                console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
+                return orig(wire, ...args);
+            }
+        }
+        catch {
+            // fallback silencioso
+        }
+        return orig(data, ...args);
+    };
+}
+// === PATCH: compat Monitor (frame action + flow_id + mtkn) ===
+function genFlowId() {
+    return String(200000 + Math.floor(Math.random() * 800000));
+}
+function genMtkn() {
+    const now = Date.now().toString();
+    let rnd = Math.floor(Math.random() * 1e12).toString();
+    while (rnd.length < 12)
+        rnd = "0" + rnd;
+    return now + rnd;
+}
+/**
+ * Monitor (Scheme Builder) usa frame: { action: { flow_id, name, parameters, session_token, mtkn } }
+ * Este wrapper converte payloads "flat" (tag/_action_name/parameters/mtkn/session_token) para o frame esperado.
+ */
+function wrapMonitorFrame(actionName, payload, sessionToken) {
+    if (payload && payload.action && payload.action.name)
+        return payload;
+    const mtkn = String(payload?.mtkn || genMtkn());
+    const sess = String(payload?.session_token || sessionToken);
+    // pega parâmetros do lugar mais comum
+    const baseParams = (payload && payload.parameters) ? payload.parameters : (payload || {});
+    const params = { ...baseParams, _action_name: actionName, mtkn };
+    return {
+        action: {
+            flow_id: genFlowId(),
+            name: actionName,
+            parameters: params,
+            session_token: sess,
+            mtkn
+        }
+    };
+}
+let cached = null;
+let connecting = null;
+let seq = 0;
+const WS_DEBUG = (process.env.WS_DEBUG || "").trim() === "1";
+function pickToken() {
+    const envToken = (process.env.MONITOR_SESSION_TOKEN || "").trim();
+    if (envToken)
+        return envToken;
+    return ((0, sessionTokenStore_1.getSessionToken)() || "").trim();
+}
+function tryJson(x) {
+    try {
+        const s = Buffer.isBuffer(x) ? x.toString("utf8") : (typeof x === "string" ? x : null);
+        if (!s)
+            return null;
+        return JSON.parse(s);
+    }
+    catch {
+        return null;
+    }
+}
+function mask(obj) {
+    const S = new Set(["password", "mtkn", "session_token", "token", "cookie"]);
+    const walk = (v) => {
+        if (v && typeof v === "object") {
+            if (Array.isArray(v))
+                return v.map(walk);
+            const out = {};
+            for (const [k, val] of Object.entries(v))
+                out[k] = S.has(k) ? "***" : walk(val);
+            return out;
+        }
+        return v;
+    };
+    return walk(obj);
+}
+/**
+ * Converte { action:{ name, parameters, mtkn, session_token } }
+ * para formato aceito pelo Monitor.
+ *
+ * Para assign_setting_to_vehicle: envia SOMENTE os campos mínimos (sem duplicatas, sem client_name, sem mtkn).
+ */
+function normalizeOutgoing(data) {
+    const obj = tryJson(data);
+    if (!obj || typeof obj !== "object")
+        return { out: data, parsed: null, note: "" };
+    const a = obj.action;
+    if (!a || typeof a !== "object")
+        return { out: data, parsed: obj, note: "" };
+    const params0 = a.parameters && typeof a.parameters === "object" ? { ...a.parameters } : {};
+    const actionName = a._action_name ||
+        a.name ||
+        a.action_name ||
+        obj._action_name ||
+        obj.action_name ||
+        params0._action_name ||
+        params0.action_name;
+    const session_token = a.session_token || obj.session_token || params0.session_token;
+    const tag = obj.tag || a.tag || params0.tag || "loading_screen";
+    // limpa tokens/ruído dentro dos params
+    delete params0.mtkn;
+    delete params0.session_token;
+    delete params0._action_name;
+    delete params0.action_name;
+    delete params0.tag;
+    let outObj;
+    if (actionName === "user_login") {
+        outObj = { ...params0, tag, _action_name: "user_login" };
+        // mtkn no login às vezes é usado, mas se vier dentro do wrapper, fica em params0
+    }
+    else if (actionName === "assign_setting_to_vehicle") {
+        // PAYLOAD MÍNIMO (sem extras)
+        const client_id = params0.client_id ?? params0.clientId;
+        const vehicle_id = params0.vehicle_id ?? params0.vehicleId;
+        const vehicle_setting_id = params0.vehicle_setting_id ?? params0.vehicleSettingId;
+        const comment = params0.comment != null ? String(params0.comment) : "";
+        outObj = {
+            tag,
+            _action_name: "assign_setting_to_vehicle",
+            parameters: { client_id, vehicle_id, vehicle_setting_id, comment },
+        };
+        // para essa ação: NÃO manda mtkn (pode estar causando 400)
+        if (session_token)
+            outObj.session_token = session_token;
+    }
+    else {
+        // default: mantém wrapper em parameters (genérico)
+        const mtkn = a.mtkn || obj.mtkn;
+        outObj = { tag, _action_name: actionName, parameters: params0 };
+        if (mtkn)
+            outObj.mtkn = mtkn;
+        if (session_token)
+            outObj.session_token = session_token;
+    }
+    return { out: JSON.stringify(outObj), parsed: outObj, note: "normalized(minimal)" };
+}
+async function doConnect() {
+    const url = (process.env.MONITOR_WS_URL || "").trim();
+    if (!url)
+        throw new Error("MONITOR_WS_URL não definido.");
+    const cookie = (process.env.MONITOR_WS_COOKIE || "").trim();
+    const origin = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
+    if (!(process.env.MONITOR_SESSION_TOKEN || "").trim()) {
+        await (0, sessionTokenStore_1.refreshSessionTokenFromDisk)().catch(() => { });
+    }
+    const sessionToken = pickToken();
+    const id = ++seq;
+    const headers = cookie ? { Cookie: cookie } : undefined;
+    const ws = new ws_1.default(url, {
+        headers,
+        origin,
+        handshakeTimeout: 15000,
+        perMessageDeflate: false,
+    });
+    patchWsSendToFirefox(ws);
+    const origSend = ws.send.bind(ws);
+    ws.send = (data, cb) => {
+        const norm = normalizeOutgoing(data);
+        if (WS_DEBUG) {
+            const p = norm.parsed || tryJson(norm.out);
+            console.log(`[WS] (#${id}) SEND ${norm.note} action=${p?._action_name || ""} tag=${p?.tag || ""} payload=`, mask(p ?? {}));
+        }
+        return origSend(norm.out, cb);
+    };
+    if (WS_DEBUG) {
+        ws.on("message", (buf) => {
+            const j = tryJson(buf);
+            if (j)
+                console.log(`[WS] (#${id}) RECV payload=`, mask(j));
         });
-        ws.on("error", (err) => {
-            console.error("[WS] Erro na conexão:", err);
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
+    }
+    return await new Promise((resolve, reject) => {
+        let opened = false;
+        ws.once("open", () => {
+            opened = true;
+            console.log(`[WS] (#${id}) Conexão aberta.`);
+            resolve({ socket: ws, ws, sessionToken });
+        });
+        ws.once("error", (err) => {
+            console.log(`[WS] (#${id}) Erro:`, err?.message || String(err));
+            if (!opened)
                 reject(err);
-            }
         });
-        ws.on("close", () => {
-            console.log("[WS] Conexão fechada.");
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                reject(new Error("WS fechado antes de obter session_token."));
-            }
+        ws.once("close", (code, reason) => {
+            const msg = reason ? reason.toString() : "";
+            console.log(`[WS] (#${id}) Conexão fechada. code=${code} reason=${msg}`);
+            if (cached?.ws === ws)
+                cached = null;
+            if (!opened)
+                reject(new Error(`WS fechou antes do open. code=${code} reason=${msg}`));
         });
     });
+}
+async function openMonitorWebSocket() {
+    if (cached && cached.ws.readyState === ws_1.default.OPEN)
+        return cached;
+    if (connecting)
+        return connecting;
+    connecting = (async () => {
+        const r = await doConnect();
+        cached = r;
+        return r;
+    })().finally(() => {
+        connecting = null;
+    });
+    return connecting;
+}
+async function openWs() {
+    return openMonitorWebSocket();
 }

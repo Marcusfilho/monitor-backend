@@ -1,69 +1,78 @@
-import fs from "fs/promises";
+import fs from "fs";
 import path from "path";
 
-type TokenFile = { token: string; updatedAt: string };
+const DEFAULT_PATH = path.join(process.cwd(), ".session_token");
+const TOKEN_PATH = (process.env.SESSION_TOKEN_PATH || DEFAULT_PATH).trim();
 
-let token: string | null = process.env.MONITOR_SESSION_TOKEN ?? null;
-let updatedAt: string | null = null;
+let _token = "";
 
-const tokenPath = process.env.SESSION_TOKEN_PATH || "";
-
-async function fileExists(p: string) {
-  try { await fs.stat(p); return true; } catch { return false; }
+export function getSessionToken(): string {
+  return _token;
 }
 
-async function ensureDirForFile(p: string) {
-  const dir = path.dirname(p);
-  await fs.mkdir(dir, { recursive: true });
+export async function refreshSessionTokenFromDisk(): Promise<string> {
+  try {
+    _token = fs.readFileSync(TOKEN_PATH, "utf8").trim();
+  } catch {
+    // ok: arquivo pode não existir
+  }
+  return _token;
 }
 
-function preview(t: string | null) {
-  if (!t) return null;
-  return `***${t.slice(-4)}`;
+let writeLock: Promise<void> = Promise.resolve();
+
+/** grava token em disco de forma serializada (sem .tmp/rename) */
+export async function setSessionToken(token: string): Promise<void> {
+  _token = (token || "").trim();
+  if (!_token) return;
+
+  writeLock = writeLock.then(async () => {
+    try {
+      fs.writeFileSync(TOKEN_PATH, _token, "utf8");
+    } catch (e: any) {
+      console.log("[token] falha ao gravar SESSION_TOKEN_PATH:", e?.message || String(e));
+    }
+  });
+
+  await writeLock;
 }
 
-export async function refreshSessionTokenFromDisk() {
-  if (!tokenPath) return;
-  if (!(await fileExists(tokenPath))) return;
+/**
+ * Compatibilidade (imports antigos):
+ * - initSessionTokenStore(): inicializa o store (tenta carregar do disco se estiver vazio)
+ * - getSessionTokenStatus(): status do token (sem expor o token completo)
+ */
 
-  const raw = await fs.readFile(tokenPath, "utf-8");
-  const data = JSON.parse(raw) as TokenFile;
+export type SessionTokenStatus = {
+  hasToken: boolean;
+  tokenMasked: string | null;
+  tokenLength: number;
+};
 
-  if (data?.token) token = data.token;
-  if (data?.updatedAt) updatedAt = data.updatedAt;
+function maskToken(token: string): string {
+  const t = (token || "").trim();
+  if (!t) return "";
+  if (t.length <= 8) return "****";
+  return `${t.slice(0, 4)}…${t.slice(-4)}`;
 }
 
-export async function initSessionTokenStore() {
-  await refreshSessionTokenFromDisk();
+export async function initSessionTokenStore(): Promise<void> {
+  const cur = (getSessionToken?.() || "").trim();
+  if (cur) return;
+
+  try {
+    // Não assumimos assinatura; cast para evitar erro se exigir argumento
+    await (refreshSessionTokenFromDisk as any)();
+  } catch (err) {
+    console.warn("[tokenStore] initSessionTokenStore: falha ao carregar token do disco:", err);
+  }
 }
 
-export function getSessionToken() {
-  return token;
-}
-
-export function getSessionTokenStatus() {
+export function getSessionTokenStatus(): SessionTokenStatus {
+  const token = (getSessionToken?.() || "").trim();
   return {
     hasToken: !!token,
-    updatedAt,
-    tokenPreview: preview(token),
-    tokenPath: tokenPath || null,
+    tokenMasked: token ? maskToken(token) : null,
+    tokenLength: token.length,
   };
-}
-
-export async function setSessionToken(newToken: string) {
-  if (!tokenPath) throw new Error("SESSION_TOKEN_PATH não configurado");
-  if (!newToken || typeof newToken !== "string") throw new Error("token inválido");
-
-  token = newToken;
-  updatedAt = new Date().toISOString();
-
-  await ensureDirForFile(tokenPath);
-
-  const payload: TokenFile = { token: newToken, updatedAt };
-  const tmp = `${tokenPath}.tmp`;
-
-   await fs.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
-  await fs.rename(tmp, tokenPath);
-  await fs.chmod(tokenPath, 0o600).catch(() => {});
-
 }

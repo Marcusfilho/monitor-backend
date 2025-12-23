@@ -3,71 +3,69 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.refreshSessionTokenFromDisk = refreshSessionTokenFromDisk;
-exports.initSessionTokenStore = initSessionTokenStore;
 exports.getSessionToken = getSessionToken;
-exports.getSessionTokenStatus = getSessionTokenStatus;
+exports.refreshSessionTokenFromDisk = refreshSessionTokenFromDisk;
 exports.setSessionToken = setSessionToken;
-const promises_1 = __importDefault(require("fs/promises"));
+exports.initSessionTokenStore = initSessionTokenStore;
+exports.getSessionTokenStatus = getSessionTokenStatus;
+const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-let token = process.env.MONITOR_SESSION_TOKEN ?? null;
-let updatedAt = null;
-const tokenPath = process.env.SESSION_TOKEN_PATH || "";
-async function fileExists(p) {
-    try {
-        await promises_1.default.stat(p);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
-async function ensureDirForFile(p) {
-    const dir = path_1.default.dirname(p);
-    await promises_1.default.mkdir(dir, { recursive: true });
-}
-function preview(t) {
-    if (!t)
-        return null;
-    return `***${t.slice(-4)}`;
+const DEFAULT_PATH = path_1.default.join(process.cwd(), ".session_token");
+const TOKEN_PATH = (process.env.SESSION_TOKEN_PATH || DEFAULT_PATH).trim();
+let _token = "";
+function getSessionToken() {
+    return _token;
 }
 async function refreshSessionTokenFromDisk() {
-    if (!tokenPath)
+    try {
+        _token = fs_1.default.readFileSync(TOKEN_PATH, "utf8").trim();
+    }
+    catch {
+        // ok: arquivo pode não existir
+    }
+    return _token;
+}
+let writeLock = Promise.resolve();
+/** grava token em disco de forma serializada (sem .tmp/rename) */
+async function setSessionToken(token) {
+    _token = (token || "").trim();
+    if (!_token)
         return;
-    if (!(await fileExists(tokenPath)))
-        return;
-    const raw = await promises_1.default.readFile(tokenPath, "utf-8");
-    const data = JSON.parse(raw);
-    if (data?.token)
-        token = data.token;
-    if (data?.updatedAt)
-        updatedAt = data.updatedAt;
+    writeLock = writeLock.then(async () => {
+        try {
+            fs_1.default.writeFileSync(TOKEN_PATH, _token, "utf8");
+        }
+        catch (e) {
+            console.log("[token] falha ao gravar SESSION_TOKEN_PATH:", e?.message || String(e));
+        }
+    });
+    await writeLock;
+}
+function maskToken(token) {
+    const t = (token || "").trim();
+    if (!t)
+        return "";
+    if (t.length <= 8)
+        return "****";
+    return `${t.slice(0, 4)}…${t.slice(-4)}`;
 }
 async function initSessionTokenStore() {
-    await refreshSessionTokenFromDisk();
-}
-function getSessionToken() {
-    return token;
+    const cur = (getSessionToken?.() || "").trim();
+    if (cur)
+        return;
+    try {
+        // Não assumimos assinatura; cast para evitar erro se exigir argumento
+        await refreshSessionTokenFromDisk();
+    }
+    catch (err) {
+        console.warn("[tokenStore] initSessionTokenStore: falha ao carregar token do disco:", err);
+    }
 }
 function getSessionTokenStatus() {
+    const token = (getSessionToken?.() || "").trim();
     return {
         hasToken: !!token,
-        updatedAt,
-        tokenPreview: preview(token),
-        tokenPath: tokenPath || null,
+        tokenMasked: token ? maskToken(token) : null,
+        tokenLength: token.length,
     };
-}
-async function setSessionToken(newToken) {
-    if (!tokenPath)
-        throw new Error("SESSION_TOKEN_PATH não configurado");
-    if (!newToken || typeof newToken !== "string")
-        throw new Error("token inválido");
-    token = newToken;
-    updatedAt = new Date().toISOString();
-    await ensureDirForFile(tokenPath);
-    const payload = { token: newToken, updatedAt };
-    const tmp = `${tokenPath}.tmp`;
-    await promises_1.default.writeFile(tmp, JSON.stringify(payload), { encoding: "utf-8" });
-    await promises_1.default.rename(tmp, tokenPath);
-    await promises_1.default.chmod(tokenPath, 0o600).catch(() => { });
 }
