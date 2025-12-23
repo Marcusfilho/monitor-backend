@@ -310,7 +310,7 @@ async function doConnect(): Promise<OpenWsResult> {
   const origin = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
 
   if (!(process.env.MONITOR_SESSION_TOKEN || "").trim()) {
-    await refreshSessionTokenFromDisk().catch(() => {});
+    refreshSessionTokenFromDisk();
   }
 
   const sessionToken = pickToken();
