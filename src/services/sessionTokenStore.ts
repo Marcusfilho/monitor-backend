@@ -16,6 +16,22 @@ export function initSessionTokenStore(): void {
   }
 }
 
+/**
+ * Recarrega do disco, mas NÃO zera o token em caso de erro.
+ * Retorna true se o token mudou.
+ */
+export function refreshSessionTokenFromDisk(): boolean {
+  try {
+    const raw = fs.readFileSync(SESSION_TOKEN_PATH, "utf8");
+    const t = (raw || "").trim();
+    const changed = t !== sessionToken;
+    sessionToken = t;
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
 export function getSessionToken(): string {
   return sessionToken;
 }
