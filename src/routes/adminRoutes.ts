@@ -1,30 +1,36 @@
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { getSessionTokenStatus, setSessionToken } from "../services/sessionTokenStore";
 
 const router = Router();
 
-function requireAdminKey(req: any, res: any, next: any) {
-  const adminKey = process.env.ADMIN_KEY;
-  if (!adminKey) return res.status(503).json({ ok: false, error: "ADMIN_KEY não configurado" });
+function requireAdminKey(req: Request, res: Response, next: NextFunction) {
+  const expected = (process.env.SESSION_TOKEN_ADMIN_KEY || "").trim();
+  const got =
+    (req.header("x-admin-key") || req.header("X-Admin-Key") || "").trim();
 
-  const got = req.header("X-Admin-Key");
-  if (!got || got !== adminKey) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  next();
+  if (!expected) {
+    return res.status(500).json({ error: "SESSION_TOKEN_ADMIN_KEY not set" });
+  }
+  if (!got || got !== expected) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  return next();
 }
 
-router.get("/admin/session-token/status", requireAdminKey, (_req, res) => {
-  res.json({ ok: true, ...getSessionTokenStatus() });
+router.get("/session-token/status", requireAdminKey, (req: Request, res: Response) => {
+  return res.json(getSessionTokenStatus());
 });
 
-router.post("/admin/session-token", requireAdminKey, async (req, res) => {
-  const token = req.body?.token;
-  if (!token || typeof token !== "string" || token.length < 20) {
-    return res.status(400).json({ ok: false, error: "token inválido" });
+router.post("/session-token", requireAdminKey, (req: Request, res: Response) => {
+  const token =
+    (req.body && (req.body.sessionToken || req.body.token)) ? String(req.body.sessionToken || req.body.token) : "";
+
+  if (!token.trim()) {
+    return res.status(400).json({ error: "missing token (body.token or body.sessionToken)" });
   }
 
-  await setSessionToken(token);
-  res.json({ ok: true, ...getSessionTokenStatus() });
+  setSessionToken(token);
+  return res.json({ ok: true, ...getSessionTokenStatus() });
 });
 
 export default router;
