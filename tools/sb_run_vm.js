@@ -1,5 +1,111 @@
 const WebSocket = require("ws");
 
+// === AUTOLOGIN PATCH (2025-12-26) ==========================================
+const fs = require("fs");
+
+function __readSecretEnvOrFile(envName, fileEnvName) {
+  const v = (process.env[envName] || "").trim();
+  if (v) return v;
+  const f = (process.env[fileEnvName] || "").trim();
+  if (!f) return "";
+  try { return fs.readFileSync(f, "utf8").trim(); } catch { return ""; }
+}
+
+const __WS_USER = (process.env.MONITOR_USERNAME || process.env.MONITOR_USER || process.env.WS_USER || process.env.USER_LOGIN || "").trim();
+const __WS_PASS =
+  __readSecretEnvOrFile("WS_PASSWORD", "WS_PASSWORD_FILE") ||
+  __readSecretEnvOrFile("MONITOR_PASSWORD", "MONITOR_PASSWORD_FILE");
+
+function __buildWire(actionName, params, mtkn, sessionToken, tag) {
+  const obj = { tag: tag || "loading_screen", _action_name: actionName, parameters: params || {}, mtkn: String(mtkn) };
+  if (sessionToken && actionName !== "user_login") obj.session_token = String(sessionToken);
+  return encodeURIComponent(JSON.stringify(obj));
+}
+
+function __safeOff(ws, ev, fn) {
+  try {
+    if (typeof ws.off === "function") ws.off(ev, fn);
+    else ws.removeListener(ev, fn);
+  } catch {}
+}
+
+async function __autoWsUserLogin(ws, sessionToken) {
+  if (!__WS_USER || !__WS_PASS) {
+    console.log("[sb] auto-login skipped (MONITOR_USERNAME / WS_PASSWORD ausentes)");
+    return true;
+  }
+  if (ws.__autoLoggedIn) return true;
+  ws.__autoLoggedIn = true; // só marca 1x
+
+  const candidates = [
+    { user_name: __WS_USER, password: __WS_PASS },
+    { username: __WS_USER, password: __WS_PASS },
+    { user: __WS_USER, password: __WS_PASS },
+    { login: __WS_USER, password: __WS_PASS },
+    { email: __WS_USER, password: __WS_PASS },
+    { user_name: __WS_USER, user_password: __WS_PASS },
+    { user: __WS_USER, pass: __WS_PASS },
+  ];
+
+  for (const params of candidates) {
+    const mtkn = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
+    const wire = __buildWire("user_login", params, mtkn, null, "loading_screen");
+    console.log("[sb] >> user_login (auto) mtkn=" + mtkn);
+
+    const ok = await new Promise((resolve) => {
+      let done = false;
+      const t = setTimeout(() => {
+        if (done) return;
+        done = true;
+        __safeOff(ws, "message", onMsg);
+        resolve(false);
+      }, 8000);
+
+      function finish(v) {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        __safeOff(ws, "message", onMsg);
+        resolve(v);
+      }
+
+      function onMsg(raw) {
+        try {
+          const txt = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
+          const dec = txt.trim().startsWith("{") ? txt : decodeURIComponent(txt);
+          const j = JSON.parse(dec);
+
+          const resp = (j && j.response && j.response.properties) ? j.response.properties
+                     : (j && j.response) ? j.response
+                     : j;
+
+          const rmtkn = String((resp && (resp.mtkn || (resp.properties && resp.properties.mtkn))) || "");
+if (rmtkn !== String(mtkn)) return;
+
+          const av = String((resp && (resp.action_value || (resp.properties && resp.properties.action_value))) || "");
+if (av === "0") {
+            console.log("[sb] << user_login OK");
+            return finish(true);
+          }
+          console.log("[sb] << user_login FAIL action_value=" + av);
+          return finish(false);
+        } catch {
+          // ignora
+        }
+      }
+
+      ws.on("message", onMsg);
+      ws.send(wire);
+    });
+
+    if (ok) return true;
+  }
+
+  console.log("[sb] auto-login falhou em todas as variações. Provável: nomes de campos diferentes.");
+  return false;
+}
+// === /AUTOLOGIN PATCH =======================================================
+
 
 const __SEEN_BY_MTK = new Map();
 const __PENDING_BY_MTK = new Map();

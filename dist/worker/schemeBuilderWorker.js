@@ -59,13 +59,18 @@ const http = axios_1.default.create({
 async function fetchNextJob() {
     try {
         const resp = await http.get(`/api/jobs/next`, {
-            params: { type: "scheme_builder", worker: WORKER_ID },
+            params: { type: "scheme_builder", worker: WORKER_ID, workerId: WORKER_ID },
         });
-        if (resp.status === 204)
+        if (resp.status === 204) {
+            console.log(`[worker] poll /api/jobs/next: 204 (sem job)`);
             return null;
+        }
+        console.log(`[worker] poll /api/jobs/next: status=${resp.status}`);
         const job = resp.data?.job;
-        if (!job)
+        if (!job) {
+            console.log(`[worker] poll /api/jobs/next: sem job no body (status=${resp.status})`);
             return null;
+        }
         console.log(`[worker] Job recebido: id=${job.id}, vehicleId=${job.payload.vehicleId}`);
         return job;
     }

@@ -9,3 +9,11 @@ _bak/
 .env
 worker_env.sh
 
+
+# --- LOCAL / SECRETS ---
+worker_env.env
+*.env
+.secrets/
+.session_token
+*.bak_*
+
