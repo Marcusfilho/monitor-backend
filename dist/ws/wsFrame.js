@@ -19,7 +19,31 @@ function buildEncodedWsFrame(actionName, params, sessionToken) {
     if (sessionToken && actionName !== "user_login") {
         frame.session_token = sessionToken;
     }
-    return encodeURIComponent(JSON.stringify(frame));
+    let f = frame;
+    try {
+        // 1) desfaz { action: { action: {...}, ... } } -> { action: {...} }
+        const a = f?.action;
+        if (a && a.action && typeof a.action === "object") {
+            const inner = a.action;
+            const outer = { ...a };
+            delete outer.action;
+            f = { ...f, action: { ...inner, ...outer } };
+        }
+        // 2) _action_name -> name (nosso payload interno)
+        if (f?.action?._action_name && !f.action.name) {
+            f.action.name = f.action._action_name;
+            delete f.action._action_name;
+        }
+        // 3) action_name/action_parameters -> name/parameters (estilo do monitor)
+        if (f?.action?.action_name && f?.action?.action_parameters && !f.action.name) {
+            f.action.name = f.action.action_name;
+            f.action.parameters = f.action.action_parameters;
+            delete f.action.action_name;
+            delete f.action.action_parameters;
+        }
+    }
+    catch (_) { }
+    return encodeURIComponent(JSON.stringify(f));
 }
 function buildEncodedWsFrameFromPayload(payload, sessionToken) {
     const actionName = payload?._action_name ?? payload?.action_name ?? payload?.actionName ?? "";

@@ -17,7 +17,31 @@ function buildEncodedWsFrame(actionName, params, sessionToken) {
     if (frame?.action?.action?.name) {
         frame.action = frame.action.action;
     }
-    return encodeURIComponent(JSON.stringify(frame));
+    let f = frame;
+    try {
+        // 1) desfaz { action: { action: {...}, ... } } -> { action: {...} }
+        const a = f?.action;
+        if (a && a.action && typeof a.action === "object") {
+            const inner = a.action;
+            const outer = { ...a };
+            delete outer.action;
+            f = { ...f, action: { ...inner, ...outer } };
+        }
+        // 2) _action_name -> name (nosso payload interno)
+        if (f?.action?._action_name && !f.action.name) {
+            f.action.name = f.action._action_name;
+            delete f.action._action_name;
+        }
+        // 3) action_name/action_parameters -> name/parameters (estilo do monitor)
+        if (f?.action?.action_name && f?.action?.action_parameters && !f.action.name) {
+            f.action.name = f.action.action_name;
+            f.action.parameters = f.action.action_parameters;
+            delete f.action.action_name;
+            delete f.action.action_parameters;
+        }
+    }
+    catch (_) { }
+    return encodeURIComponent(JSON.stringify(f));
 }
 function patchWsPrototypeSendForMonitorV3() {
     const proto = ws_1.default?.prototype;
@@ -77,6 +101,16 @@ function patchWsPrototypeSendForMonitorV3() {
                             const storeToken = (typeof sessionTokenStore_1.getSessionToken === "function") ? (0, sessionTokenStore_1.getSessionToken)() : "";
                             const wire = (0, wsFrame_1.buildEncodedWsFrameFromPayload)(obj, storeToken || obj?.session_token || "");
                             console.log(`[WS] SEND encodedPrefix=${wire.slice(0, 60)}`);
+                            try {
+                                const decoded = decodeURIComponent(wire);
+                                const obj = JSON.parse(decoded);
+                                const a = obj?.action || {};
+                                const pkeys = a?.parameters ? Object.keys(a.parameters) : [];
+                                console.log(`[WS] SEND summary action=${a?.name || ""} tag=${obj?.tag || ""} mtkn=${a?.mtkn ? "YES" : "NO"} session_token=${a?.session_token ? "YES" : (obj?.session_token ? "YES" : "NO")} paramKeys=${pkeys.join(",")}`);
+                            }
+                            catch (e) {
+                                console.log("[WS] SEND summary parse_failed");
+                            }
                             return orig.call(this, wire, ...args);
                         }
                     }
@@ -281,7 +315,7 @@ async function doConnect() {
     const cookie = (process.env.MONITOR_WS_COOKIE || "").trim();
     const origin = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
     if (!(process.env.MONITOR_SESSION_TOKEN || "").trim()) {
-        await (0, sessionTokenStore_1.refreshSessionTokenFromDisk)().catch(() => { });
+        (0, sessionTokenStore_1.refreshSessionTokenFromDisk)();
     }
     const sessionToken = pickToken();
     const id = ++seq;
