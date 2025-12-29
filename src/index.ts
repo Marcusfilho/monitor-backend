@@ -22,6 +22,8 @@ app.get("/health", (_req, res) => {
     status: "ok",
     service: "monitor-backend",
     timestamp: new Date().toISOString(),
+    git_commit: process.env.RENDER_GIT_COMMIT || null,
+    git_branch: process.env.RENDER_GIT_GIT_BRANCH || process.env.RENDER_GIT_BRANCH || null
   });
 });
 
