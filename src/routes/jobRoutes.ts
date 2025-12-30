@@ -35,6 +35,28 @@ router.get("/next", (req: Request, res: Response) => {
 });
 
 /** POST /api/jobs/:id/complete */
+// POST /api/jobs/:id/progress  body: { percent: 0..100, stage?: string, detail?: string }
+// POST /api/jobs/:id/progress  body: { percent: 0..100, stage?: string, detail?: string }
+router.post("/:id/progress", (req, res) => {
+  const jobId = String((req as any).params?.id || "");
+  const id = jobId; // compat: alguns lookups usam "id"
+  const body = (req as any).body || {};
+
+  const p = Number(body.percent);
+  if (!Number.isFinite(p) || p < 0 || p > 100) {
+    return res.status(400).json({ error: "percent must be 0..100" });
+  }
+
+  const job = getJob(id);
+  if (!job) return res.status(404).json({ error: "job not found" });
+
+  (job as any).progressPercent = Math.round(p);
+  (job as any).progressStage = (typeof body.stage === "string") ? body.stage : null;
+  (job as any).progressDetail = (typeof body.detail === "string") ? body.detail : null;
+  (job as any).lastProgressAt = new Date().toISOString();
+
+  return res.json({ ok: true });
+});
 router.post("/:id/complete", (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, result, workerId } = req.body || {};
