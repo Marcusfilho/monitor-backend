@@ -3,73 +3,72 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/jobRoutes.ts
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
+const sessionTokenStore_1 = require("../services/sessionTokenStore");
 const router = (0, express_1.Router)();
-/**
- * POST /api/jobs
- * Cria um job novo
- */
+/** POST /api/jobs */
 router.post("/", (req, res) => {
     const { type, payload } = req.body || {};
-    if (!type) {
+    if (!type)
         return res.status(400).json({ error: "Field 'type' is required" });
-    }
     const job = (0, jobStore_1.createJob)(type, payload);
     return res.status(201).json({ job });
 });
-/**
- * GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01
- * Usado pelo worker na VM
- */
+/** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
 router.get("/next", (req, res) => {
     const type = req.query.type || "";
     const workerId = req.query.worker || "unknown-worker";
-    if (!type) {
-        return res
-            .status(400)
-            .json({ error: "Query param 'type' is required" });
-    }
+    if (!type)
+        return res.status(400).json({ error: "Query param 'type' is required" });
+    // ✅ só libera job se houver token carregado
+    const token = ((0, sessionTokenStore_1.getSessionToken)() || "").trim();
+    if (!token)
+        return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
     const job = (0, jobStore_1.getNextJob)(type, workerId);
-    if (!job) {
+    if (!job)
         return res.status(204).send();
-    }
-    return res.json({ job });
+    // ✅ injeta token apenas na resposta
+    const out = JSON.parse(JSON.stringify(job));
+    out.payload = out.payload || {};
+    out.payload.sessionToken = token;
+    return res.json({ job: out });
 });
-/**
- * POST /api/jobs/:id/complete
- * Worker marca job como concluído
- */
+/** POST /api/jobs/:id/complete */
+// POST /api/jobs/:id/progress  body: { percent: 0..100, stage?: string, detail?: string }
+// POST /api/jobs/:id/progress  body: { percent: 0..100, stage?: string, detail?: string }
+router.post("/:id/progress", (req, res) => {
+    const jobId = String(req.params?.id || "");
+    const id = jobId; // compat: alguns lookups usam "id"
+    const body = req.body || {};
+    const p = Number(body.percent);
+    if (!Number.isFinite(p) || p < 0 || p > 100) {
+        return res.status(400).json({ error: "percent must be 0..100" });
+    }
+    const job = (0, jobStore_1.getJob)(id);
+    if (!job)
+        return res.status(404).json({ error: "job not found" });
+    job.progressPercent = Math.round(p);
+    job.progressStage = (typeof body.stage === "string") ? body.stage : null;
+    job.progressDetail = (typeof body.detail === "string") ? body.detail : null;
+    job.lastProgressAt = new Date().toISOString();
+    return res.json({ ok: true });
+});
 router.post("/:id/complete", (req, res) => {
     const { id } = req.params;
     const { status, result, workerId } = req.body || {};
-    if (!status) {
-        return res
-            .status(400)
-            .json({ error: "Field 'status' is required" });
-    }
+    if (!status)
+        return res.status(400).json({ error: "Field 'status' is required" });
     const finalStatus = status === "ok" ? "completed" : "error";
     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);
-    if (!job) {
+    if (!job)
         return res.status(404).json({ error: "Job not found" });
-    }
     return res.json({ job });
 });
-/**
- * GET /api/jobs/:id
- * Consultar status de um job
- */
 router.get("/:id", (req, res) => {
     const { id } = req.params;
     const job = (0, jobStore_1.getJob)(id);
-    if (!job) {
+    if (!job)
         return res.status(404).json({ error: "Job not found" });
-    }
     return res.json({ job });
 });
-/**
- * GET /api/jobs
- * Lista jobs (debug)
- */
-router.get("/", (_req, res) => {
-    return res.json({ jobs: (0, jobStore_1.listJobs)() });
-});
+router.get("/", (_req, res) => res.json({ jobs: (0, jobStore_1.listJobs)() }));
 exports.default = router;
