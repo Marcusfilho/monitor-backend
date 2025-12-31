@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import schemeBuilderRoutes from "./routes/schemeBuilderRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import workerSessionTokenRoutes from "./routes/workerSessionTokenRoutes";
 import { initSessionTokenStore } from "./services/sessionTokenStore";
 
 
@@ -41,6 +42,7 @@ async function main() {
   await initSessionTokenStore();
 
   app.use("/api/admin", adminRoutes);
+  app.use("/api/worker", workerSessionTokenRoutes);
 
   const PORT = Number(process.env.PORT || 3000);
   app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
