@@ -6,6 +6,64 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/worker/schemeBuilderWorker.ts
 const axios_1 = __importDefault(require("axios"));
 const child_process_1 = require("child_process");
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+const LOCAL_TOKEN_PATH = process.env.SESSION_TOKEN_PATH || path_1.default.join(process.cwd(), ".session_token");
+const PULL_ON_STARTUP = (process.env.SESSION_TOKEN_PULL_ON_STARTUP || "1") !== "0";
+const PULL_EACH_JOB = (process.env.SESSION_TOKEN_PULL_EACH_JOB || "1") !== "0";
+const PULL_INTERVAL_S = Number(process.env.SESSION_TOKEN_PULL_INTERVAL_S || "0"); // 0 desliga
+const PULL_TIMEOUT_MS = Number(process.env.SESSION_TOKEN_PULL_TIMEOUT_MS || "5000");
+async function pullSessionTokenFromServer(reason) {
+    const base = (process.env.JOB_SERVER_BASE_URL || "").replace(/\/+$/, "");
+    const workerKey = (process.env.WORKER_KEY || "").trim();
+    if (!base || !workerKey)
+        return;
+    const fetchAny = globalThis.fetch;
+    if (!fetchAny) {
+        console.log(`[worker] fetch() indisponível; não consegui puxar token (reason=${reason})`);
+        return;
+    }
+    const url = `${base}/api/worker/session-token`;
+    const AbortCtrl = globalThis.AbortController;
+    const ctrl = AbortCtrl ? new AbortCtrl() : null;
+    const t = setTimeout(() => ctrl?.abort?.(), PULL_TIMEOUT_MS);
+    try {
+        const r = await fetchAny(url, {
+            headers: { "x-worker-key": workerKey },
+            signal: ctrl?.signal,
+        });
+        if (!r.ok) {
+            console.log(`[worker] token pull falhou (${r.status}) reason=${reason}`);
+            return;
+        }
+        const j = await r.json();
+        const token = typeof j?.token === "string" ? j.token.trim() : "";
+        if (!token) {
+            console.log(`[worker] token pull: server sem token (reason=${reason})`);
+            return;
+        }
+        let prev = "";
+        try {
+            prev = fs_1.default.readFileSync(LOCAL_TOKEN_PATH, "utf8").trim();
+        }
+        catch { }
+        if (prev !== token) {
+            fs_1.default.writeFileSync(LOCAL_TOKEN_PATH, token);
+            console.log(`[worker] token atualizado via pull (len=${token.length}) reason=${reason}`);
+        }
+    }
+    catch (e) {
+        console.log(`[worker] token pull erro reason=${reason} err=${e?.message || e}`);
+    }
+    finally {
+        clearTimeout(t);
+    }
+}
+// token pull on startup
+if (PULL_ON_STARTUP)
+    pullSessionTokenFromServer("startup").catch(() => { });
+if (PULL_INTERVAL_S > 0)
+    setInterval(() => { pullSessionTokenFromServer("interval").catch(() => { }); }, PULL_INTERVAL_S * 1000);
 // progressPercent (job) — updates não bloqueiam o fluxo
 async function reportProgress(jobId, percent, stage, detail) {
     try {

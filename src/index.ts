@@ -10,6 +10,8 @@ import authRoutes from "./routes/authRoutes";
 import monitorRoutes from "./routes/monitorRoutes";
 import jobRoutes from "./routes/jobRoutes";
 
+
+import workerSessionTokenRoutes from "./routes/workerSessionTokenRoutes";
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -41,6 +43,7 @@ async function main() {
   await initSessionTokenStore();
 
   app.use("/api/admin", adminRoutes);
+  app.use("/api/worker", workerSessionTokenRoutes);
 
   const PORT = Number(process.env.PORT || 3000);
   app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

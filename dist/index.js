@@ -11,6 +11,7 @@ const sessionTokenStore_1 = require("./services/sessionTokenStore");
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
+const workerSessionTokenRoutes_1 = __importDefault(require("./routes/workerSessionTokenRoutes"));
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
@@ -21,6 +22,8 @@ app.get("/health", (_req, res) => {
         status: "ok",
         service: "monitor-backend",
         timestamp: new Date().toISOString(),
+        git_commit: process.env.RENDER_GIT_COMMIT || null,
+        git_branch: process.env.RENDER_GIT_BRANCH || null,
     });
 });
 // Rotas existentes
@@ -33,6 +36,7 @@ app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 async function main() {
     await (0, sessionTokenStore_1.initSessionTokenStore)();
     app.use("/api/admin", adminRoutes_1.default);
+    app.use("/api/worker", workerSessionTokenRoutes_1.default);
     const PORT = Number(process.env.PORT || 3000);
     app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
 }
