@@ -11,7 +11,11 @@ import authRoutes from "./routes/authRoutes";
 import monitorRoutes from "./routes/monitorRoutes";
 import jobRoutes from "./routes/jobRoutes";
 
+import { migrateIfNeeded } from "./db/migrate";
+import adminCatalogRoutes from "./routes/adminCatalogRoutes";
 const app = express();
+app.use("/api/admin/catalogs", adminCatalogRoutes);
+
 const port = process.env.PORT || 3000;
 
 app.use(cors());
@@ -45,7 +49,16 @@ async function main() {
   app.use("/api/worker", workerSessionTokenRoutes);
 
   const PORT = Number(process.env.PORT || 3000);
+(async () => {
+  await migrateIfNeeded();
+
+  const PORT = Number(process.env.PORT || 3000);
   app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+})().catch((err) => {
+  console.error("[fatal] startup failed:", err);
+  process.exit(1);
+});
+
 }
 
 main().catch((err) => {
