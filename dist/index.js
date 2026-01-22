@@ -12,7 +12,10 @@ const sessionTokenStore_1 = require("./services/sessionTokenStore");
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
+const migrate_1 = require("./db/migrate");
+const adminCatalogRoutes_1 = __importDefault(require("./routes/adminCatalogRoutes"));
 const app = (0, express_1.default)();
+app.use("/api/admin/catalogs", adminCatalogRoutes_1.default);
 const port = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
@@ -38,7 +41,14 @@ async function main() {
     app.use("/api/admin", adminRoutes_1.default);
     app.use("/api/worker", workerSessionTokenRoutes_1.default);
     const PORT = Number(process.env.PORT || 3000);
-    app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+    (async () => {
+        await (0, migrate_1.migrateIfNeeded)();
+        const PORT = Number(process.env.PORT || 3000);
+        app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+    })().catch((err) => {
+        console.error("[fatal] startup failed:", err);
+        process.exit(1);
+    });
 }
 main().catch((err) => {
     console.error("[boot] failed:", err);

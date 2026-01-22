@@ -351,25 +351,48 @@ async function doConnect(): Promise<OpenWsResult> {
   const sessionToken = pickToken();
   const id = ++seq;
 
-  const headers = cookie ? { Cookie: cookie } : undefined;
+  // Headers estilo Chrome (mantendo controle por env)
+  const extraHeaders: any = {
+    "Pragma": "no-cache",
+    "Cache-Control": "no-cache",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+  };
+  if (cookie) extraHeaders["Cookie"] = cookie;
 
   const ws = new WebSocket(url, {
-    headers,
+    headers: extraHeaders,
     origin,
     handshakeTimeout: 15000,
-    perMessageDeflate: false,
+    // Chrome negocia permessage-deflate; client_max_window_bits
+    perMessageDeflate: { clientMaxWindowBits: 15 },
   });
   patchWsSendToFirefox(ws);
 
   const origSend = ws.send.bind(ws);
   (ws as any).send = (data: any, cb?: any) => {
-    const norm = normalizeOutgoing(data);
+  // 1) Se já vier URL-encoded (%7B...), manda 1:1 (idêntico ao Monitor)
+  if (typeof data === "string" && (data.startsWith("%7B") || data.startsWith("%5B"))) {
     if (WS_DEBUG) {
-      const p = norm.parsed || tryJson(norm.out);
-      console.log(`[WS] (#${id}) SEND ${norm.note} action=${p?._action_name || ""} tag=${p?.tag || ""} payload=`, mask(p ?? {}));
+      const decoded = tryJson(decodeURIComponent(data));
+      console.log(`[WS] (#${id}) SEND passthrough(encoded) payload=`, mask(decoded ?? {}));
     }
-    return origSend(norm.out, cb);
-  };
+    return origSend(data, cb);
+  }
+
+  const norm = normalizeOutgoing(data);
+  const payload = norm.parsed || tryJson(norm.out) || {};
+  const encoded = buildEncodedWsFrameFromPayload(payload, sessionToken);
+
+  if (WS_DEBUG) {
+    const decoded = tryJson(decodeURIComponent(encoded));
+    console.log(`[WS] (#${id}) SEND ${norm.note} encoded payload=`, mask(decoded ?? {}));
+  }
+
+  return origSend(encoded, cb);
+};
 
   if (WS_DEBUG) {
     ws.on("message", (buf: any) => {

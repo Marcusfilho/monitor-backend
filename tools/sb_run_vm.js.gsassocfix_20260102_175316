@@ -1,0 +1,1292 @@
+// === SB AUTH CONFIG (local VM) ===
+const SB_TOKEN_FILE = process.env.MONITOR_SESSION_TOKEN_FILE || "/tmp/.session_token";
+const SB_LOGIN_EACH_RUN = String(process.env.SB_LOGIN_EACH_RUN || "0") === "1";
+const SB_LOGIN_ONLY = String(process.env.SB_LOGIN_ONLY || "0") === "1";
+const WS_LOGIN_NAME = process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN || "";
+const WS_PASSWORD = process.env.WS_PASSWORD || process.env.MONITOR_PASSWORD || "";
+const WS_LANGUAGE = process.env.WS_LANGUAGE || "pt_BR";
+const SB_ACTION_SOURCE = String(process.env.SB_ACTION_SOURCE || "0");
+
+const SB_COMMENT_TAG = String(process.env.SB_COMMENT_TAG || "1") === "1";
+const SB_SKIP_REVIEW_PROCESS_ATTRIBUTES = String(process.env.SB_SKIP_REVIEW_PROCESS_ATTRIBUTES || "1") === "1";
+const SB_SKIP_ASSOC_AFTER_REVIEW = String(process.env.SB_SKIP_ASSOC_AFTER_REVIEW || "1") === "1";
+const WebSocket = require("ws");
+
+// === SB_AUTOLOGIN_V1 ===
+
+async function __sbWaitWsOpen(ws, timeoutMs) {
+  if (!ws) throw new Error("WS inválido (null)");
+  if (ws.readyState === 1) return; // OPEN
+  if (ws.readyState === 3) throw new Error("WS já fechado (CLOSED)");
+  const to = Number(timeoutMs || 15000) || 15000;
+
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      cleanup();
+      reject(new Error("WS open timeout (" + to + "ms) readyState=" + ws.readyState));
+    }, to);
+
+    function cleanup() {
+      clearTimeout(t);
+      ws.off("open", onOpen);
+      ws.off("error", onErr);
+      ws.off("close", onClose);
+    }
+    function onOpen() { cleanup(); resolve(); }
+    function onErr(e) { cleanup(); reject(e); }
+    function onClose() { cleanup(); reject(new Error("WS closed before open")); }
+
+    ws.once("open", onOpen);
+    ws.once("error", onErr);
+    ws.once("close", onClose);
+  });
+}
+
+function __sbDecodeMaybe(data) {
+  try {
+    let s = data;
+    if (Buffer.isBuffer(s)) s = s.toString("utf8");
+    if (typeof s !== "string") s = String(s);
+    if (s.startsWith("%7B") || s.startsWith("%5B")) s = decodeURIComponent(s);
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function __sbExtractSessionToken(msg) {
+  if (!msg || typeof msg !== "object") return "";
+  return (
+    msg?.response?.properties?.data?.[0]?.session_token ||
+    msg?.properties?.data?.[0]?.session_token ||
+    msg?.data?.[0]?.session_token ||
+    msg?.response?.properties?.session_token ||
+    msg?.properties?.session_token ||
+    msg?.session_token ||
+    ""
+  );
+}
+
+function __sbGenMtkn() {
+  return "mtkn_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+}
+
+async function __sbUserLoginGetToken(ws, loginName, password, language, timeoutMs) {
+  const mtkn = __sbGenMtkn();
+  const frame = {
+    action: {
+      name: "user_login",
+      parameters: {
+        tag: "loading_screen",
+        _action_name: "user_login",
+        mtkn,
+        login_name: loginName,
+        password,
+        language: language || "pt",
+      },
+    },
+    mtkn,
+    tag: "loading_screen",
+  };
+  const wire = encodeURIComponent(JSON.stringify(frame));
+
+  // SB_WAITOPEN_IN_USERLOGIN_V1
+  await __sbWaitWsOpen(ws, timeoutMs || 15000);
+
+
+  return await new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      cleanup();
+      reject(new Error("user_login timeout"));
+    }, timeoutMs || 15000);
+
+    function onMsg(buf) {
+      const msg = __sbDecodeMaybe(buf);
+      if (!msg) return;
+
+      // tenta casar por mtkn quando possível, mas aceita primeiro token que vier
+      const tok = __sbExtractSessionToken(msg);
+      const raw = JSON.stringify(msg);
+
+      if (tok) {
+        cleanup();
+        return resolve(String(tok));
+      }
+
+      // se veio retorno explícito do user_login com erro (action_value != 0)
+      if (raw.includes("user_login") && (raw.includes("action_value") || raw.includes("error_description"))) {
+        // deixa cair no timeout se não tiver token; ou pode rejeitar mais cedo
+      }
+    }
+
+    function onErr(e) {
+      cleanup();
+      reject(e);
+    }
+
+    function onClose() {
+      cleanup();
+      reject(new Error("WS closed during user_login"));
+    }
+
+    function cleanup() {
+      clearTimeout(t);
+      ws.off("message", onMsg);
+      ws.off("error", onErr);
+      ws.off("close", onClose);
+    }
+
+    ws.on("message", onMsg);
+    ws.on("error", onErr);
+    ws.on("close", onClose);
+
+    try {
+      ws.send(wire);
+} catch (e) {
+      cleanup();
+      reject(e);
+    }
+  });
+}
+
+function __sbPersistToken(token) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const tokenPath =
+      process.env.SESSION_TOKEN_PATH ||
+      process.env.MONITOR_SESSION_TOKEN_PATH ||
+      "/tmp/.session_token";
+
+    fs.writeFileSync(tokenPath, String(token).trim() + "\n", "utf8");
+    try { fs.chmodSync(tokenPath, 0o600); } catch {}
+    console.log("[sb] token salvo em " + tokenPath + " (len=" + String(token).trim().length + ")");
+  } catch (e) {
+    console.log("[sb] aviso: não consegui salvar token em disco (" + (e?.message || "err") + ")");
+  }
+}
+// === /SB_AUTOLOGIN_V1 ===
+
+
+// === AUTOLOAD_SESSION_TOKEN_FROM_DISK_v1 ===
+// Garante que o processo do sb_run_vm tenha token mesmo quando o worker puxou e gravou em disco.
+(() => {
+  try {
+    const __fs = require("fs");
+    const __path =
+      process.env.SESSION_TOKEN_PATH ||
+      process.env.MONITOR_SESSION_TOKEN_PATH ||
+      "/tmp/.session_token";
+
+    const hasEnv = ((process.env.SESSION_TOKEN || "") + (process.env.MONITOR_SESSION_TOKEN || "")).trim().length > 0;
+
+    if (!hasEnv && __fs.existsSync(__path)) {
+      const t = String(__fs.readFileSync(__path, "utf8")).trim();
+      if (t) {
+        process.env.SESSION_TOKEN = process.env.SESSION_TOKEN || t;
+        process.env.MONITOR_SESSION_TOKEN = process.env.MONITOR_SESSION_TOKEN || t;
+      }
+    }
+
+    const tlen = (process.env.SESSION_TOKEN || process.env.MONITOR_SESSION_TOKEN || "").trim().length;
+    console.log("[sb] tokenLen=" + tlen + " tokenFile=" + __path);
+  } catch (e) {
+    console.log("[sb] token autoload: FAIL (" + (e && e.message ? e.message : "err") + ")");
+  }
+})();
+
+
+// === PATCH: inject root_auth like GUI (toggle via env) ===
+function __sbExtractTokenFromWsUrl(wsUrl) {
+  try {
+    if (!wsUrl) return "";
+    const u = new URL(wsUrl);
+    const parts = u.pathname.split("/").filter(Boolean); // [GUID, TOKEN, "json"]
+    return parts.length >= 2 ? parts[1] : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+
+function __sbCleanToken(tok) {
+  return String(tok || "").replace(/[\\r\\n\\s]+/g, "").trim();
+}
+
+
+function __sbLooksLikeSessionToken(tok) {
+  const t = __sbCleanToken(tok);
+  // sessão do Monitor normalmente é longa (~40+). Rejeita curtas e números puros.
+  if (t.length < 30) return false;
+  if (/^\d+$/.test(t)) return false;
+  return true;
+}
+
+function __sbGetRootToken() {
+  // 1) usar o MESMO token que o script usa (pickToken), se existir
+  try {
+    if (typeof pickToken === "function") {
+      const t = __sbCleanToken(pickToken());
+      if (__sbLooksLikeSessionToken(t)) return t;
+    }
+  } catch (e) {}
+
+  // 2) extrair da URL do WS (se setada)
+  const fromUrl = __sbCleanToken(__sbExtractTokenFromWsUrl(process.env.MONITOR_WS_URL || ""));
+  if (__sbLooksLikeSessionToken(fromUrl)) return fromUrl;
+
+  // 3) fallbacks de env
+  const a = __sbCleanToken(process.env.SB_ROOT_AUTH_TOKEN);
+  if (__sbLooksLikeSessionToken(a)) return a;
+
+  const b = __sbCleanToken(process.env.MONITOR_SESSION_TOKEN);
+  if (__sbLooksLikeSessionToken(b)) return b;
+
+  return "";
+}
+
+
+// Se SB_INCLUDE_ROOT_AUTH=0 -> desliga. Default = ligado.
+function __sbPreparePayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+
+  const out = { ...payload };
+  const tok = __sbCleanToken(__sbGetRootToken());
+
+  if (process.env.SB_INCLUDE_ROOT_AUTH !== "0" && tok && !out.root_auth) {
+    out.root_auth = { session_token: tok };
+  }
+
+  // toggles úteis pra comparar com GUI sem refazer patch:
+  if (process.env.SB_ACTION_SOURCE && out.action_source != null) {
+    out.action_source = Number(process.env.SB_ACTION_SOURCE);
+  }
+  if (process.env.SB_ACTION_ID && out.action_id != null) {
+    out.action_id = Number(process.env.SB_ACTION_ID);
+  }
+
+  return out;
+}
+// === END PATCH ===
+
+
+// === AUTOLOGIN PATCH (2025-12-26) ==========================================
+const fs = require("fs");
+
+function extractMtkn(obj) {
+  try {
+    const v =
+      (obj && obj.mtkn) ||
+      (obj && obj.response && obj.response.mtkn) ||
+      (obj && obj.response && obj.response.properties && obj.response.properties.mtkn) ||
+      (obj && obj.properties && obj.properties.mtkn) ||
+      (obj && obj.data && obj.data.mtkn) ||
+      null;
+    return v != null ? String(v) : null;
+  } catch (_e) {
+    return null;
+  }
+}
+function extractProcessId(msg) {
+  try {
+    // formatos comuns
+    const p1 = msg?.response?.properties?.process_id;
+    if (p1 != null) return String(p1);
+
+    const data = msg?.response?.properties?.data;
+    if (Array.isArray(data)) {
+      for (const it of data) {
+        const pid = it?.process_id ?? it?.processId ?? it?.properties?.process_id;
+        if (pid != null) return String(pid);
+      }
+    }
+
+    // alguns retornos vêm em action_value com properties
+    const p2 = msg?.properties?.process_id;
+    if (p2 != null) return String(p2);
+
+    const d2 = msg?.properties?.data;
+    if (Array.isArray(d2)) {
+      for (const it of d2) {
+        const pid = it?.process_id ?? it?.processId ?? it?.properties?.process_id;
+        if (pid != null) return String(pid);
+      }
+    }
+  } catch {}
+  return null;
+}
+
+// === MTKN TAP/CACHE (anti-race) ===
+const __MTKN_CACHE = new Map();
+let __LAST_FRAME = null; // {action, mtkn, head}
+ // mtknStr -> parsedMsg
+function __safeDecodeMaybe(s) {
+  try {
+    if (typeof s === "string" && (s.startsWith("%") || s.includes("%7B") || s.includes("%22"))) {
+      return decodeURIComponent(s);
+    }
+  } catch {}
+  return s;
+}
+function __wsText(data) {
+  try {
+    if (typeof data === "string") return data;
+
+    // ws (Buffer / ArrayBuffer)
+    if (data && typeof data.toString === "function") {
+      return data.toString("utf8");
+    }
+
+    // websocket library (message object)
+    if (data && typeof data === "object") {
+      if (typeof data.utf8Data === "string") return data.utf8Data;
+      if (data.type === "utf8" && typeof data.utf8Data === "string") return data.utf8Data;
+      if (data.type === "binary" && data.binaryData && typeof data.binaryData.toString === "function") {
+        return data.binaryData.toString("utf8");
+      }
+    }
+  } catch {}
+  return "";
+}
+
+function __tryParseJson(txt) {
+  try {
+    if (!txt) return null;
+
+    txt = __safeDecodeMaybe(txt);
+    txt = txt.replace(/\u0000/g, "").trim();
+    if (!txt) return null;
+
+    try { return JSON.parse(txt); } catch {}
+
+    // tenta extrair substring JSON
+    const i = txt.indexOf("{");
+    const j = txt.lastIndexOf("}");
+    if (i >= 0 && j > i) {
+      const sub = txt.slice(i, j + 1);
+      try { return JSON.parse(sub); } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+function __wsText(data) {
+  try {
+    if (typeof data === "string") return data;
+    if (data && typeof data.toString === "function") return data.toString("utf8");
+    if (data && typeof data === "object") {
+      if (typeof data.utf8Data === "string") return data.utf8Data;
+      if (data.type === "utf8" && typeof data.utf8Data === "string") return data.utf8Data;
+      if (data.type === "binary" && data.binaryData && typeof data.binaryData.toString === "function") {
+        return data.binaryData.toString("utf8");
+      }
+    }
+  } catch {}
+  return "";
+}
+
+function __tryParseJson(txt) {
+  try {
+    if (!txt) return null;
+    txt = __safeDecodeMaybe(txt);
+    txt = txt.replace(/\u0000/g, "").trim();
+    if (!txt) return null;
+
+    try { return JSON.parse(txt); } catch {}
+
+    const i = txt.indexOf("{");
+    const j = txt.lastIndexOf("}");
+    if (i >= 0 && j > i) {
+      const sub = txt.slice(i, j + 1);
+      try { return JSON.parse(sub); } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+function __extractActionError(msg) {
+  try {
+    const av =
+      (msg && msg.action_value) ||
+      (msg && msg.response && msg.response.properties && msg.response.properties.action_value) ||
+      null;
+
+    const ed =
+      (msg && msg.error_description) ||
+      (msg && msg.response && msg.response.properties && msg.response.properties.error_description) ||
+      (msg && msg.error) ||
+      null;
+
+    if (av == null) return null;
+    const code = String(av);
+    if (code === "0") return null;
+
+    return { code, desc: ed ? String(ed) : "" };
+  } catch {
+    return null;
+  }
+}
+
+function installMtknTap(ws) {
+  if (!ws || ws.__mtknTapInstalled) return;
+  ws.__mtknTapInstalled = true;
+  ws.__mtknLastSeen = null;
+  ws.__tapLastError = null;
+  ws.__tapLastSentHead = "";
+  ws.__tapStats = { seen: 0, parsed: 0, parseErrors: 0, lastRawHead: "" };
+
+  // tap do SEND (pra saber a última ação que enviamos)
+  if (typeof ws.send === "function" && !ws.__sendTapInstalled) {
+    ws.__sendTapInstalled = true;
+    const origSend = ws.send.bind(ws);
+    ws.send = (data, ...rest) => {
+      try {
+        const txt = __wsText(data);
+        const clean = (txt || "").replace(/\u0000/g, "").trim();
+        if (clean) ws.__tapLastSentHead = clean.slice(0, 220).replace(/\s+/g, " ");
+      } catch {}
+      return origSend(data, ...rest);
+    };
+  }
+
+  ws.on("message", (data) => {
+    try {
+      const txt = __wsText(data);
+      ws.__tapStats.seen++;
+
+      const clean = (txt || "").replace(/\u0000/g, "").trim();
+      if (clean) ws.__tapStats.lastRawHead = clean.slice(0, 220).replace(/\s+/g, " ");
+
+      const msg = __tryParseJson(txt);
+      if (!msg) {
+        ws.__tapStats.parseErrors++;
+        return;
+      }
+      ws.__tapStats.parsed++;
+
+      const err = __extractActionError(msg);
+      if (err) {
+        ws.__tapLastError = { ...err, at: Date.now(), raw: ws.__tapStats.lastRawHead };
+      }
+
+      const mtkn = extractMtkn(msg);
+      if (mtkn) {
+        ws.__mtknLastSeen = String(mtkn);
+        __MTKN_CACHE.set(String(mtkn), msg);
+        if (__MTKN_CACHE.size > 500) {
+          __MTKN_CACHE.clear();
+          __MTKN_CACHE.set(String(mtkn), msg);
+        }
+      }
+    } catch (_e) {
+      try { ws.__tapStats.parseErrors++; } catch {}
+    }
+  });
+}
+
+
+// === /MTKN TAP/CACHE ===
+
+
+function __readSecretEnvOrFile(envName, fileEnvName) {
+  const v = (process.env[envName] || "").trim();
+  if (v) return v;
+  const f = (process.env[fileEnvName] || "").trim();
+  if (!f) return "";
+  try { return fs.readFileSync(f, "utf8").trim(); } catch { return ""; }
+}
+
+const __WS_USER = (process.env.MONITOR_USERNAME || process.env.MONITOR_USER || process.env.WS_USER || process.env.USER_LOGIN || "").trim();
+const __WS_PASS =
+  __readSecretEnvOrFile("WS_PASSWORD", "WS_PASSWORD_FILE") ||
+  __readSecretEnvOrFile("MONITOR_PASSWORD", "MONITOR_PASSWORD_FILE");
+
+function __buildWire(actionName, params, mtkn, sessionToken, tag) {
+  const obj = { tag: tag || "loading_screen", _action_name: actionName, parameters: params || {}, mtkn: String(mtkn) };
+  if (sessionToken && actionName !== "user_login") {
+  const st = String(sessionToken);
+  obj.session_token = st;
+  // compat: alguns actions esperam session_token dentro de action.parameters
+  try { if (obj.action && obj.action.parameters) obj.action.parameters.session_token = st; } catch {}
+}
+return encodeURIComponent(JSON.stringify(obj));
+}
+
+function __safeOff(ws, ev, fn) {
+  try {
+    if (typeof ws.off === "function") ws.off(ev, fn);
+    else ws.removeListener(ev, fn);
+  } catch {}
+}
+
+async function __autoWsUserLogin(ws, sessionToken) {
+  if (!__WS_USER || !__WS_PASS) {
+    console.log("[sb] auto-login skipped (MONITOR_USERNAME / WS_PASSWORD ausentes)");
+    return true;
+  }
+  if (ws.__autoLoggedIn) return true;
+  ws.__autoLoggedIn = true; // só marca 1x
+
+  const candidates = [
+    { user_name: __WS_USER, password: __WS_PASS },
+    { username: __WS_USER, password: __WS_PASS },
+    { user: __WS_USER, password: __WS_PASS },
+    { login: __WS_USER, password: __WS_PASS },
+    { email: __WS_USER, password: __WS_PASS },
+    { user_name: __WS_USER, user_password: __WS_PASS },
+    { user: __WS_USER, pass: __WS_PASS },
+  ];
+
+  for (const params of candidates) {
+    const mtkn = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
+    const wire = __buildWire("user_login", params, mtkn, null, "loading_screen");
+    console.log("[sb] >> user_login (auto) mtkn=" + mtkn);
+
+    const ok = await new Promise((resolve) => {
+      let done = false;
+      const t = setTimeout(() => {
+        if (done) return;
+        done = true;
+        __safeOff(ws, "message", onMsg);
+        resolve(false);
+      }, 8000);
+
+      function finish(v) {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        __safeOff(ws, "message", onMsg);
+        resolve(v);
+      }
+
+      function onMsg(raw) {
+        try {
+          const txt = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
+          const dec = txt.trim().startsWith("{") ? txt : decodeURIComponent(txt);
+          const j = JSON.parse(dec);
+
+          const resp = (j && j.response && j.response.properties) ? j.response.properties
+                     : (j && j.response) ? j.response
+                     : j;
+
+          const rmtkn = String((resp && (resp.mtkn || (resp.properties && resp.properties.mtkn))) || "");
+if (rmtkn !== String(mtkn)) return;
+
+          const av = String((resp && (resp.action_value || (resp.properties && resp.properties.action_value))) || "");
+if (av === "0") {
+            console.log("[sb] << user_login OK");
+            return finish(true);
+          }
+          console.log("[sb] << user_login FAIL action_value=" + av);
+          return finish(false);
+        } catch {
+          // ignora
+        }
+      }
+
+      ws.on("message", onMsg);
+      ws.send(wire);
+    });
+
+    if (ok) return true;
+  }
+
+  console.log("[sb] auto-login falhou em todas as variações. Provável: nomes de campos diferentes.");
+  return false;
+}
+// === /AUTOLOGIN PATCH =======================================================
+
+
+const __SEEN_BY_MTK = new Map();
+const __PENDING_BY_MTK = new Map();
+
+function parseWsMessage_(raw) {
+  const s = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw ?? "");
+  let txt = s;
+
+  // Alguns frames vêm URL-encoded (%7B...%7D)
+  if (txt.startsWith("%7B") || (txt.includes("%22") && txt.includes("%7D"))) {
+    try { txt = decodeURIComponent(txt); } catch (_) {}
+  }
+  try { return JSON.parse(txt); } catch (_) { return null; }
+}
+
+function getMsgMtkn_(msg) {
+  const m =
+    msg?.mtkn ??
+    msg?.action?.mtkn ??
+    msg?.properties?.mtkn ??
+    msg?.response?.mtkn ??
+    msg?.response?.properties?.mtkn ??
+    msg?.response?.action?.mtkn;
+  return m == null ? null : String(m);
+}
+
+function noteMessage_(msg) {
+  const mt = getMsgMtkn_(msg);
+  if (!mt) return;
+
+  __SEEN_BY_MTK.set(mt, msg);
+
+  const p = __PENDING_BY_MTK.get(mt);
+  if (p) {
+    clearTimeout(p.to);
+    __PENDING_BY_MTK.delete(mt);
+    p.resolve(msg);
+  }
+
+  // proteção simples
+  if (__SEEN_BY_MTK.size > 1500) __SEEN_BY_MTK.clear();
+}
+
+
+const __SB_PENDING = new Map();
+function __sbExtractMtkn(obj){
+  return (obj?.response?.properties?.mtkn ?? obj?.properties?.mtkn ?? obj?.response?.mtkn ?? obj?.mtkn ?? null);
+}
+function __sbResolve(mtkn, payload){
+  const key = String(mtkn);
+  const entry = __SB_PENDING.get(key);
+  if (!entry) return;
+  clearTimeout(entry.t);
+  __SB_PENDING.delete(key);
+  entry.resolve(payload);
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function genFlowId(){ return String(200000 + Math.floor(Math.random()*800000)); }
+function genMtkn(){
+  const now = Date.now().toString();
+  let rnd = Math.floor(Math.random() * 1e12).toString();
+  while (rnd.length < 12) rnd = "0" + rnd;
+  return now + rnd;
+}
+function decodeMaybe(s){
+  if (typeof s === "string" && (s.startsWith("%7B") || s.startsWith("%7b"))) {
+    try { return decodeURIComponent(s); } catch {}
+  }
+  return s;
+}
+
+function buildFrame(actionName, params, sessionToken){
+  const mtkn = genMtkn();
+  return {
+    mtkn,
+    frame: {
+      action: {
+        flow_id: genFlowId(),
+        name: actionName,
+        parameters: { ...params, _action_name: actionName, mtkn: String(mtkn) },
+        session_token: String(sessionToken || ""),
+        mtkn: String(mtkn)
+      }
+    }
+  };
+}
+
+function sendFrame(ws, actionName, params, sessionToken){
+  params = __sbPreparePayload(params);
+
+  try {
+    // tenta capturar action + mtkn a partir dos args mais comuns
+    const args = Array.from(arguments);
+    const action = (args[1] != null) ? String(args[1]) : null; // normalmente action_name
+    const payload = (args[2] && typeof args[2] === "object") ? args[2] : null;
+    const mtkn = payload && (payload.mtkn || (payload.properties && payload.properties.mtkn)) ? String(payload.mtkn || payload.properties.mtkn) : null;
+
+    let head = "";
+    try { head = JSON.stringify(payload || {}).slice(0, 220); } catch {}
+    __LAST_FRAME = { action, mtkn, head, at: Date.now() };
+  } catch {}
+  const { mtkn, frame } = buildFrame(actionName, params, sessionToken);
+  const rawJson = JSON.stringify(frame);
+
+  // default RAW (igual Tampermonkey). Para mandar %7B..., use SB_SEND_ENCODE=1
+  const out = process.env.SB_SEND_ENCODE === "1" ? encodeURIComponent(rawJson) : rawJson;
+
+  console.log(`[sb] >> ${actionName} mtkn=${mtkn}`);
+  ws.send(out);
+  return mtkn;
+}
+
+function waitRowByMtkn(ws, want, timeoutMs) {
+  const wantStr = String(want);
+  const ms = Number(process.env.WS_WAIT_TIMEOUT_MS || timeoutMs || 15000);
+
+  installMtknTap(ws);
+
+  const hit = __MTKN_CACHE.get(wantStr);
+  if (hit) return Promise.resolve(hit);
+
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = setInterval(() => {
+      // fail-fast se o WS respondeu com erro (ex.: 403 action forbidden)
+      const e = ws && ws.__tapLastError ? ws.__tapLastError : null;
+      if (e && e.at && (Date.now() - e.at) < ms) {
+        clearInterval(tick);
+        const st = ws && ws.__tapStats ? ws.__tapStats : { seen: 0, parsed: 0, parseErrors: 0, lastRawHead: "" };
+        const sent = ws && ws.__tapLastSentHead ? ws.__tapLastSentHead : "";
+        return reject(new Error(
+          `WS error action_value=${e.code} desc="${e.desc}" ` +
+          `seen=${st.seen} parsed=${st.parsed} parseErr=${st.parseErrors} ` +
+          `lastRaw="${st.lastRawHead}" lastSent="${sent}" lastFrame="${__LAST_FRAME ? (__LAST_FRAME.action + " " + (__LAST_FRAME.head||"")) : ""}"`
+        ));
+      }
+
+      const m = __MTKN_CACHE.get(wantStr);
+      if (m) {
+        clearInterval(tick);
+        return resolve(m);
+      }
+
+      if (Date.now() - started >= ms) {
+        clearInterval(tick);
+        const lastSeen = ws && ws.__mtknLastSeen ? ws.__mtknLastSeen : null;
+        const st = ws && ws.__tapStats ? ws.__tapStats : { seen: 0, parsed: 0, parseErrors: 0, lastRawHead: "" };
+        const sent = ws && ws.__tapLastSentHead ? ws.__tapLastSentHead : "";
+        reject(new Error(
+          `Timeout esperando mtkn=${wantStr} (ms=${ms}) lastSeen=${lastSeen || "none"} ` +
+          `seen=${st.seen} parsed=${st.parsed} parseErr=${st.parseErrors} ` +
+          `lastRaw="${st.lastRawHead}" lastSent="${sent}" lastFrame="${__LAST_FRAME ? (__LAST_FRAME.action + " " + (__LAST_FRAME.head||"")) : ""}"`
+        ));
+      }
+    }, 20);
+  });
+}
+
+// === GSENSOR_PATCH_v1 ========================================================
+// Mantém WS aberto (10+ min) sem cair: manda q-ws-ka a cada 60s.
+// Engatilha G-Sensor com LABEL+HARNESS (ou comando direto) e só executa após gate CAN.
+
+const __GS_ACTION_ID_RUN_COMMAND = "5";
+
+const __GS_TABLE = {
+  "UP:BACK":   "(o2w,44,C614FC00000000000000FC0000000000000004000000)",
+  "UP:FRONT":  "(o2w,44,C6140400000000000000040000000000000004000000)",
+  "UP:RIGHT":  "(o2w,44,C6140000FC0000000400000000000000000004000000)",
+  "UP:LEFT":   "(o2w,44,C614000004000000FC00000000000000000004000000)",
+
+  "FRONT:RIGHT":"(o2w,44,C61400000000FC000400000000000000FC0000000000)",
+  "FRONT:DOWN": "(o2w,44,C61400000000FC000000040000000400000000000000)",
+  "FRONT:LEFT": "(o2w,44,C61400000000FC00FC00000000000000040000000000)",
+  "FRONT:UP":   "(o2w,44,C61400000000FC000000FC000000FC00000000000000)",
+
+  "LEFT:BACK":  "(o2w,44,C614FC00000000000000000004000000040000000000)",
+  "LEFT:FRONT": "(o2w,44,C61404000000000000000000FC000000040000000000)",
+  "LEFT:DOWN":  "(o2w,44,C6140000040000000000000004000400000000000000)",
+  "LEFT:UP":    "(o2w,44,C6140000FC000000000000000400FC00000000000000)",
+
+  "RIGHT:DOWN": "(o2w,44,C6140000FC00000000000000FC000400000000000000)",
+  "RIGHT:FRONT":"(o2w,44,C61404000000000000000000FC000000040000000000)",
+  "RIGHT:BACK": "(o2w,44,C614FC000000000000000000FC000000FC0000000000)",
+  "RIGHT:UP":   "(o2w,44,C61400000400000000000000FC00FC00000000000000)",
+
+  "BACK:DOWN":  "(o2w,44,C6140000000004000000FC0000000400000000000000)",
+  "BACK:UP":    "(o2w,44,C614000000000400000004000000FC00000000000000)",
+  "BACK:RIGHT": "(o2w,44,C6140000000004000400000000000000040000000000)",
+  "BACK:LEFT":  "(o2w,44,C614000000000400FC00000000000000FC0000000000)",
+
+  "DOWN:FRONT": "(o2w,44,C6140400000000000000FC00000000000000FC000000)",
+  "DOWN:BACK":  "(o2w,44,C614FC000000000000000400000000000000FC000000)",
+  "DOWN:LEFT":  "(o2w,44,C6140000FC000000FC000000000000000000FC000000)",
+  "DOWN:RIGHT": "(o2w,44,C61400000400000004000000000000000000FC000000)",
+};
+
+function __gsNorm(x){ return String(x||"").trim().toUpperCase().replace(/\s+/g,""); }
+function __gsPretty(x){ const u=__gsNorm(x); return u ? (u[0]+u.slice(1).toLowerCase()) : ""; }
+
+function __gsResolve(label, harness){
+  const key = `${__gsNorm(label)}:${__gsNorm(harness)}`;
+  const cmd = __GS_TABLE[key];
+  if (!cmd) throw new Error(`[gs] posição inválida: ${key}`);
+  return { key, cmd };
+}
+
+// Fonte futura: backend/app -> por enquanto ENV/CLI
+// - Preferência: GS_COMMAND_SYNTAX (manda pronto)
+// - Senão: GS_LABEL + GS_HARNESS (resolve na tabela)
+// - Opcional: GS_COMMENT
+function __gsBuildPendingFromEnv(){
+  const cmdEnv = String(process.env.GS_COMMAND_SYNTAX || "").trim();
+  const label  = String(process.env.GS_LABEL || "").trim();
+  const harness= String(process.env.GS_HARNESS || "").trim();
+  const comment= String(process.env.GS_COMMENT || "").trim();
+
+  if (!cmdEnv && !(label && harness)) return null;
+
+  const resolved = cmdEnv ? cmdEnv : __gsResolve(label, harness).cmd;
+  const cmt = comment || ((label && harness) ? `G-Sensor:${__gsPretty(label)}-${__gsPretty(harness)}` : "G-Sensor");
+
+  return { command_syntax: resolved, comment: cmt, label, harness };
+}
+
+function __gsStartKeepAlive(ws, sessionToken){
+  const every = Number(process.env.WS_KA_MS || 60000);
+  const t = setInterval(() => {
+    try { sendFrame(ws, "q-ws-ka", {}, sessionToken); } catch {}
+  }, every);
+  if (typeof t.unref === "function") t.unref();
+  console.log(`[sb] keepalive q-ws-ka a cada ${every}ms`);
+  return () => { try { clearInterval(t); } catch {} };
+}
+
+// Gate CAN (fase futura). Enquanto não sniffa CAN, você libera manualmente:
+// touch /tmp/.can_ok
+async function __gsWaitCanGateIfEnabled(pending){
+  if (!pending) return;
+  if (String(process.env.CAN_HOLD || "0") !== "1") return;
+
+  const gatePath = process.env.CAN_GATE_PATH || "/tmp/.can_ok";
+  const timeoutMs = Number(process.env.CAN_GATE_TIMEOUT_MS || (15*60*1000));
+  const started = Date.now();
+
+  console.log(`[can] aguardando gate (CAN_HOLD=1). Libere com: touch ${gatePath}`);
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      fs.accessSync(gatePath, fs.constants.F_OK);
+      console.log("[can] gate liberado.");
+      return;
+    } catch {}
+    await sleep(2000);
+  }
+  throw new Error(`[can] timeout aguardando gate: ${gatePath} (${timeoutMs}ms)`);
+}
+
+function __gsExtractProcessId(reviewRow){
+  // tenta topo
+  const p0 = reviewRow?.process_id;
+  if (p0) return String(p0);
+
+  // response.properties.process_id
+  const p1 = reviewRow?.response?.properties?.process_id;
+  if (p1) return String(p1);
+
+  // response.properties.data[]
+  const d = reviewRow?.response?.properties?.data;
+  if (Array.isArray(d)) {
+    for (const it of d) {
+      const pid =
+        it?.process_id ??
+        it?.processId ??
+        it?.processID ??
+        it?.properties?.process_id ??
+        it?.properties?.processId;
+      if (pid) return String(pid);
+    }
+  }
+  return "";
+}
+
+
+function __gsSendGui(ws, actionName, params, sessionToken){
+  // Envia frames do G-Sensor “igual GUI”:
+  // - sem root_auth
+  // - sem overrides de SB_ACTION_SOURCE/SB_ACTION_ID
+  const oldInc = process.env.SB_INCLUDE_ROOT_AUTH;
+  const oldAS  = process.env.SB_ACTION_SOURCE;
+  const oldAID = process.env.SB_ACTION_ID;
+
+  process.env.SB_INCLUDE_ROOT_AUTH = "0";
+  try {
+    try { delete process.env.SB_ACTION_SOURCE; } catch {}
+    try { delete process.env.SB_ACTION_ID; } catch {}
+    return sendFrame(ws, actionName, params, sessionToken);
+  } finally {
+    if (oldInc === undefined) { try { delete process.env.SB_INCLUDE_ROOT_AUTH; } catch {} }
+    else process.env.SB_INCLUDE_ROOT_AUTH = oldInc;
+
+    if (oldAS === undefined) { try { delete process.env.SB_ACTION_SOURCE; } catch {} }
+    else process.env.SB_ACTION_SOURCE = oldAS;
+
+    if (oldAID === undefined) { try { delete process.env.SB_ACTION_ID; } catch {} }
+    else process.env.SB_ACTION_ID = oldAID;
+  }
+}
+
+async function __gsRunCustomCommand(ws, sessionToken, ctx, pending){
+  const cid = String(ctx.clientId);
+  const cname = String(ctx.clientName);
+  const cmd = String(pending.command_syntax);
+  const cmt = String(pending.comment);
+
+  // (1) associate call 0 (action_id=5)
+  let mt = __gsSendGui(ws, "associate_vehicles_actions_opr", {
+    client_id: cid,
+    client_name: cname,
+    action_source: "0", action_id: String(__GS_ACTION_ID_RUN_COMMAND), call_num: "0"
+  }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (2) get_custom_command
+  mt = __gsSendGui(ws, "get_custom_command", { client_id: cid }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (3) get_user_command_list
+  mt = __gsSendGui(ws, "get_user_command_list", { tag:"loading_screen", filter:"" }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (4) add_remove_custom_command (inclui o (o2w,44,C614...))
+  mt = __gsSendGui(ws, "add_remove_custom_command", {
+    client_id: cid,
+    acknowledge_needed: "1",
+    command_syntax: cmd,
+    action_value: "0"
+  }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (5) get_custom_command (pós)
+  mt = __gsSendGui(ws, "get_custom_command", { client_id: cid }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (6) associate call 1 (keep_priority=true)
+  mt = __gsSendGui(ws, "associate_vehicles_actions_opr", {
+    client_id: cid,
+    client_name: cname,
+    keep_priority: true, action_source: "0", action_id: String(__GS_ACTION_ID_RUN_COMMAND), call_num: "1"
+  }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (7) review_process_attributes
+  mt = __gsSendGui(ws, "review_process_attributes", { client_id: cid }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  // (8) get_vcls_action_review_opr -> process_id
+  mt = __gsSendGui(ws, "get_vcls_action_review_opr", {
+    client_id: Number(cid),
+    client_name: String(cname),
+    action_source: "0",
+  }, sessionToken);
+  const reviewRow = await waitRowByMtkn(ws, mt, 15000);
+
+  const pid = __gsExtractProcessId(reviewRow);
+  if (!pid) throw new Error("[gs] não veio process_id no review (get_vcls_action_review_opr).");
+
+  console.log("[gs] process_id =", pid);
+
+  // (9) execute_action_opr
+  mt = __gsSendGui(ws, "execute_action_opr", {
+    tag: "loading_screen",
+    client_id: cid,
+    action_source: "0",
+    process_id: String(pid),
+    comment: cmt,
+    toggle_check: "0"
+  }, sessionToken);
+  await waitRowByMtkn(ws, mt, 15000);
+
+  console.log(`[gs] execute_action_opr enviado. comment="${cmt}"`);
+  return String(pid);
+}
+// === /GSENSOR_PATCH_v1 =======================================================
+
+
+
+
+
+
+(async () => {
+  const url = process.env.MONITOR_WS_URL;
+  let sessionToken = process.env.MONITOR_SESSION_TOKEN;
+
+  if (!url) throw new Error("Faltou MONITOR_WS_URL");
+  const needLogin = !sessionToken;
+  if (needLogin) console.log("[sb] sem session_token; vou fazer user_login via WS...");
+const cookie = process.env.MONITOR_WS_COOKIE || "";
+  const origin = process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com";
+
+  const [clientId, clientName, vehicleId, vehicleSettingId, ...rest] = process.argv.slice(2);
+  const comment = rest.join(" ") || "vm scheme builder";
+
+  if (!clientId || !clientName || !vehicleId || !vehicleSettingId) {
+    console.error("Uso: node tools/sb_run_vm.js <clientId> <clientName> <vehicleId> <vehicleSettingId> [comment...]");
+    process.exit(2);
+  }
+
+  // IMPORTANTE: sem subprotocol (evita "invalid subprotocol")
+  const ws = new WebSocket(url, {
+    headers: cookie ? { Cookie: cookie } : {},
+    origin,
+    handshakeTimeout: 15000,
+    perMessageDeflate: false,
+  });
+
+  ws.on("open", () => console.log("[sb] WS open"));
+
+  // === SB_AUTOLOGIN_CALLSITE_V2 ===
+  if (typeof needLogin !== "undefined" && needLogin) {
+    const login = String(WS_LOGIN_NAME || "").trim();
+    const pass  = String(WS_PASSWORD || "").trim();
+    const lang  = String(WS_LANGUAGE || "pt").trim();
+    const toMs  = Number(process.env.WS_WAIT_TIMEOUT_MS || 15000) || 15000;
+    if (!login || !pass) throw new Error("Sem token e WS_LOGIN_NAME/WS_PASSWORD vazios");
+    console.log("[sb] user_login iniciando (login_len=" + login.length + ")");
+    await __sbWaitWsOpen(ws, toMs);
+    sessionToken = await __sbUserLoginGetToken(ws, login, pass, lang, toMs);
+    process.env.MONITOR_SESSION_TOKEN = sessionToken;
+    process.env.SESSION_TOKEN = sessionToken;
+    __sbPersistToken(sessionToken);
+    console.log("[sb] user_login OK (tokenLen=" + String(sessionToken||"").trim().length + ")");
+  }
+  // === /SB_AUTOLOGIN_CALLSITE_V2 ===
+  ws.on("close", (c,r) => console.log("[sb] WS close", c, String(r||"")));
+  ws.on("error", (e) => console.log("[sb] WS error", e && e.message ? e.message : e));
+
+  ws.on("message", (data) => {
+    // --- mtkn correlation (anti-race) ---
+    const __msg0 = parseWsMessage_(data);
+    if (__msg0) noteMessage_(__msg0);
+    // -----------------------------------
+
+    const text = decodeMaybe(String(data));
+    if (text.includes("action_value")) {
+      try { console.log("[sb] << action_value msg:", JSON.parse(text)); } catch {}
+    }
+  });
+
+  await new Promise((res, rej) => {
+    ws.once("open", res);
+    ws.once("error", rej);
+  });
+
+  
+  // __GS2_APPLIED: keepalive WS
+  const __gs2StopKa = __gsStartKeepAlive(ws, sessionToken);
+const __stopKa = __gsStartKeepAlive(ws, sessionToken);
+
+
+  // 0) INIT (igual quando a tela carrega): get_client_vehicles_opr
+  sendFrame(ws, "get_client_vehicles_opr", {
+    vcls_from_previous_process: "0",
+    is_checked: "0",
+    last_ignition_status: "0",
+    license_nmbr: "",
+    inner_id: "",
+    vehicle_id: "",
+    vin_nmbr: "",
+    client_group: "",
+    vehicle_type_descr: "",
+    is_last_SB_error: "0",
+    LAST_SB_STATUS_ID: "",
+    current_firmware: "",
+    is_assigned_fw: "0",
+    time_interval_id: "",
+    assigned_firmware: "",
+    loaded_setting_name: "",
+    is_assigned_setting: "0",
+    assigned_setting_name: "",
+    processor_type: "",
+    hardware_type: "",
+    client_id: String(clientId),
+    client_name: String(clientName)
+  }, sessionToken);
+  await sleep(800);
+
+  // 1) Marca veículo
+  sendFrame(ws, "vcls_check_opr", {
+    client_id: String(clientId),
+    vehicle_id: String(vehicleId),
+    client_name: String(clientName),
+    is_checked: "1"
+  }, sessionToken);
+  await sleep(300);
+
+  // 2) associate call 0
+  sendFrame(ws, "associate_vehicles_actions_opr", {
+    tag: "loading_screen",
+    client_id: String(String(clientId)),
+    client_name: String(String(clientName)),
+    action_source: SB_ACTION_SOURCE,
+    action_id: "1",
+    call_num: "0"
+  }, sessionToken);
+  await sleep(300);
+
+    // === comment tagging (rid -> pid) ===
+  const __rid = `${Date.now()}_${Math.random().toString(16).slice(2,8)}`;
+  let commentTagged = String(comment || "").trim();
+  if (SB_COMMENT_TAG) {
+    commentTagged = (commentTagged ? (commentTagged + " ") : "") + `#rid=${__rid}`;
+  }
+  console.log("[sb] commentTagged(pre) =", commentTagged);
+
+// 3) associate call 1 (setting)
+  sendFrame(ws, "associate_vehicles_actions_opr", {
+    client_id: String(clientId),
+    client_name: String(clientName),
+    vehicle_setting_id: String(vehicleSettingId),
+    action_source: "0",
+    action_id: "1",
+    call_num: "1"
+  }, sessionToken);
+  await sleep(500);
+
+  // 4) review
+  if (SB_SKIP_REVIEW_PROCESS_ATTRIBUTES) {
+  console.log("[sb] skip review_process_attributes (SB_SKIP_REVIEW_PROCESS_ATTRIBUTES=1)");
+} else {
+  sendFrame(ws, "review_process_attributes", { client_id: String(clientId) }, sessionToken);
+}
+
+  await sleep(200);
+
+  // 5) get review -> process_id
+// FIX: o review costuma exigir process_id (gerado via associate). Direto dá 403.
+  let processId = "";
+  const mtknReview = sendFrame(ws, "get_vcls_action_review_opr", {
+    client_id: Number(clientId),
+    client_name: String(clientName || ""),
+    vehicle_id: Number(vehicleId),
+    action_id: 1, // Assign Setting
+    action_source: SB_ACTION_SOURCE,
+    vehicle_setting_id: Number(vehicleSettingId),
+    comment: commentTagged
+  }, sessionToken);
+const reviewRow = await waitRowByMtkn(ws, mtknReview, 15000);
+  processId = processId || String(reviewRow && reviewRow.process_id ? reviewRow.process_id : "");
+  if (!processId) {
+  // get_vcls_action_review_opr costuma trazer o process_id dentro de response.properties.data[]
+  const d = reviewRow?.response?.properties?.data;
+  if (Array.isArray(d)) {
+    for (const it of d) {
+      const pid =
+        it?.process_id ??
+        it?.processId ??
+        it?.processID ??
+        it?.properties?.process_id ??
+        it?.properties?.processId;
+      if (pid) { processId = String(pid); break; }
+    }
+  }
+
+  if (!processId) {
+    const preview = Array.isArray(d) ? d.slice(0, 3) : d;
+    console.log("[sb] DEBUG: process_id não veio no topo. preview data=", JSON.stringify(preview));
+    throw new Error("Não veio process_id");
+  }
+}
+  console.log("[sb] process_id =", processId);
+  if (SB_COMMENT_TAG && processId) {
+    commentTagged = `${commentTagged} #pid=${processId}`;
+  }
+  console.log("[sb] commentTagged(pid) =", commentTagged);
+// 6) execute
+  sendFrame(ws, "execute_action_opr", {
+
+    tag: "loading_screen",
+    client_id: String(clientId),
+    action_source: "0",
+    process_id: processId,
+    comment: commentTagged,
+    toggle_check: "1"
+  
+  }, sessionToken);
+
+  console.log("[sb] execute_action_opr enviado.");
+
+  // ---- GSENSOR: arma e aguarda CAN (sem perder vínculo/WS) ----
+  const __ctx = { clientId: String(clientId), clientName: String(clientName) };
+  const __pendingGs = __gsBuildPendingFromEnv();
+
+  if (__pendingGs) {
+    console.log("[gs] ARMADO:", {
+      label: __pendingGs.label,
+      harness: __pendingGs.harness,
+      comment: __pendingGs.comment
+    });
+  } else {
+    console.log("[gs] sem GS_LABEL/GS_HARNESS ou GS_COMMAND_SYNTAX; nada a executar.");
+  }
+
+  // segura aqui até você validar CAN e liberar o gate (se CAN_HOLD=1)
+  await __gsWaitCanGateIfEnabled(__pendingGs);
+
+  // executa G-Sensor (se existir)
+  if (__pendingGs && String(process.env.GS_ENABLE || "1") === "1") {
+    await __gsRunCustomCommand(ws, sessionToken, __ctx, __pendingGs);
+  } else if (__pendingGs) {
+    console.log("[gs] GS_ENABLE=0 -> armado mas não enviado.");
+  }
+
+  // encerra
+  await sleep(500);
+  try { __stopKa && __stopKa(); } catch {}
+
+  // __GS2_APPLIED: Engatilhar G-Sensor e executar somente após CAN gate
+  {
+  const __gs2Ctx = { clientId: String(clientId), clientName: String(clientName) };
+  const __gs2PendingGs = __gsBuildPendingFromEnv();
+
+  if (__gs2PendingGs) {
+    console.log("[gs] ARMADO:", { label: __gs2PendingGs.label, harness: __gs2PendingGs.harness, comment: __gs2PendingGs.comment });
+  } else {
+    console.log("[gs] sem GS_LABEL/GS_HARNESS ou GS_COMMAND_SYNTAX; nada a executar.");
+  }
+
+  // (fase CAN) segura aqui se CAN_HOLD=1 (libere com: touch /tmp/.can_ok)
+  await __gsWaitCanGateIfEnabled(__gs2PendingGs);
+
+  // Executa o custom command (G-Sensor) se armado e habilitado
+  if (__gs2PendingGs && String(process.env.GS_ENABLE || "1") === "1") {
+    await __gsRunCustomCommand(ws, sessionToken, __gs2Ctx, __gs2PendingGs);
+  } else if (__gs2PendingGs) {
+    console.log("[gs] GS_ENABLE=0 -> armado mas não enviado.");
+  }
+
+  // encerra keepalive antes de fechar
+  try { __gs2StopKa && __gs2StopKa(); } catch {}
+  }
+
+  ws.close(1000, "done");
+})();
+
+// PATCH_WAITFORMTKN_V2
+
+function parseWsMessage_(raw) {
+  const s = Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw ?? '');
+  let txt = s;
+
+  // Alguns frames vêm URL-encoded (%7B...%7D)
+  if (txt.startsWith('%7B') || (txt.includes('%22') && txt.includes('%7D'))) {
+    try { txt = decodeURIComponent(txt); } catch (_) {}
+  }
+
+  try { return JSON.parse(txt); } catch (_) { return null; }
+}
+
+function getMsgMtkn_(msg) {
+  const m =
+    msg?.mtkn ??
+    msg?.action?.mtkn ??
+    msg?.properties?.mtkn ??
+    msg?.response?.mtkn ??
+    msg?.response?.properties?.mtkn ??
+    msg?.response?.action?.mtkn;
+  return m == null ? null : String(m);
+}
+
+
+
+/* [cleanup] duplicate waitForMtkn removido (bloco antigo) */
+/* WAITFOR OVERRIDE V2 */
+function waitForMtkn(ws, mtkn, timeoutMs = 15000) {
+  const want = String(mtkn);
+
+  const seen = __SEEN_BY_MTK.get(want);
+  if (seen) return Promise.resolve(seen);
+
+  const existing = __PENDING_BY_MTK.get(want);
+  if (existing) return existing.promise;
+
+  let resolve, reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+const to = setTimeout(() => {
+    __PENDING_BY_MTK.delete(want);
+    reject(new Error("Timeout esperando mtkn=" + want));
+  }, timeoutMs);
+
+  __PENDING_BY_MTK.set(want, { promise, resolve, reject, to });
+  return promise;
+}

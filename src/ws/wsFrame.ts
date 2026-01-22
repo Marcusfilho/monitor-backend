@@ -2,11 +2,12 @@
 export function buildEncodedWsFrame(
   actionName: string,
   params: Record<string, any>,
-  sessionToken: string
+  sessionToken: string,
+  mtknOverride?: string
 ): string {
   if (!actionName) throw new Error("actionName vazio.");
 
-  const mtkn = genMtkn();
+  const mtkn = (mtknOverride && String(mtknOverride)) || genMtkn();
 
   // ✅ Frame correto (sem action.action)
   const frame: any = {
@@ -56,16 +57,41 @@ export function buildEncodedWsFrameFromPayload(payload: any, sessionToken: strin
   const actionName =
     payload?._action_name ?? payload?.action_name ?? payload?.actionName ?? "";
 
-  const baseParams =
-    payload?.parameters ?? payload?.action_parameters ?? {};
+  const RESERVED = new Set([
+    "tag", "_action_name", "action_name", "actionName",
+    "session_token", "sessionToken", "mtkn",
+    "parameters", "action_parameters", "action",
+  ]);
+
+  // pega chaves "flat" (ex.: login_name/password/language) sem engolir campos de controle
+  const topLevel: any = {};
+  if (payload && typeof payload === "object") {
+    for (const [k, v] of Object.entries(payload)) {
+      if (!RESERVED.has(k)) topLevel[k] = v;
+    }
+  }
+
+  const baseParams = payload?.parameters ?? payload?.action_parameters ?? topLevel;
+
+  // se existir payload.parameters, mescla topLevel junto (pra não perder login_name etc.)
+  const merged =
+    (payload?.parameters || payload?.action_parameters)
+      ? { ...topLevel, ...(baseParams || {}) }
+      : { ...(baseParams || {}) };
 
   const params =
-    payload?.tag ? { tag: payload.tag, ...baseParams } : { ...baseParams };
+    payload?.tag ? { tag: payload.tag, ...merged } : { ...merged };
 
   const token =
     payload?.session_token ?? payload?.sessionToken ?? sessionToken ?? "";
 
-  return buildEncodedWsFrame(actionName, params, token);
+  const mtkn =
+    payload?.mtkn ??
+    payload?.parameters?.mtkn ??
+    payload?.action?.parameters?.mtkn ??
+    payload?.action?.mtkn;
+
+  return buildEncodedWsFrame(actionName, params, token, mtkn);
 }
 
 function genMtkn(): string {

@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -6,6 +39,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/worker/schemeBuilderWorker.ts
 const axios_1 = __importDefault(require("axios"));
 const child_process_1 = require("child_process");
+const fs = __importStar(require("fs"));
+const vehicleMonitorSnapshotService_1 = require("../services/vehicleMonitorSnapshotService");
 // progressPercent (job) — updates não bloqueiam o fluxo
 async function reportProgress(jobId, percent, stage, detail) {
     try {
@@ -34,6 +69,77 @@ const MAX_IDLE_POLL_INTERVAL_MS = Number(process.env.WORKER_MAX_IDLE_POLL_MS || 
 const IDLE_BACKOFF_FACTOR = Number(process.env.WORKER_IDLE_BACKOFF_FACTOR || "1.6");
 const REQUEST_TIMEOUT_MS = Number(process.env.WORKER_HTTP_TIMEOUT_MS || "45000");
 const ALLOW_REMOTE_JOB_SERVER = process.env.ALLOW_REMOTE_JOB_SERVER === "1";
+// =====================================================
+// Session Token LOCAL (não depende do Render)
+// - Gera via user_login (Traffilog API) usando env:
+//   TRAFFILOG_API_BASE_URL (…/1/json) + WS_LOGIN_NAME + WS_PASSWORD
+// - Salva em /tmp/.session_token (ou MONITOR_SESSION_TOKEN_PATH)
+// =====================================================
+const MONITOR_SESSION_TOKEN_PATH = (process.env.SESSION_TOKEN_PATH || process.env.MONITOR_SESSION_TOKEN_PATH || "/tmp/.session_token");
+const MONITOR_SESSION_TOKEN_TTL_MS = Number(process.env.MONITOR_SESSION_TOKEN_TTL_MS || "21600000"); // 6h
+const TRAFFILOG_API_BASE_URL = (process.env.TRAFFILOG_API_BASE_URL || process.env.TRAFFILOG_API_URL || process.env.MONITOR_API_BASE_URL || "").trim();
+const TRAFFILOG_LOGIN_URL = (process.env.TRAFFILOG_LOGIN_URL || "").trim(); // opcional (se quiser apontar direto no /user_login/)
+const WS_LOGIN_NAME = (process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN_NAME || "").trim();
+const WS_PASSWORD = (process.env.WS_PASSWORD || process.env.MONITOR_PASSWORD || "").trim();
+function readTokenIfFresh() {
+    try {
+        const st = fs.statSync(MONITOR_SESSION_TOKEN_PATH);
+        const age = Date.now() - st.mtimeMs;
+        if (age > MONITOR_SESSION_TOKEN_TTL_MS)
+            return null;
+        const tok = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
+        if (tok.length < 20)
+            return null;
+        return tok;
+    }
+    catch {
+        return null;
+    }
+}
+async function userLoginAndGetToken() {
+    if (!WS_LOGIN_NAME || !WS_PASSWORD) {
+        throw new Error("[worker] faltam envs: WS_LOGIN_NAME / WS_PASSWORD");
+    }
+    const base = (TRAFFILOG_LOGIN_URL || TRAFFILOG_API_BASE_URL).replace(/\/+$/g, "");
+    if (!base) {
+        throw new Error("[worker] falta env: TRAFFILOG_API_BASE_URL (terminando em /1/json) ou TRAFFILOG_LOGIN_URL");
+    }
+    // Normaliza URL: se vier .../1/json -> usa .../1/json/user_login/
+    const loginUrl = base; // PATCH: AppEngine aceita POST em .../1/json (sem /user_login/)
+    // ✅ Postman: POST .../1/json com body { action: { name, parameters } }
+    const loginPayload = {
+        action: {
+            name: "user_login",
+            parameters: { login_name: WS_LOGIN_NAME, password: WS_PASSWORD },
+        },
+    };
+    const resp = await axios_1.default.post(loginUrl, loginPayload, {
+        timeout: 20000,
+        headers: { "content-type": "application/json", accept: "application/json" },
+    });
+    const tok = resp?.data?.response?.properties?.session_token ||
+        resp?.data?.response?.properties?.data?.[0]?.session_token;
+    if (!tok || String(tok).trim().length < 20) {
+        throw new Error("[worker] user_login não retornou session_token (verifique TRAFFILOG_* e credenciais)");
+    }
+    return String(tok).trim();
+}
+async function ensureLocalSessionTokenFile() {
+    const cached = readTokenIfFresh();
+    if (cached) {
+        process.env.MONITOR_SESSION_TOKEN = cached;
+        return cached;
+    }
+    const tok = await userLoginAndGetToken();
+    try {
+        fs.writeFileSync(MONITOR_SESSION_TOKEN_PATH, tok + "\n", { mode: 0o600 });
+    }
+    catch {
+        // mesmo se não conseguir gravar, mantém em memória
+    }
+    process.env.MONITOR_SESSION_TOKEN = tok;
+    return tok;
+}
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function jitter(ms) { const j = Math.min(800, Math.floor(ms * 0.1)); return Math.floor(Math.random() * (j + 1)); }
 function isLoopbackHost(host) { return host === "127.0.0.1" || host === "localhost" || host === "::1"; }
@@ -48,26 +154,15 @@ const http = axios_1.default.create({
     timeout: REQUEST_TIMEOUT_MS,
 });
 async function fetchNextJob() {
+    // Token LOCAL: não depende do backend Render.
     try {
-        const resp = await http.get(`/api/jobs/next`, { params: { type: "scheme_builder", worker: WORKER_ID, workerId: WORKER_ID } });
-        if (resp.status === 204) {
-            console.log(`[worker] poll /api/jobs/next: 204 (sem job)`);
-            return null;
-        }
-        const job = resp.data?.job;
-        if (!job)
-            return null;
-        job.payload.comment = appendJobTag(job.payload.comment, job.id);
-        console.log(`[worker] Job recebido: id=${job.id}, vehicleId=${job.payload.vehicleId}`);
-        return job;
+        const tok = await ensureLocalSessionTokenFile();
+        console.log(`[worker] session_token LOCAL OK (len=${tok.length})`);
+        return null;
     }
-    catch (err) {
-        const status = err?.response?.status;
-        if (status === 503) {
-            console.log(`[worker] backend sem session token (503). Rode o snippet no Chrome e envie o token pro Render.`);
-            return null;
-        }
-        console.error("[worker] Erro ao buscar job:", err?.message || err);
+    catch (e) {
+        const msg = String(e?.message || e);
+        console.log(`[worker] falha ao obter session_token LOCAL: ${msg}`);
         return null;
     }
 }
@@ -147,3 +242,112 @@ async function runForever() {
 }
 if (require.main === module)
     runForever().catch((e) => console.error("[worker] fatal:", e));
+// =====================================================
+// Vehicle Monitor Snapshot (Validar CAN) — handler
+// =====================================================
+async function postFirstOk(http, paths, body) {
+    let lastErr = null;
+    for (const path of paths) {
+        try {
+            await http.post(path, body);
+            return;
+        }
+        catch (e) {
+            lastErr = e;
+            const st = e?.response?.status;
+            if (st === 404)
+                continue;
+            throw e;
+        }
+    }
+    throw lastErr || new Error("[vm] nenhum endpoint aceitou");
+}
+async function readSessionTokenFallback() {
+    const envTok = (process.env.MONITOR_SESSION_TOKEN || "").trim();
+    if (envTok)
+        return envTok;
+    try {
+        const fsMod = await Promise.resolve().then(() => __importStar(require("fs")));
+        const fs = fsMod?.default || fsMod;
+        const tok = String(fs.readFileSync("/tmp/.session_token", "utf8") || "").trim();
+        return tok || null;
+    }
+    catch {
+        return null;
+    }
+}
+function makeGuidLike() {
+    const hex = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
+    return `${hex()}-${hex().slice(0, 4)}-${hex().slice(0, 4)}-${hex().slice(0, 4)}-${hex()}${hex().slice(0, 4)}`.toUpperCase();
+}
+async function openMonitorWs(sessionToken, timeoutMs = 15000) {
+    const wsMod = await Promise.resolve().then(() => __importStar(require("ws")));
+    const WebSocketCtor = wsMod?.default || wsMod;
+    const guid = makeGuidLike();
+    const url = `wss://websocket.traffilog.com:8182/${guid}/${sessionToken}/json?defragment=1`;
+    return await new Promise((resolve, reject) => {
+        const ws = new WebSocketCtor(url, { headers: { Origin: "https://operation.traffilog.com" } });
+        const t = setTimeout(() => {
+            try {
+                ws.close();
+            }
+            catch { }
+            reject(new Error(`[vm] WS timeout open (${timeoutMs}ms)`));
+        }, timeoutMs);
+        ws.on("open", () => { clearTimeout(t); resolve(ws); });
+        ws.on("error", (e) => { clearTimeout(t); reject(e); });
+    });
+}
+async function runVehicleMonitorSnapshotJob(job, http) {
+    const jobId = String(job?.id || "");
+    const payload = job?.payload || {};
+    const vehicleId = Number(payload.vehicleId ?? payload.vehicle_id ?? payload.VEHICLE_ID ?? 0);
+    if (!jobId)
+        throw new Error("[vm] job.id ausente");
+    if (!vehicleId)
+        throw new Error("[vm] payload.vehicleId ausente");
+    let sessionToken = String(payload.sessionToken ?? payload.session_token ?? "").trim();
+    if (!sessionToken) {
+        const fb = await readSessionTokenFallback();
+        if (fb)
+            sessionToken = fb;
+    }
+    if (!sessionToken)
+        throw new Error("[vm] sessionToken ausente (payload/env//tmp/.session_token)");
+    await reportProgress(jobId, 5, "vm_snapshot", `open ws (vehicleId=${vehicleId})`);
+    const ws = await openMonitorWs(sessionToken, 15000);
+    try {
+        await reportProgress(jobId, 20, "vm_snapshot", "collect snapshot");
+        const snap = await (0, vehicleMonitorSnapshotService_1.collectVehicleMonitorSnapshot)({
+            ws,
+            sessionToken,
+            vehicleId,
+            windowMs: Number(process.env.VM_WINDOW_MS || "8000"),
+            waitAfterCmdMs: Number(process.env.VM_WAIT_AFTER_CMD_MS || "1000"),
+            urlEncode: true
+        });
+        const can = (0, vehicleMonitorSnapshotService_1.summarizeCanFromModuleState)(snap.moduleState);
+        await reportProgress(jobId, 90, "vm_snapshot", `done (params=${snap.parameters.length})`);
+        await postFirstOk(http, [
+            `/api/jobs/${jobId}/complete`,
+            `/api/jobs/${jobId}/done`,
+            `/api/jobs/${jobId}/result`,
+        ], { result: { status: "ok", snapshot: snap, can } });
+        await reportProgress(jobId, 100, "vm_snapshot", "completed");
+    }
+    catch (e) {
+        const msg = String(e?.message || e);
+        await postFirstOk(http, [
+            `/api/jobs/${jobId}/error`,
+            `/api/jobs/${jobId}/fail`,
+            `/api/jobs/${jobId}/result`,
+        ], { result: { status: "error", message: msg } }).catch(() => { });
+        throw e;
+    }
+    finally {
+        try {
+            ws.close();
+        }
+        catch { }
+    }
+}

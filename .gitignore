@@ -17,3 +17,4 @@ worker_env.env
 .session_token
 *.bak_*
 
+worker_secrets.env

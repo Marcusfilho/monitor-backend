@@ -1,0 +1,1263 @@
+
+// === Env aliases (WS_LOGIN_NAME/WS_PASSWORD) ================================
+process.env.MONITOR_USER = process.env.MONITOR_USER || process.env.WS_LOGIN_NAME || "";
+process.env.MONITOR_PASS = process.env.MONITOR_PASS || process.env.WS_PASSWORD  || "";
+process.env.MONITOR_LANGUAGE = process.env.MONITOR_LANGUAGE || process.env.WS_LANGUAGE || "pt_BR";
+// =============================================================================
+const WebSocket = require("ws");
+
+// === WS options (igual ao probe ws_probe_login_then_assign_dump.js) ===
+const __WS_COOKIE = process.env.MONITOR_WS_COOKIE || "";
+const __WS_ORIGIN = process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com";
+// ================================================================
+
+
+// === AUTOLOGIN PATCH (2025-12-26) ==========================================
+const fs = require("fs");
+
+function __readSecretEnvOrFile(envName, fileEnvName) {
+  const v = (process.env[envName] || "").trim();
+  if (v) return v;
+  const f = (process.env[fileEnvName] || "").trim();
+  if (!f) return "";
+  try { return fs.readFileSync(f, "utf8").trim(); } catch { return ""; }
+}
+
+const __WS_USER = (process.env.MONITOR_USERNAME || process.env.MONITOR_USER || process.env.WS_USER || process.env.USER_LOGIN || "").trim();
+const __WS_PASS =
+  __readSecretEnvOrFile("WS_PASSWORD", "WS_PASSWORD_FILE") ||
+  __readSecretEnvOrFile("MONITOR_PASSWORD", "MONITOR_PASSWORD_FILE");
+
+function __buildWire(actionName, params, mtkn, sessionToken, tag) {
+  const obj = { tag: tag || "loading_screen", _action_name: actionName, parameters: params || {}, mtkn: String(mtkn) };
+  if (sessionToken && actionName !== "user_login") obj.session_token = String(sessionToken);
+  return encodeURIComponent(JSON.stringify(obj));
+}
+
+function __safeOff(ws, ev, fn) {
+  try {
+    if (typeof ws.off === "function") ws.off(ev, fn);
+    else ws.removeListener(ev, fn);
+  } catch {}
+}
+
+async function __autoWsUserLogin(ws, sessionToken) {
+  if (!__WS_USER || !__WS_PASS) {
+    console.log("[sb] auto-login skipped (MONITOR_USERNAME / WS_PASSWORD ausentes)");
+    return true;
+  }
+  if (ws.__autoLoggedIn) return true;
+  ws.__autoLoggedIn = true; // só marca 1x
+
+  const candidates = [
+    { user_name: __WS_USER, password: __WS_PASS },
+    { username: __WS_USER, password: __WS_PASS },
+    { user: __WS_USER, password: __WS_PASS },
+    { login: __WS_USER, password: __WS_PASS },
+    { email: __WS_USER, password: __WS_PASS },
+    { user_name: __WS_USER, user_password: __WS_PASS },
+    { user: __WS_USER, pass: __WS_PASS },
+  ];
+
+  for (const params of candidates) {
+    const mtkn = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
+    const wire = __buildWire("user_login", params, mtkn, null, "loading_screen");
+    console.log("[sb] >> user_login (auto) mtkn=" + mtkn);
+
+    const ok = await new Promise((resolve) => {
+      let done = false;
+      const t = setTimeout(() => {
+        if (done) return;
+        done = true;
+        __safeOff(ws, "message", onMsg);
+        resolve(false);
+      }, 8000);
+
+      function finish(v) {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        __safeOff(ws, "message", onMsg);
+        resolve(v);
+      }
+
+      function onMsg(raw) {
+        try {
+          const txt = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
+          const dec = txt.trim().startsWith("{") ? txt : decodeURIComponent(txt);
+          const j = JSON.parse(dec);
+
+          const resp = (j && j.response && j.response.properties) ? j.response.properties
+                     : (j && j.response) ? j.response
+                     : j;
+
+          const rmtkn = String((resp && (resp.mtkn || (resp.properties && resp.properties.mtkn))) || "");
+if (rmtkn !== String(mtkn)) return;
+
+          const av = String((resp && (resp.action_value || (resp.properties && resp.properties.action_value))) || "");
+if (av === "0") {
+            console.log("[sb] << user_login OK");
+            return finish(true);
+          }
+          console.log("[sb] << user_login FAIL action_value=" + av);
+          return finish(false);
+        } catch {
+          // ignora
+        }
+      }
+
+      ws.on("message", onMsg);
+      ws.send(wire);
+    });
+
+    if (ok) return true;
+  }
+
+  console.log("[sb] auto-login falhou em todas as variações. Provável: nomes de campos diferentes.");
+  return false;
+}
+// === /AUTOLOGIN PATCH =======================================================
+
+
+const __SEEN_BY_MTK = new Map();
+const __PENDING_BY_MTK = new Map();
+
+// === PATCH GS-RUN v1 =========================================================
+function __isTruthy(v) {
+  return /^(1|true|yes|on)$/i.test(String(v || "").trim());
+}
+function __sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// extrai process_id do retorno do get_vcls_action_review_opr
+function __extractProcessId(obj) {
+  // tenta os formatos mais comuns
+  const direct = obj?.process_id || obj?.response?.properties?.process_id || obj?.response?.process_id;
+  if (direct) return Number(direct);
+
+  const arr = obj?.response?.properties?.data;
+  if (Array.isArray(arr)) {
+    for (const it of arr) {
+      const pid = it?.process_id ?? it?.processId ?? it?.pid;
+      if (pid) return Number(pid);
+    }
+  }
+  return null;
+}
+
+async function __runActionById(ws, { clientId, clientName, vehicleId, actionId, comment }) {
+  if (typeof sendFrame !== "function") throw new Error("sendFrame() não existe no sb_run_vm.js (precisa existir).");
+  if (typeof waitRowByMtkn !== "function") throw new Error("waitRowByMtkn() não existe no sb_run_vm.js (precisa existir).");
+
+  const to = Number(process.env.WS_WAIT_TIMEOUT_MS || 15000);
+
+  console.log(`[gs] >> associate_vehicles_actions_opr action_id=${actionId}`);
+  let mt = sendFrame(ws, "associate_vehicles_actions_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    client_id: Number(clientId),
+    client_name: String(clientName || ""),
+    vehicle_id: Number(vehicleId),
+    action_id: Number(actionId),
+  });
+  await waitRowByMtkn(ws, String(mt), to);
+
+  console.log(`[gs] >> review_process_attributes action_id=${actionId}`);
+  mt = sendFrame(ws, "review_process_attributes", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    vehicle_id: Number(vehicleId),
+    action_id: Number(actionId),
+    comment: String(comment || ""),
+  });
+  await waitRowByMtkn(ws, String(mt), to);
+
+  console.log(`[gs] >> get_vcls_action_review_opr action_id=${actionId}`);
+  mt = sendFrame(ws, "get_vcls_action_review_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    vehicle_id: Number(vehicleId),
+    action_id: Number(actionId),
+    comment: String(comment || ""),
+  });
+  const reviewObj = await waitRowByMtkn(ws, String(mt), to);
+
+  const pid = __extractProcessId(reviewObj);
+  if (!pid) throw new Error("[gs] não consegui extrair process_id do review.");
+
+  console.log(`[gs] process_id=${pid}`);
+  mt = sendFrame(ws, "execute_action_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    process_id: Number(pid),
+    comment: String(comment || ""),
+  });
+  await waitRowByMtkn(ws, String(mt), to);
+
+  console.log("[gs] execute_action_opr OK");
+}
+// === /PATCH GS-RUN v1 ========================================================
+function parseWsMessage_(raw) {
+  const s = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw ?? "");
+  let txt = s;
+
+  // Alguns frames vêm URL-encoded (%7B...%7D)
+  if (txt.startsWith("%7B") || (txt.includes("%22") && txt.includes("%7D"))) {
+    try { txt = decodeURIComponent(txt); } catch (_) {}
+  }
+  try { return JSON.parse(txt); } catch (_) { return null; }
+}
+
+function getMsgMtkn_(msg) {
+  const m =
+    msg?.mtkn ??
+    msg?.action?.mtkn ??
+    msg?.properties?.mtkn ??
+    msg?.response?.mtkn ??
+    msg?.response?.properties?.mtkn ??
+    msg?.response?.action?.mtkn;
+  return m == null ? null : String(m);
+}
+
+function noteMessage_(msg) {
+  const mt = getMsgMtkn_(msg);
+  if (!mt) return;
+
+  __SEEN_BY_MTK.set(mt, msg);
+
+  const p = __PENDING_BY_MTK.get(mt);
+  if (p) {
+    clearTimeout(p.to);
+    __PENDING_BY_MTK.delete(mt);
+    p.resolve(msg);
+  }
+
+  // proteção simples
+  if (__SEEN_BY_MTK.size > 1500) __SEEN_BY_MTK.clear();
+}
+
+
+const __SB_PENDING = new Map();
+function __sbExtractMtkn(obj){
+  return (obj?.response?.properties?.mtkn ?? obj?.properties?.mtkn ?? obj?.response?.mtkn ?? obj?.mtkn ?? null);
+}
+function __sbResolve(mtkn, payload){
+  const key = String(mtkn);
+  const entry = __SB_PENDING.get(key);
+  if (!entry) return;
+  clearTimeout(entry.t);
+  __SB_PENDING.delete(key);
+  entry.resolve(payload);
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function genFlowId(){ return String(200000 + Math.floor(Math.random()*800000)); }
+function genMtkn(){
+  const now = Date.now().toString();
+  let rnd = Math.floor(Math.random() * 1e12).toString();
+  while (rnd.length < 12) rnd = "0" + rnd;
+  return now + rnd;
+}
+function decodeMaybe(s){
+  if (typeof s === "string" && (s.startsWith("%7B") || s.startsWith("%7b"))) {
+    try { return decodeURIComponent(s); } catch {}
+  }
+  return s;
+}
+
+function buildFrame(actionName, params, sessionToken){
+  const mtkn = genMtkn();
+  return {
+    mtkn,
+    frame: {
+      action: {
+        flow_id: genFlowId(),
+        name: actionName,
+        parameters: { ...params, _action_name: actionName, mtkn: String(mtkn) },
+        session_token: String(sessionToken || ""),
+        mtkn: String(mtkn)
+      }
+    }
+  };
+}
+
+function sendFrame(ws, actionName, params, sessionToken){
+  const { mtkn, frame } = buildFrame(actionName, params, sessionToken);
+  const rawJson = JSON.stringify(frame);
+
+  // default RAW (igual Tampermonkey). Para mandar %7B..., use SB_SEND_ENCODE=1
+  const out = process.env.SB_SEND_ENCODE === "1" ? encodeURIComponent(rawJson) : rawJson;
+
+  console.log(`[sb] >> ${actionName} mtkn=${mtkn}`);
+  ws.send(out);
+  return mtkn;
+}
+
+function waitRowByMtkn(ws, mtkn, timeoutMs=15000){
+  const want = String(mtkn);
+
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      ws.removeListener("message", onMsg);
+      reject(new Error("Timeout esperando mtkn=" + want));
+    }, timeoutMs);
+
+    function onMsg(data){
+      const text = decodeMaybe(String(data));
+      if (!text.includes(want)) return;
+
+      try {
+        const obj = JSON.parse(text);
+        if (!obj) return;
+
+        // Aceita:
+        // 1) "row" (sem response) ou com process_id (comportamento antigo)
+        // 2) "action_value" padrão (response.properties.mtkn)
+      // FAIL-FAST: alguns erros vêm sem mtkn (ex.: {"action_value":"403","error_description":"action forbidden"})
+      const av0 = String(obj?.action_value ?? obj?.response?.properties?.action_value ?? "");
+      const err0 = String(obj?.error_description ?? obj?.response?.properties?.error_description ?? obj?.response?.properties?.description ?? "");
+      if (av0 && av0 !== "0" && !obj?.response) {
+        clearTimeout(t);
+        ws.removeListener("message", onMsg);
+        reject(new Error("[WS] action_value=" + av0 + (err0 ? (" err=" + err0) : "") + " (sem mtkn)"));
+        return;
+      }
+
+        const mt =
+          obj?.mtkn ??
+          obj?.response?.properties?.mtkn ??
+          obj?.response?.mtkn ??
+          obj?.action?.mtkn;
+
+        if (mt != null && String(mt) !== want) return;
+
+        if (obj.process_id || !obj.response || obj?.response?.properties) {
+          clearTimeout(t);
+          ws.removeListener("message", onMsg);
+          resolve(obj);
+        }
+      } catch {}
+    }
+
+    ws.on("message", onMsg);
+  });
+}
+
+(async () => {
+  let url = process.env.MONITOR_WS_URL || "";
+let sessionToken = process.env.MONITOR_SESSION_TOKEN || "";
+
+  // === HTTP user_login (token local) =========================================
+  const __TOKEN_API_URL = process.env.MONITOR_TOKEN_API_URL
+    || "https://api-il.traffilog.com/appengine_3/5E1DCD81-5138-4A35-B271-E33D71FFFFD9/1/json";
+
+  async function __getSessionTokenViaHttp() {
+    const login = String(process.env.WS_LOGIN_NAME || "").trim();
+    const pass  = String(process.env.WS_PASSWORD  || "").trim();
+    if (!login || !pass) throw new Error("Faltou WS_LOGIN_NAME/WS_PASSWORD para gerar session_token via HTTP.");
+
+    const body = {
+      action: {
+        name: "user_login",
+        parameters: { login_name: login, password: pass }
+      }
+    };
+
+    const r = await fetch(__TOKEN_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const txt = await r.text();
+    let j;
+    try { j = JSON.parse(txt); } catch { j = null; }
+
+    const av =
+      j?.response?.properties?.action_value ??
+      j?.response?.properties?.data?.[0]?.action_value ??
+      "";
+
+    const token =
+      j?.response?.properties?.session_token ??
+      j?.response?.properties?.data?.[0]?.session_token ??
+      "";
+
+    if (String(av) !== "0" || !token) {
+      const desc = j?.response?.properties?.description || j?.response?.properties?.error_description || "";
+      throw new Error("HTTP user_login FAIL (action_value=" + String(av) + ") " + (desc ? ("desc=" + desc) : "") + " http=" + r.status);
+    }
+    return String(token).trim();
+  }
+
+  function __patchWsUrlWithToken(wsUrl, token) {
+    const u = new URL(wsUrl);
+    const seg = u.pathname.split("/").filter(Boolean); // [GUID, TOKEN, json]
+    if (seg.length < 3) throw new Error("MONITOR_WS_URL inválida (path curto): " + u.pathname);
+    seg[1] = token;               // troca TOKEN do caminho
+    u.pathname = "/" + seg.join("/");
+    // garante defragment=1
+    if (!u.searchParams.get("defragment")) u.searchParams.set("defragment", "1");
+    return u.toString();
+  }
+
+  async function __ensureLocalTokenAndWsUrl() {
+    if (!url) throw new Error("Faltou MONITOR_WS_URL.");
+    const u = new URL(url);
+    const seg = u.pathname.split("/").filter(Boolean);
+    const guid = seg[0] || "";
+    const tok  = seg[1] || "";
+    const badTok = (!tok || tok === "TOKEN" || tok.length < 20);
+
+    if (badTok) {
+      console.log("[sb] WS_URL token inválido (" + (tok || "vazio") + "); gerando session_token via HTTP...");
+      const t = await __getSessionTokenViaHttp();
+      sessionToken = t;
+      url = __patchWsUrlWithToken(url, t);
+      console.log("[sb] WS_URL atualizada (guid=" + guid.slice(0,8) + "... tokenLen=" + t.length + ")");
+      return;
+    }
+
+    // se já veio token real na URL, use também como sessionToken (evita login via WS)
+    if (!String(sessionToken || "").trim() && tok.length >= 20) {
+      sessionToken = tok;
+      console.log("[sb] sessionToken adotado do WS_URL (tokenLen=" + sessionToken.length + ")");
+    }
+  }
+  // ===========================================================================
+
+  await __ensureLocalTokenAndWsUrl();
+
+// === AUTO LOGIN via WS (user_login) =========================================
+
+// === LOGIN-FIRST (user_login via WS) - sem depender de mtkn ==================
+function __waitUserLoginReply(ws, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => { cleanup(); reject(new Error("user_login timeout")); }, timeoutMs);
+
+    function cleanup() {
+      clearTimeout(t);
+      if (typeof ws.off === "function") ws.off("message", onMsg);
+      else ws.removeListener("message", onMsg);
+    }
+
+    function onMsg(data) {
+      let raw = (typeof data === "string") ? data : (data ? data.toString() : "");
+      if (!raw) return;
+
+      // alguns frames podem vir percent-encoded
+      let json = null;
+      const tryParse = (txt) => {
+        try { return JSON.parse(txt); } catch (_) { return null; }
+      };
+      json = tryParse(raw);
+      if (!json && raw[0] === "%") {
+        try { json = tryParse(decodeURIComponent(raw)); } catch (_) {}
+      }
+
+      // dispara assim que aparecer algo “conclusivo” para login
+      if (raw.includes("action_value") || raw.includes("session_token") || raw.includes("user_login")) {
+        cleanup();
+        resolve({ raw, json });
+      }
+    }
+
+    ws.on("message", onMsg);
+  });
+}
+
+function __extractToken(obj, raw) {
+  const t =
+    obj?.response?.properties?.data?.[0]?.session_token ||
+    obj?.response?.properties?.session_token ||
+    obj?.session_token ||
+    obj?.token ||
+    "";
+  if (t) return String(t).trim();
+
+  const m = raw && raw.match(/"session_token"\s*:\s*"([^"]+)"/);
+  return m ? String(m[1]).trim() : "";
+}
+
+function __extractActionValue(obj, raw) {
+  const av =
+    obj?.action_value ||
+    obj?.response?.properties?.action_value ||
+    obj?.response?.properties?.data?.[0]?.action_value ||
+    "";
+  if (av !== "") return String(av).trim();
+
+  const m = raw && raw.match(/"action_value"\s*:\s*"?(\d+)"?/);
+  return m ? String(m[1]).trim() : "";
+}
+
+function __extractErr(obj, raw) {
+  const e =
+    obj?.error_description ||
+    obj?.response?.properties?.error_description ||
+    obj?.response?.properties?.data?.[0]?.error_description ||
+    "";
+  if (e) return String(e);
+
+  const m = raw && raw.match(/"error_description"\s*:\s*"([^"]*)"/);
+  return m ? String(m[1]) : "";
+}
+
+async function __ensureWsLogin(ws) {
+  if (String(sessionToken || "").trim()) return;
+
+  const url = process.env.MONITOR_WS_URL || "";
+  const cookie = process.env.MONITOR_WS_COOKIE || "";
+  const origin = process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com";
+
+  // credenciais reais do seu env
+  const login = String(process.env.WS_LOGIN_NAME || "").trim();
+  const pass  = String(process.env.WS_PASSWORD  || "").trim();
+  const lang  = String(process.env.WS_LANGUAGE  || "en").trim();   // probe default "en"
+  const tag   = String(process.env.WS_TAG || "loading_screen").trim();
+
+  if (!login || !pass) throw new Error("Faltou WS_LOGIN_NAME/WS_PASSWORD no env (user_login via WS).");
+
+  // encoder idêntico ao tools/ws_probe_login_then_assign_dump.js
+  function encodeFirefoxFrameFromPayload(payload, sessionTok) {
+    const mtkn = String(Math.floor(Math.random() * 1e18)).padStart(18, "0") + String(Date.now());
+    const actionName = payload._action_name || payload.action_name || payload.actionName || "";
+    const token = (actionName === "user_login") ? "" : (payload.session_token || sessionTok || "");
+
+    const reserved = new Set([
+      "tag",
+      "_action_name", "action_name", "actionName",
+      "parameters", "action_parameters",
+      "session_token", "sessionToken", "mtkn"
+    ]);
+
+    let params = payload.parameters || payload.action_parameters;
+    if (!params || typeof params !== "object") {
+      params = {};
+      if (payload && typeof payload === "object") {
+        for (const [k, v] of Object.entries(payload)) {
+          if (!reserved.has(k)) params[k] = v;
+        }
+      }
+    }
+    if (payload.tag) params = { tag: payload.tag, ...params };
+
+    const frame = {
+      action: {
+        action: {
+          name: actionName,
+          parameters: { ...params, _action_name: actionName, mtkn },
+        },
+        session_token: token,
+        mtkn,
+      },
+    };
+
+    return { mtkn, enc: encodeURIComponent(JSON.stringify(frame)) };
+  }
+
+  const timeoutMs = Number(process.env.WS_LOGIN_TIMEOUT_MS || 15000);
+
+  const loginPayload = {
+    tag,
+    _action_name: "user_login",
+    login_name: login,
+    password: pass,
+    language: lang,
+  };
+
+  const { mtkn, enc } = encodeFirefoxFrameFromPayload(loginPayload, sessionToken);
+  console.log("[sb] >> user_login (probe-style) mtkn=" + mtkn + " (login_len=" + login.length + ", lang=" + lang + ", hasCookie=" + (!!cookie) + ", origin=" + origin + ")");
+
+  const waitP = __waitUserLoginReply(ws, timeoutMs);
+  ws.send(enc);
+
+  const { raw, json } = await waitP;
+
+  const token =
+    json?.session_token ||
+    json?.response?.properties?.data?.[0]?.session_token ||
+    json?.response?.properties?.session_token ||
+    (raw && (raw.match(/"session_token"\s*:\s*"([^"]+)"/) || [])[1]) ||
+    "";
+
+  const t = String(token || "").trim();
+  if (!t) {
+    const av =
+      json?.action_value ||
+      json?.response?.properties?.action_value ||
+      (raw && (raw.match(/"action_value"\s*:\s*"?(\d+)"?/) || [])[1]) ||
+      "?";
+    const err =
+      json?.error_description ||
+      json?.response?.properties?.error_description ||
+      (raw && (raw.match(/"error_description"\s*:\s*"([^"]*)"/) || [])[1]) ||
+      "";
+    throw new Error("user_login FAIL action_value=" + av + (err ? (" err=" + err) : ""));
+  }
+
+  sessionToken = t;
+  console.log("[sb] << user_login OK (tokenLen=" + sessionToken.length + ")");
+}
+// =============================================================================
+
+// =============================================================================
+
+
+  if (!url) throw new Error("Faltou MONITOR_WS_URL");
+  if (!sessionToken) console.log("[sb] sem MONITOR_SESSION_TOKEN; vou fazer user_login via WS...");
+
+  const cookie = process.env.MONITOR_WS_COOKIE || "";
+  const origin = process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com";
+
+  const [clientId, clientName, vehicleId, vehicleSettingId, ...rest] = process.argv.slice(2);
+  const comment = rest.join(" ") || "vm scheme builder";
+
+  if (!clientId || !clientName || !vehicleId || !vehicleSettingId) {
+    console.error("Uso: node tools/sb_run_vm.js <clientId> <clientName> <vehicleId> <vehicleSettingId> [comment...]");
+    process.exit(2);
+  }
+
+  // IMPORTANTE: sem subprotocol (evita "invalid subprotocol")
+  const ws = new WebSocket(url, {
+    headers: cookie ? { Cookie: cookie } : {},
+    origin,
+    handshakeTimeout: 15000,
+    perMessageDeflate: false,
+  });
+
+  ws.on("open", () => console.log("[sb] WS open"));
+  ws.on("close", (c,r) => console.log("[sb] WS close", c, String(r||"")));
+  ws.on("error", (e) => console.log("[sb] WS error", e && e.message ? e.message : e));
+
+  ws.on("message", (data) => {
+    // --- mtkn correlation (anti-race) ---
+    const __msg0 = parseWsMessage_(data);
+    if (__msg0) noteMessage_(__msg0);
+    // -----------------------------------
+
+    const text = decodeMaybe(String(data));
+    if (text.includes("action_value")) {
+      try { console.log("[sb] << action_value msg:", JSON.parse(text)); } catch {}
+
+// ---- cache: get_client_vehicles_opr (para GS ctx) ----
+try {
+  const __p = (JSON && JSON.response && JSON.response.properties) ? JSON.response.properties : null;
+  if (__p && __p.action_name === "get_client_vehicles_opr" && String(__p.action_value || "") === "0" && Array.isArray(__p.data)) {
+    globalThis.__LAST_GET_CLIENT_VEHICLES_DATA = __p.data;
+  }
+} catch (_e) {}
+// ---- /cache ----
+      // fail-fast: algumas respostas de erro (ex.: 403) vêm sem mtkn -> não deixe waitForMtkn dar timeout
+      try {
+        const m = __msg0;
+        const av = String((m && (m.action_value || m?.response?.properties?.action_value)) || "");
+        const err = String((m && (m.error_description || m?.response?.properties?.description)) || "");
+        const hasMtkn = !!(m && getMsgMtkn_(m));
+        if (!hasMtkn && av && av !== "0" && __PENDING_BY_MTK && __PENDING_BY_MTK.size) {
+          const lastKey = Array.from(__PENDING_BY_MTK.keys()).pop();
+          const pending = __PENDING_BY_MTK.get(lastKey);
+          if (pending) {
+            clearTimeout(pending.to);
+            __PENDING_BY_MTK.delete(lastKey);
+            pending.reject(new Error("WS error action_value=" + av + (err ? (" err=" + err) : "") + " (sem mtkn)"));
+          }
+        }
+      } catch {}
+    }
+  });
+
+  await new Promise((res, rej) => {
+    ws.once("open", res);
+    ws.once("error", rej);
+  });
+
+  // 0) INIT (igual quando a tela carrega): get_client_vehicles_opr
+  await __ensureWsLogin(ws);
+  sendFrame(ws, "get_client_vehicles_opr", {
+    vcls_from_previous_process: "0",
+    is_checked: "0",
+    last_ignition_status: "0",
+    license_nmbr: "",
+    inner_id: "",
+    vehicle_id: "",
+    vin_nmbr: "",
+    client_group: "",
+    vehicle_type_descr: "",
+    is_last_SB_error: "0",
+    LAST_SB_STATUS_ID: "",
+    current_firmware: "",
+    is_assigned_fw: "0",
+    time_interval_id: "",
+    assigned_firmware: "",
+    loaded_setting_name: "",
+    is_assigned_setting: "0",
+    assigned_setting_name: "",
+    processor_type: "",
+    hardware_type: "",
+    client_id: String(clientId),
+    client_name: String(clientName)
+  }, sessionToken);
+  await sleep(800);
+
+  // 1) Marca veículo
+  sendFrame(ws, "vcls_check_opr", {
+    client_id: String(clientId),
+    vehicle_id: String(vehicleId),
+    client_name: String(clientName),
+    is_checked: "1"
+  }, sessionToken);
+  await sleep(300);
+
+  // 2) associate call 0
+  sendFrame(ws, "associate_vehicles_actions_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    tag: "loading_screen",
+    client_id: String(clientId),
+    client_name: String(clientName),
+    action_source: "0",
+    action_id: "1",
+    call_num: "0"
+  }, sessionToken);
+  await sleep(300);
+
+  // 3) associate call 1 (setting)
+  sendFrame(ws, "associate_vehicles_actions_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    client_id: String(clientId),
+    client_name: String(clientName),
+    vehicle_setting_id: String(vehicleSettingId),
+    action_source: "0",
+    action_id: "1",
+    call_num: "1"
+  }, sessionToken);
+  await sleep(500);
+
+  // 4) review
+  sendFrame(ws, "review_process_attributes", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),  client_id: String(clientId) }, sessionToken);
+  await sleep(200);
+
+  // 5) get review -> process_id
+  const mtknReview = sendFrame(ws, "get_vcls_action_review_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    client_id: String(clientId),
+    client_name: String(clientName),
+    action_source: "0"
+  }, sessionToken);
+
+  const reviewRow = await waitRowByMtkn(ws, mtknReview, 15000);
+  let processId = String(reviewRow && reviewRow.process_id ? reviewRow.process_id : "");
+  if (!processId) {
+  // get_vcls_action_review_opr costuma trazer o process_id dentro de response.properties.data[]
+  const d = reviewRow?.response?.properties?.data;
+  if (Array.isArray(d)) {
+    for (const it of d) {
+      const pid =
+        it?.process_id ??
+        it?.processId ??
+        it?.processID ??
+        it?.properties?.process_id ??
+        it?.properties?.processId;
+      if (pid) { processId = String(pid); break; }
+    }
+  }
+
+  if (!processId) {
+    const preview = Array.isArray(d) ? d.slice(0, 3) : d;
+    console.log("[sb] DEBUG: process_id não veio no topo. preview data=", JSON.stringify(preview));
+    throw new Error("Não veio process_id");
+  }
+}
+  console.log("[sb] process_id =", processId);
+
+  // 6) execute
+  sendFrame(ws, "execute_action_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
+    tag: "loading_screen",
+    client_id: String(clientId),
+    action_source: "0",
+    process_id: processId,
+    comment: String(comment),
+    toggle_check: "1"
+  }, sessionToken);
+
+  console.log("[sb] execute_action_opr enviado.");
+  await sleep(2000);
+  // === GS stage ==============================================================
+  const __gsEnabled = __isTruthy(process.env.GS_ENABLE);
+  if (__gsEnabled) {
+    const __gsActionId = Number(process.env.GS_ACTION_ID || 5);
+    const __gsDelayMs  = Number(process.env.GS_DELAY_MS || 1500);
+    console.log(`[gs] enabled=true action_id=${__gsActionId} delay_ms=${__gsDelayMs}`);
+    if (__gsDelayMs > 0) await __sleep(__gsDelayMs);
+
+    await __gsRunCustomCommand_GS2(ws, {
+      clientId,
+      clientName,
+      vehicleId,
+      comment: String(comment || "") + " [GS]",
+      sessionToken
+    });
+  } else {
+    console.log(`[gs] enabled=false (GS_ENABLE=${String(process.env.GS_ENABLE||"")})`);
+  }
+  // ===========================================================================
+ws.close(1000, "done");
+})();
+
+// PATCH_WAITFORMTKN_V2
+
+function parseWsMessage_(raw) {
+  const s = Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw ?? '');
+  let txt = s;
+
+  // Alguns frames vêm URL-encoded (%7B...%7D)
+  if (txt.startsWith('%7B') || (txt.includes('%22') && txt.includes('%7D'))) {
+    try { txt = decodeURIComponent(txt); } catch (_) {}
+  }
+
+  try { return JSON.parse(txt); } catch (_) { return null; }
+}
+
+function getMsgMtkn_(msg) {
+  const m =
+    msg?.mtkn ??
+    msg?.action?.mtkn ??
+    msg?.properties?.mtkn ??
+    msg?.response?.mtkn ??
+    msg?.response?.properties?.mtkn ??
+    msg?.response?.action?.mtkn;
+  return m == null ? null : String(m);
+}
+
+
+
+/* [cleanup] duplicate waitForMtkn removido (bloco antigo) */
+/* WAITFOR OVERRIDE V2 */
+function waitForMtkn(ws, mtkn, timeoutMs = 15000) {
+  const want = String(mtkn);
+
+  const seen = __SEEN_BY_MTK.get(want);
+  if (seen) return Promise.resolve(seen);
+
+  const existing = __PENDING_BY_MTK.get(want);
+  if (existing) return existing.promise;
+
+  let resolve, reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+
+  const to = setTimeout(() => {
+    __PENDING_BY_MTK.delete(want);
+    reject(new Error("Timeout esperando mtkn=" + want));
+  }, timeoutMs);
+
+  __PENDING_BY_MTK.set(want, { promise, resolve, reject, to });
+  return promise;
+}
+
+
+// === PATCH GS2 v2 — Run Command (G-sensor) conforme Chrome =================
+// Fluxo (Chrome):
+// 1) add_remove_custom_command (manual) [ack + command_syntax]
+// 2) associate_vehicles_actions_opr (action_id=5) com call_num=1 + keep_priority=true
+// 3) review_process_attributes -> get_vcls_action_review_opr (extrai process_id)
+// 4) execute_action_opr com toggle_check=0
+//
+// Env:
+//   GS_ENABLE=1
+//   GS_ACTION_ID=5
+//   GS_DELAY_MS=1500
+//   GS_COMMAND_SYNTAX='(o2w,44,C6140000FC0000000400000000000000000004000000)'
+//   GS_ACK_NEEDED=1
+//   GS_CALL_NUM=1 (default)
+//   GS_ACTION_SOURCE=0 (default)
+
+function __parseWsMsgLocal_(raw) {
+  const s = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw ?? "");
+  let txt = s;
+  if (txt && txt[0] === "%") { try { txt = decodeURIComponent(txt); } catch {} }
+  try { return JSON.parse(txt); } catch { return null; }
+}
+
+function __extractProcessIdFromReview_(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  if (obj.process_id) return Number(obj.process_id) || null;
+
+  const data = obj?.response?.properties?.data;
+  if (Array.isArray(data)) {
+    for (const it of data) {
+      if (!it) continue;
+      if (it.process_id) return Number(it.process_id) || null;
+      if (it.processId) return Number(it.processId) || null;
+      if (Array.isArray(it.data)) {
+        for (const r of it.data) {
+          if (r?.process_id) return Number(r.process_id) || null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function __actionValue_(obj) {
+  const av =
+    obj?.action_value ??
+    obj?.response?.properties?.action_value ??
+    obj?.response?.action_value;
+  return av == null ? "" : String(av);
+}
+
+function __errDesc_(obj) {
+  return String(
+    obj?.error_description ??
+    obj?.response?.properties?.description ??
+    obj?.response?.description ??
+    ""
+  );
+}
+
+function __waitRowOrRawFail_(ws, wantMtkn, timeoutMs, label) {
+  // RACE: (1) resposta normal com mtkn (response.properties.mtkn)
+  //       (2) erro "seco" {action_value:"403", error_description:"..."} sem mtkn
+  return new Promise((resolve, reject) => {
+    let done = false;
+
+    const t = setTimeout(() => cleanupReject(new Error(`[gs] timeout aguardando ${label} mtkn=${wantMtkn}`)), timeoutMs);
+
+    const off = (fn) => {
+      if (typeof ws.off === "function") ws.off("message", fn);
+      else ws.removeListener("message", fn);
+    };
+
+    function cleanup() {
+      clearTimeout(t);
+      off(onRawFail);
+    }
+
+    function cleanupReject(err) {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(err);
+    }
+
+    function cleanupResolve(obj) {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(obj);
+    }
+
+    function onRawFail(data) {
+      const msg = __parseWsMsgLocal_(data);
+      // Só falha-rápido no formato "seco" (sem response) com action_value != 0
+      if (msg && typeof msg === "object" && msg.action_value && !msg.response) {
+        const av = String(msg.action_value);
+        if (av !== "0") {
+          const err = msg.error_description ? ` err=${msg.error_description}` : "";
+          if (String(av) === "403" && (label === "add_remove_custom_command" || label === "get_custom_command" || label === "associate_vehicles_actions_opr")) {
+            console.log("[gs] WARN: " + label + " retornou 403 (action forbidden). Ignorando e seguindo...");
+            cleanupResolve({ skipped: true, action_value: av, error_description: err });
+            return;
+          }
+          cleanupReject(new Error(`[gs] ${label} FAIL action_value=${av}${err}`));
+
+        }
+      }
+    }
+
+    ws.on("message", onRawFail);
+
+    waitRowByMtkn(ws, String(wantMtkn), timeoutMs)
+      .then((obj) => {
+        const av = __actionValue_(obj);
+        if (av && av !== "0") {
+          const err = __errDesc_(obj);
+          if (String(av) === "403" && (label === "add_remove_custom_command" || label === "get_custom_command" || label === "associate_vehicles_actions_opr")) {
+            console.log("[gs] WARN: " + label + " retornou 403 (action forbidden). Ignorando e seguindo...");
+            cleanupResolve({ skipped: true, action_value: av, error_description: err });
+            return;
+          }
+          cleanupReject(new Error(`[gs] ${label} FAIL action_value=${av}${err ? " err=" + err : ""}`));
+
+          return;
+        }
+        cleanupResolve(obj);
+      })
+      .catch((e) => cleanupReject(e));
+  });
+}
+
+async function __gsRunCustomCommand_GS2(ws, ctx) {
+  // OBS: o runner chama esta função passando um OBJETO:
+  //   { clientId, clientName, vehicleId, comment, sessionToken, actionId? }
+  // A versão anterior recebia args soltos -> client_id virava "[object Object]" e o session_token não era enviado.
+
+  ctx = (ctx && typeof ctx === "object") ? ctx : {};
+
+  const clientId   = ctx.clientId   ?? ctx.client_id   ?? process.argv[2];
+  const clientName = ctx.clientName ?? ctx.client_name ?? process.argv[3];
+  const vehicleId  = ctx.vehicleId  ?? ctx.vehicle_id  ?? process.env.GS_VEHICLE_ID ?? process.argv[4];
+  const comment    = ctx.comment    ?? "";
+  const sessionTok = ctx.sessionToken ?? ctx.session_token ?? process.env.MONITOR_SESSION_TOKEN ?? "";
+
+  let actionId = Number(ctx.actionId ?? ctx.action_id ?? process.env.GS_ACTION_ID ?? 0);
+  if (!actionId && String(process.env.GS_DISCOVER || "") !== "1") {
+    throw new Error("[gs] GS_ACTION_ID inválido (actionId=0) e GS_DISCOVER=0");
+  }
+
+  const __vehicleId = Number(vehicleId || 0);
+  if (!__vehicleId) throw new Error("[gs] vehicleId inválido (argv[4])");
+
+  if (!String(sessionTok || "").trim()) {
+    throw new Error("[gs] sessionToken vazio no ctx (sem session_token) — não dá para executar GS no WS.");
+  }
+
+  // ---- GS auto-discover (leve) ----
+  // Ative com: GS_DISCOVER=1 (opcional: GS_DISCOVER_FROM/TO, GS_DISCOVER_KEYWORDS)
+  const __gsDiscover = String(process.env.GS_DISCOVER || "") === "1";
+  if (__gsDiscover) {
+    const __from = Number(process.env.GS_DISCOVER_FROM || 1);
+    const __to   = Number(process.env.GS_DISCOVER_TO || 200);
+    const __toMs = Number(process.env.WS_WAIT_TIMEOUT_MS || 30000);
+    const __kw = (process.env.GS_DISCOVER_KEYWORDS || "gsensor,g-sensor,accelerometer,calibr,calibration")
+      .split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+
+    console.log("[gs] discover ON: range=" + __from + "-" + __to + " kw=" + (__kw.join("|") || "(none)"));
+
+    async function __try(id, __unit_key, __inner_id) {
+      const mtA = sendFrame(ws, "associate_vehicles_actions_opr", {
+        ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+        ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+        tag: String(process.env.GS_MANUAL_TAG || "manual_command_popup"),
+        client_id: String(clientId),
+        client_name: String(clientName),
+        vehicle_id: String(__vehicleId),
+        action_id: String(id),
+        action_source: String(process.env.GS_ACTION_SOURCE || "0"),
+        call_num: String(process.env.GS_CALL_NUM || "1"),
+        keep_priority: true
+      }, sessionTok);
+      await __waitRowOrRawFail_(ws, mtA, __toMs, "gs_discover_associate");
+
+      const mtR = sendFrame(ws, "review_process_attributes", {
+        ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+        ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+        tag: String(process.env.GS_MANUAL_TAG || "manual_command_popup"),
+        client_id: String(clientId),
+        client_name: String(clientName),
+        vehicle_id: String(__vehicleId),
+        action_id: String(id),
+        action_source: String(process.env.GS_ACTION_SOURCE || "0"),
+        call_num: String(process.env.GS_CALL_NUM || "1"),
+        keep_priority: true
+      }, sessionTok);
+
+      const r = await __waitRowOrRawFail_(ws, mtR, __toMs, "gs_discover_review");
+      const props = (r && r.response && r.response.properties) ? r.response.properties : {};
+      const hay = JSON.stringify(props.data || props || {}).toLowerCase();
+      const hit = (__kw.length === 0) || __kw.some(k => hay.includes(k));
+      return { ok: true, hit: hit, hay: hay };
+    }
+
+    let chosen = 0;
+    const seed = Number(actionId || 0) > 0 ? Number(actionId) : __from;
+
+    let __unit_key_seed = null;
+    let __inner_id_seed = null;
+    try {
+      const data = (typeof globalThis !== "undefined" && Array.isArray(globalThis.__LAST_GET_CLIENT_VEHICLES_DATA))
+        ? globalThis.__LAST_GET_CLIENT_VEHICLES_DATA
+        : null;
+      if (data) {
+        const row = data.find(r => String(r?.vehicle_id ?? r?.id ?? r?.v_id ?? r?.vehicleId ?? "") === String(__vehicleId)) or None
+        if row:
+          __unit_key_seed = row.get("unit_key") or row.get("unitKey") or row.get("unit")
+          __inner_id_seed = row.get("inner_id") or row.get("innerId") or row.get("inner")
+    except Exception:
+      pass
+
+    for (let id = seed; id <= __to; id++) {
+      try {
+        const out = await __try(id, __unit_key_seed, __inner_id_seed);
+        if (out.hit) { chosen = id; break; }
+        if (!chosen) chosen = id;
+      } catch (e) {
+        const msg = String((e && e.message) ? e.message : e);
+        if (msg.includes("action_value=403") || msg.toLowerCase().includes("forbidden")) continue;
+        continue;
+      }
+    }
+
+    if (!chosen) throw new Error("[gs] discover: nenhum action_id passou (tudo 403).");
+    console.log("[gs] discover RESULT: action_id=" + chosen);
+    actionId = Number(chosen);
+  }
+  // ---- /GS auto-discover ----
+
+  const to = Number(process.env.WS_WAIT_TIMEOUT_MS || 15000);
+  const delay = Number(process.env.GS_DELAY_MS || 1500);
+
+  const tagLoading = String(process.env.WS_TAG || "loading_screen");
+  const tagManual  = String(process.env.GS_MANUAL_TAG || "manual_command_popup");
+
+  const actionSource = String(process.env.GS_ACTION_SOURCE || "0");
+  const callNum = String(process.env.GS_CALL_NUM || "1");
+
+  const ackNeeded = String(process.env.GS_ACK_NEEDED || "1");
+  const commandSyntax = String(process.env.GS_COMMAND_SYNTAX || "").trim();
+
+  if (delay > 0) await new Promise(r => setTimeout(r, delay));
+
+  console.log(`[gs] enabled=true action_id=${actionId} delay_ms=${delay} call_num=${callNum}`);
+
+  // ---- GS ctx (unit_key / inner_id) ----
+  let __unit_key = null;
+  let __inner_id = null;
+
+  try {
+    const data = (typeof globalThis !== "undefined" && Array.isArray(globalThis.__LAST_GET_CLIENT_VEHICLES_DATA))
+      ? globalThis.__LAST_GET_CLIENT_VEHICLES_DATA
+      : null;
+
+    if (data) {
+      const row = data.find(r => String(r?.vehicle_id ?? r?.id ?? r?.v_id ?? r?.vehicleId ?? "") === String(__vehicleId)) || null;
+      __unit_key = row?.unit_key ?? row?.unitKey ?? row?.unit ?? null;
+      __inner_id = row?.inner_id ?? row?.innerId ?? row?.inner ?? null;
+    }
+
+    if (!__unit_key && !__inner_id) {
+      try {
+        console.log("[gs] ctx cache vazio — tentando get_client_vehicles_opr para obter unit_key/inner_id...");
+        const mtCtx = sendFrame(ws, "get_client_vehicles_opr", {
+          vcls_from_previous_process: "0",
+          is_checked: "0",
+          last_ignition_status: "0",
+          license_nmbr: "",
+          inner_id: "",
+          vehicle_id: "",
+          vin_nmbr: "",
+          client_group: "",
+          vehicle_type_descr: "",
+          is_last_SB_error: "0",
+          LAST_SB_STATUS_ID: "",
+          current_firmware: "",
+          is_assigned_fw: "0",
+          time_interval_id: "",
+          assigned_firmware: "",
+          loaded_setting_name: "",
+          is_assigned_setting: "0",
+          assigned_setting_name: "",
+          processor_type: "",
+          hardware_type: "",
+          client_id: String(clientId),
+          client_name: String(clientName)
+        }, sessionTok);
+
+        const ctxObj = await __waitRowOrRawFail_(ws, mtCtx, to, "get_client_vehicles_opr");
+        const p = ctxObj?.response?.properties || {};
+        const arr = Array.isArray(p.data) ? p.data : [];
+        if (arr.length) globalThis.__LAST_GET_CLIENT_VEHICLES_DATA = arr;
+
+        const row2 = arr.find(r => String(r?.vehicle_id ?? r?.id ?? r?.v_id ?? r?.vehicleId ?? "") === String(__vehicleId)) || null;
+        __unit_key = row2?.unit_key ?? row2?.unitKey ?? row2?.unit ?? __unit_key;
+        __inner_id = row2?.inner_id ?? row2?.innerId ?? row2?.inner ?? __inner_id;
+      } catch (e) {
+        console.log("[gs] ctx fetch falhou — seguindo mesmo assim:", e?.message || String(e));
+      }
+    }
+
+    if (__unit_key || __inner_id) {
+      console.log("[gs] ctx OK:", { vehicleId: __vehicleId, unit_key: __unit_key, inner_id: __inner_id });
+    } else {
+      console.log("[gs] ctx vazio (sem unit_key/inner_id) — seguindo mesmo assim.");
+    }
+  } catch (e) {
+    console.log("[gs] ctx cache falhou — seguindo mesmo assim:", e?.message || String(e));
+  }
+  // ---- /GS ctx ----
+
+  if (commandSyntax) {
+    console.log("[gs] >> add_remove_custom_command (manual)");
+    const mtAdd = sendFrame(ws, "add_remove_custom_command", {
+      ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+      ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+      tag: tagManual,
+      client_id: String(clientId),
+      acknowledge_needed: ackNeeded,
+      command_syntax: commandSyntax,
+    }, sessionTok);
+    await __waitRowOrRawFail_(ws, mtAdd, to, "add_remove_custom_command");
+  } else {
+    console.log("[gs] GS_COMMAND_SYNTAX vazio — pulando add_remove_custom_command (vai executar comando já existente).");
+  }
+
+  try {
+    console.log("[gs] >> get_custom_command (refresh)");
+    const mtList = sendFrame(ws, "get_custom_command", {
+      ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+      ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+      tag: tagManual,
+      client_id: String(clientId)
+    }, sessionTok);
+    await __waitRowOrRawFail_(ws, mtList, to, "get_custom_command");
+  } catch (e) {
+    console.log("[gs] get_custom_command (refresh) falhou/foi ignorado:", e?.message || String(e));
+  }
+
+  console.log("[gs] >> associate_vehicles_actions_opr (NEXT)");
+  const mtAssoc = sendFrame(ws, "associate_vehicles_actions_opr", {
+    ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+    ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+    tag: tagManual,
+    action_id: String(actionId),
+    action_source: String(actionSource),
+    call_num: String(callNum),
+    client_id: String(clientId),
+    client_name: String(clientName),
+    vehicle_id: String(__vehicleId),
+    keep_priority: true,
+  }, sessionTok);
+  await __waitRowOrRawFail_(ws, mtAssoc, to, "associate_vehicles_actions_opr");
+
+  console.log("[gs] >> review_process_attributes");
+  const mtRpa = sendFrame(ws, "review_process_attributes", {
+    ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+    ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+    tag: tagManual,
+    action_id: String(actionId),
+    action_source: String(actionSource),
+    call_num: String(callNum),
+    client_id: String(clientId),
+    client_name: String(clientName),
+    vehicle_id: String(__vehicleId),
+    keep_priority: true,
+  }, sessionTok);
+  await __waitRowOrRawFail_(ws, mtRpa, to, "review_process_attributes");
+
+  console.log("[gs] >> get_vcls_action_review_opr");
+  const mtRev = sendFrame(ws, "get_vcls_action_review_opr", {
+    ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+    ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+    tag: tagManual,
+    action_id: String(actionId),
+    action_source: String(actionSource),
+    client_id: String(clientId),
+    client_name: String(clientName),
+    vehicle_id: String(__vehicleId),
+  }, sessionTok);
+  const revObj = await __waitRowOrRawFail_(ws, mtRev, to, "get_vcls_action_review_opr");
+
+  const pid = __extractProcessIdFromReview_(revObj);
+  if (!pid) throw new Error("[gs] ERRO: não consegui extrair process_id do get_vcls_action_review_opr.");
+
+  console.log("[gs] process_id =", pid);
+
+  console.log("[gs] >> execute_action_opr (toggle_check=0)");
+  const mtExec = sendFrame(ws, "execute_action_opr", {
+    ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ),
+    ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ),
+    tag: tagLoading,
+    action_id: String(actionId),
+    action_source: String(actionSource),
+    client_id: String(clientId),
+    client_name: String(clientName),
+    vehicle_id: String(__vehicleId),
+    process_id: String(pid),
+    comment: String(comment || ""),
+    toggle_check: "0",
+  }, sessionTok);
+  await __waitRowOrRawFail_(ws, mtExec, to, "execute_action_opr");
+
+  console.log("[gs] execute_action_opr OK");
+}
+// === END PATCH GS2 v2 =========================================================
+
