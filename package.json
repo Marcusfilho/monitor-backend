@@ -7,7 +7,8 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "worker:schemebuilder": "node dist/worker/schemeBuilderWorker.js"
+    "worker:schemebuilder": "node dist/worker/schemeBuilderWorker.js",
+    "postinstall": "npm run build"
   },
   "keywords": [],
   "author": "",
@@ -15,8 +16,9 @@
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.13.2",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.17.2",
     "ws": "^8.18.3"
   },
@@ -24,6 +26,7 @@
     "@types/axios": "^0.9.36",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.16.0",
     "@types/ws": "^8.18.1",
