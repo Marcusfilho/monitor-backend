@@ -37,7 +37,7 @@ const corsMw = cors({
 
 
 // --- CORS FIRST ---
-app.options("*", corsMw);
+app.options(/.*/, corsMw);
 app.use(corsMw);
 // Express/router aqui quebra com "*", então usamos regex:
 // Parser antes das rotas
