@@ -1,24 +1,46 @@
 import express from "express";
-import cors from "cors";
 import schemeBuilderRoutes from "./routes/schemeBuilderRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import workerSessionTokenRoutes from "./routes/workerSessionTokenRoutes";
-import { initSessionTokenStore } from "./services/sessionTokenStore";
-
-
-
 import authRoutes from "./routes/authRoutes";
 import monitorRoutes from "./routes/monitorRoutes";
 import jobRoutes from "./routes/jobRoutes";
-
-import { migrateIfNeeded } from "./db/migrate";
 import adminCatalogRoutes from "./routes/adminCatalogRoutes";
+
+import { initSessionTokenStore } from "./services/sessionTokenStore";
+import { migrateIfNeeded } from "./db/migrate";
+import cors from "cors";
+
+
 const app = express();
-app.use("/api/admin/catalogs", adminCatalogRoutes);
 
-const port = process.env.PORT || 3000;
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:5173")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
 
-app.use(cors());
+app.use((req, res, next) => {
+  res.header("Vary", "Origin");
+  next();
+});
+
+const corsMw = cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/postman
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error("CORS blocked origin=" + origin), false);
+  },
+  methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
+  allowedHeaders: ["content-type","authorization"],
+  maxAge: 86400,
+});
+
+
+// --- CORS FIRST ---
+app.options("*", corsMw);
+app.use(corsMw);
+// Express/router aqui quebra com "*", então usamos regex:
+// Parser antes das rotas
 app.use(express.json());
 
 // Healthcheck
@@ -32,33 +54,32 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Rotas existentes
+// Rotas
+app.use("/api/admin/catalogs", adminCatalogRoutes);
+
 app.use("/api/auth", authRoutes);
 app.use("/api/monitor", monitorRoutes);
-
-// NOVO: rotas de jobs
 app.use("/api/jobs", jobRoutes);
-
-// nova rota mais “amigável” para o app dos instaladores
 app.use("/api/scheme-builder", schemeBuilderRoutes);
+
+app.use("/api/admin", adminRoutes);
+app.use("/api/worker", workerSessionTokenRoutes);
 
 async function main() {
   await initSessionTokenStore();
 
-  app.use("/api/admin", adminRoutes);
-  app.use("/api/worker", workerSessionTokenRoutes);
-
-  const PORT = Number(process.env.PORT || 3000);
-(async () => {
-  await migrateIfNeeded();
+  // Em dev, deixa subir sem DB (pra testar CORS e front).
+  // Em prod, mantém fail-fast.
+  const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
+  if (!process.env.DATABASE_URL) {
+    if (isProd) throw new Error("DATABASE_URL is not set");
+    console.warn("[dev] DATABASE_URL is not set; skipping migrations");
+  } else {
+    await migrateIfNeeded();
+  }
 
   const PORT = Number(process.env.PORT || 3000);
   app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
-})().catch((err) => {
-  console.error("[fatal] startup failed:", err);
-  process.exit(1);
-});
-
 }
 
 main().catch((err) => {
@@ -66,6 +87,4 @@ main().catch((err) => {
   process.exit(1);
 });
 
-
 export default app;
-
