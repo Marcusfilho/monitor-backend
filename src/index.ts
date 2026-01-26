@@ -31,7 +31,7 @@ const corsMw = cors({
     return cb(new Error("CORS blocked origin=" + origin), false);
   },
   methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
-  allowedHeaders: ["content-type","authorization"],
+  allowedHeaders: ["content-type","authorization","x-admin-key","x-worker-key"],
   maxAge: 86400,
 });
 
