@@ -2,6 +2,7 @@ import express from "express";
 import schemeBuilderRoutes from "./routes/schemeBuilderRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import workerSessionTokenRoutes from "./routes/workerSessionTokenRoutes";
+import { workerRoutes } from "./routes/workerRoutes";
 import authRoutes from "./routes/authRoutes";
 import monitorRoutes from "./routes/monitorRoutes";
 import jobRoutes from "./routes/jobRoutes";
@@ -63,6 +64,7 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/scheme-builder", schemeBuilderRoutes);
 
 app.use("/api/admin", adminRoutes);
+app.use("/api/worker", workerRoutes);
 app.use("/api/worker", workerSessionTokenRoutes);
 
 async function main() {
