@@ -1,11 +1,38 @@
 // src/worker/schemeBuilderWorker.ts
 import axios from "axios";
 import { spawnSync } from "child_process";
+import { startHeartbeat } from "./heartbeatClient";
 
 
 import * as fs from "fs";
 import { collectVehicleMonitorSnapshot, summarizeCanFromModuleState } from "../services/vehicleMonitorSnapshotService";
 // progressPercent (job) — updates não bloqueiam o fluxo
+
+// === HEARTBEAT (source) ===
+try {
+  const baseUrl = process.env.BASE_URL || "";
+  const workerId = process.env.WORKER_ID || "tunel";
+  const workerKey = process.env.WORKER_KEY || "";
+  const intervalMs = Number(process.env.HEARTBEAT_INTERVAL_MS || 30000);
+
+  startHeartbeat({
+    baseUrl,
+    workerId,
+    workerKey,
+    intervalMs,
+    getState: () => ({
+      status: "running",
+      checks: { backend_ok: true },
+      meta: { uptime_s: Math.round(process.uptime()) },
+    }),
+  });
+
+  console.log("[hb] enabled (src):", { workerId, intervalMs });
+} catch (e: any) {
+  console.error("[hb] init fail (src):", e?.message || e);
+}
+// === /HEARTBEAT ===
+
 async function reportProgress(jobId: string, percent: number, stage: string, detail?: string) {
   try {
     // http deve existir no escopo quando a função for chamada
