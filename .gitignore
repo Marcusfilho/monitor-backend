@@ -18,3 +18,4 @@ worker_env.env
 *.bak_*
 
 worker_secrets.env
+node_modules/
