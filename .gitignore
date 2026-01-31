@@ -19,3 +19,6 @@ worker_env.env
 
 worker_secrets.env
 node_modules/
+
+# backups locais
+*.bak_*
