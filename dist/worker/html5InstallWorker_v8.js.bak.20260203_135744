@@ -195,7 +195,7 @@ try {
       globalThis.__LAST_FETCH_URL = u; // PATCH_A11
       globalThis.__LAST_FETCH_URL = u;
       const body = init && init.body != null ? String(init.body) : "";
-      const want = u.includes("AppEngine_2_1/default.aspx") && (body.includes("action=ASSET_BASIC_LOAD") || body.includes("action=ASSET_BASIC_SAVE"));
+      const want = u.includes("AppEngine_2_1/default.aspx") && body.includes("action=ASSET_BASIC_LOAD");
 
       // chama o fetch anterior (que já inclui PATCH_C6)
       const res = await __origFetch(url, init);
@@ -204,19 +204,18 @@ try {
 
       try {
         const txt = await res.clone().text();
-        const attrs = __parseFirstTagAttributes(txt, "DATA") || __parseFirstTagAttributes(txt, "ASSET") || __parseFirstTagAttributes(txt, "VHCL") || null;
+        const attrs = __parseFirstTagAttributes(txt, "ASSET") || __parseFirstTagAttributes(txt, "VHCL") || null;
 
-        const __capKey = body.includes("action=ASSET_BASIC_SAVE") ? "ASSET_BASIC_SAVE" : "ASSET_BASIC_LOAD";
-        __CAPTURES[__capKey] = {
+        __CAPTURES.ASSET_BASIC_LOAD = {
           ts: Date.now(),
           url: u,
-          req: __snip(body, 2200),
-          resp: __snip(txt, 6000),
+          req: __snip(body, 1200),
+          resp: __snip(txt, 1600),
           tag: attrs
         };
 
-        console.log("[CAPTURE_FETCHWRAP_V8] captured " + __capKey + " bytes=" + String(txt || "").length);
-} catch (e) {
+        console.log("[CAPTURE_FETCHWRAP_V8] captured ASSET_BASIC_LOAD bytes=" + String(txt || "").length);
+      } catch (e) {
         console.log("[CAPTURE_FETCHWRAP_V8] capture error:", e && (e.message || e.toString()));
       }
 
@@ -681,48 +680,13 @@ function normalizeStep(step, jobPayload){
   return { label, action, fields, _from: "fields" };
 }
 
-
-/* ASSET_BASIC_SAVE_DEFAULTS_V1
- * Motivo: ASSET_BASIC_SAVE no HTML5 costuma enviar vários campos como 0 e datas (não vazio).
- * Aqui garantimos defaults para evitar "Action: ASSET_BASIC_SAVE error" genérico.
- */
-function __fmtDDMMYYYY(d){
-  try {
-    const dd = String(d.getDate()).padStart(2,"0");
-    const mm = String(d.getMonth()+1).padStart(2,"0");
-    const yy = String(d.getFullYear());
-    return dd + "/" + mm + "/" + yy;
-  } catch(e) { return ""; }
-}
-function ensureAssetBasicSaveDefaults(f){
-  try{
-    // numéricos que no template real vão como 0
-    const zKeys = ["NEXT_SER_KM","NEXT_SER_ENG","MODEL_YEAR","TIRES","DRAGGING_HOOK","IN_GARAGE"];
-    for (const k of zKeys){
-      const v = f[k];
-      if (v === undefined || v === null || String(v).trim() === "") f[k] = "0";
-    }
-
-    // datas: usa UNIT_END_OF_WARRANTY_DATE se existir; senão hoje
-    const baseDate = (f.UNIT_END_OF_WARRANTY_DATE && String(f.UNIT_END_OF_WARRANTY_DATE).trim()) || __fmtDDMMYYYY(new Date());
-    const dKeys = ["EXPIRATION_DATE","OWNERSHIP_DATE","REGISTER_DATE","SERVICE_START","SERVICE_END","POINT_ZERO","DOD"];
-    for (const k of dKeys){
-      const v = f[k];
-      if (v === undefined || v === null || String(v).trim() === "") f[k] = baseDate;
-    }
-  } catch(e) { /* noop */ }
-}
-
-
 async function html5CallFormAction(actionName, fields, cookieHeader){
   const f = { ...(fields || {}) };
   f.action = String(f.action || actionName);
   if (f.VERSION_ID === undefined) f.VERSION_ID = "2";
   if (String(f.action) === "SAVE_VHCL_ACTIVATION_NEW") ensureCustomField1(f);
 
-  
-  if (String(f.action) === "ASSET_BASIC_SAVE") ensureAssetBasicSaveDefaults(f);
-const body = encodeForm(f);
+  const body = encodeForm(f);
   const cookieFixed = ensureCookieDefaults(cookieHeader || "");
 
   const r = await fetchWithCookies(HTML5_ACTION_URL, {
@@ -779,7 +743,6 @@ function normService(v){
 }
 
 function buildStepsForService(service, payload){
-  // PATCH_D2: v8 services (templates reais + preload via ASSET_BASIC_LOAD)
   // Prioridade: payload.html5Steps (lista explícita, com payload idêntico ao da UI)
   if (Array.isArray(payload.html5Steps) && payload.html5Steps.length) {
     return payload.html5Steps.map(s => normalizeStep(s, payload));
@@ -793,117 +756,6 @@ function buildStepsForService(service, payload){
   // Fallback: INSTALL conhecido (builder)
   if (service === "INSTALL") {
     return [normalizeStep({ label: "install", useBuilder: true }, payload)];
-  }
-
-  // MAINT_NO_SWAP: não altera HTML5 (somente Monitor)
-  if (service === "MAINT_NO_SWAP") return [];
-
-  const vId = payload.vehicle_id || payload.vehicleId || payload.VEHICLE_ID || payload.vehicleID || payload.VehicleId;
-
-  // Template real: DEACTIVATE_VEHICLE_HIST (descadastro/desvincular)
-  const mkDeactivate = (label, note) => {
-    if (!vId) return null;
-    const installer = payload.installer_name || payload.installer || payload.INSTALLER_NAME || "installer";
-    const comments = payload.comments || payload.note || payload.notes || note || "";
-    const reason = String(payload.reason_code || payload.REASON_CODE || 5501);
-    const deliver = String(payload.deliver_code || payload.DELIVER_CODE || 5511);
-    return normalizeStep({
-      label,
-      action: "DEACTIVATE_VEHICLE_HIST",
-      fields: {
-        INSTALLER_NAME: String(installer),
-        REASON_CODE: String(reason),
-        DELIVER_CODE: String(deliver),
-        COMMENTS: String(comments),
-        VEHICLE_ID: String(vId),
-        action: "DEACTIVATE_VEHICLE_HIST",
-        VERSION_ID: "2"
-      }
-    }, payload);
-  };
-
-  // Template real: ASSET_BASIC_LOAD (card do veículo) — usado para baseline/confirm
-  const mkAssetLoad = (label, assetIdMaybe) => {
-    const aid = assetIdMaybe || vId;
-    if (!aid) return null;
-    return normalizeStep({
-      label,
-      action: "ASSET_BASIC_LOAD",
-      fields: {
-        ASSET_ID: String(aid),
-        ASSET_DESCRIPTION: String(payload.asset_description || payload.ASSET_DESCRIPTION || ""),
-        action: "ASSET_BASIC_LOAD",
-        VERSION_ID: "2"
-      }
-    }, payload);
-  };
-
-  if (service === "UNINSTALL") {
-    const s1 = mkDeactivate("uninstall_deactivate", "uninstall");
-    if (!s1) return [];
-    const steps = [s1];
-    if (payload.confirm_asset_load) {
-      const s2 = mkAssetLoad("uninstall_confirm");
-      if (s2) steps.push(s2);
-    }
-    return steps;
-  }
-
-  if (service === "MAINT_WITH_SWAP") {
-    if (!vId) return [];
-    const newSerial = payload.serial || payload.inner_id || payload.INNER_ID || payload.unit || payload.UNIT;
-    const cur = payload.__assetLoadAttrs && (payload.__assetLoadAttrs.UNIT || payload.__assetLoadAttrs.INNER_ID);
-    if (cur && newSerial && String(cur) === String(newSerial)) return []; // já está com o serial desejado
-    if (!newSerial) return [];
-    const steps = [];
-    const d = mkDeactivate("swap_deactivate_old", "swap");
-    if (d && !payload.skip_deactivate) steps.push(d);
-    steps.push(normalizeStep({ label: "swap_activate", useBuilder: true }, payload));
-    return steps;
-  }
-
-  if (service === "CHANGE_COMPANY") {
-    const attrs = payload.__assetLoadAttrs || null;
-    const clientId = payload.client_id_target || payload.CLIENT_ID_TARGET || payload.clientIdTarget;
-    const groupId  = payload.group_id_target  || payload.GROUP_ID_TARGET  || payload.groupIdTarget; // opcional (ensureGroupId pode preencher)
-    if (!attrs || !clientId) return [];
-
-    // keys do template real (Fetchs.txt - mudar empresa)
-    const KEYS = [
-      "ASSET_ID","ASSET_DESCRIPTION","GROUP_ID","DRIVER_ID","URL","VEHICLE_ID","CLIENT_ID","UNIT_TYPE_DESCR","MODEL_CODE",
-      "NEXT_SER_KM","TOTAL_WEIGHT_1","TIRES","DRAGGING_HOOK","EXPIRATION_DATE","OWNERSHIP_DATE","REGISTER_DATE","NEXT_SER_ENG",
-      "MODEL_YEAR","CHASSIS_SERIAL","FUEL_I_VOLUME","IN_GARAGE","SERVICE_START","SERVICE_END","INTERNAL_VALUE","ASSET_TYPE_DESCR",
-      "CLIENT_NAME","UNIT","GCW","LICENSE_TYPE_CODE","BODY_CONFIGURATION_CODE","LETTERS_SEND_BY_CODE","VEHICLE_STATUS_CODE","FIRMWARE",
-      "FUEL_II_VOLUME","VEHICLE_MIN_FUEL_CONS","VEHICLE_MAX_FUEL_CONS","POINT_ZERO_FUEL_CONS","FUEL_COST","POINT_ZERO","DOD",
-      "UNIT_END_OF_WARRANTY_DATE","MONTHLY_MILEAGE_LIMIT","PARKING_SCM_ID","FUEL_TYPE_ID"
-    ];
-
-    const f = {};
-    for (const k of KEYS) {
-      if (k === "DRIVER_ID") { f[k] = "undefined"; continue; }
-      // campos que tipicamente ficam em branco no template real
-      if (k === "TOTAL_WEIGHT_1" || k === "FUEL_I_VOLUME" || k === "FUEL_II_VOLUME" || k === "FUEL_COST" || k === "GCW" ||
-          k === "VEHICLE_MIN_FUEL_CONS" || k === "VEHICLE_MAX_FUEL_CONS" || k === "POINT_ZERO_FUEL_CONS" ||
-          k === "MONTHLY_MILEAGE_LIMIT" || k === "PARKING_SCM_ID" || k === "FUEL_TYPE_ID") { f[k] = ""; continue; }
-      f[k] = (attrs[k] !== undefined && attrs[k] !== null) ? String(attrs[k]) : "";
-    }
-
-    // overrides: mudar SOMENTE CLIENT_ID + GROUP_ID (e manter IDs consistentes)
-    const aid = attrs.ASSET_ID || vId;
-    const vid = attrs.VEHICLE_ID || vId || aid;
-    f.ASSET_ID = String(aid);
-    f.VEHICLE_ID = String(vid);
-    f.CLIENT_ID = String(clientId);
-    f.GROUP_ID  = groupId ? String(groupId) : ""; // se vazio, ensureGroupId tenta preencher via groupMap
-
-    const steps = [
-      normalizeStep({ label: "change_company_save", action: "ASSET_BASIC_SAVE", fields: { ...f, action:"ASSET_BASIC_SAVE", VERSION_ID:"2" } }, payload)
-    ];
-
-    const confirm = mkAssetLoad("change_company_confirm", aid);
-    if (confirm !== null && payload.confirm_asset_load !== false) steps.push(confirm);
-
-    return steps;
   }
 
   // Para as outras ações: NÃO inventar payload (regra do projeto)
@@ -937,9 +789,8 @@ async function main(){
         await completeJobLogged(id, status, result);
       };
 
-            const jobRunner = async () => {
-        // PATCH_D2: preflight ASSET_BASIC_LOAD when needed
-        let steps = buildStepsForService(service, payload);
+      const jobRunner = async () => {
+        const steps = buildStepsForService(service, payload);
 
         // DEBUG: não chama HTML5, só monta o payload do SAVE_VHCL_ACTIVATION_NEW
         if (service === "DEBUG_BUILD_SAVE_ACTIVATION_FIELDS") {
@@ -959,7 +810,9 @@ async function main(){
           return;
         }
 
-        // DRY_RUN / exec off
+        // serviços que deliberadamente NÃO mutam HTML5
+        const html5ShouldSkip = (service === "MAINT_NO_SWAP" && steps.length === 0);
+
         if (DRY_RUN || !EXECUTE_HTML5) {
           await finish("ok", {
             ok:true,
@@ -972,53 +825,11 @@ async function main(){
           return;
         }
 
-        // load cookie
-        let cookie = (await loadCookieJar()).cookie || "";
-
-        // preflight (needed for MAINT_WITH_SWAP + CHANGE_COMPANY)
-        if (service === "MAINT_WITH_SWAP" || service === "CHANGE_COMPANY") {
-          const vId = payload.vehicle_id || payload.vehicleId || payload.VEHICLE_ID || payload.vehicleID || payload.VehicleId;
-          if (vId) {
-            const preload = normalizeStep({
-              label: "preload_asset",
-              action: "ASSET_BASIC_LOAD",
-              fields: {
-                ASSET_ID: String(vId),
-                ASSET_DESCRIPTION: String(payload.asset_description || payload.ASSET_DESCRIPTION || ""),
-                action: "ASSET_BASIC_LOAD",
-                VERSION_ID: "2"
-              }
-            }, payload);
-
-            const out = await html5RunStep(id, preload, cookie);
-            cookie = (await loadCookieJar()).cookie || cookie;
-
-            // se preload falhar, não “mata” MAINT_WITH_SWAP (ele segue), mas CHANGE_COMPANY vai ficar sem payload e cair no erro abaixo
-            if (stepOk(out)) {
-              try {
-                const cap = __CAPTURES.ASSET_BASIC_LOAD || null;
-                const resp = cap && cap.resp ? String(cap.resp) : "";
-                const a = __parseFirstTagAttributes(resp, "DATA") || (cap && cap.tag) || null;
-                if (a) {
-                  payload.__assetLoadAttrs = a;
-                  if (!payload.asset_description && a.ASSET_DESCRIPTION) payload.asset_description = a.ASSET_DESCRIPTION;
-                }
-              } catch {}
-            } else {
-              console.log("[PATCH_D2] preload ASSET_BASIC_LOAD not ok; continuing");
-            }
-          }
-          steps = buildStepsForService(service, payload);
-        }
-
-        // serviços que deliberadamente NÃO mutam HTML5
-        const html5ShouldSkip = ((service === "MAINT_NO_SWAP" || service === "MAINT_WITH_SWAP") && steps.length === 0);
-
         if (html5ShouldSkip) {
           await finish("ok", {
             ok:true,
             service,
-            note: "no HTML5 mutation by design (or not needed)",
+            note: "no HTML5 mutation by design for this service",
             cookieKeys: cookieKeysFromCookieHeader((await loadCookieJar()).cookie || "")
           });
           return;
@@ -1034,6 +845,9 @@ async function main(){
           return;
         }
 
+        const jar = await loadCookieJar();
+        let cookie = jar.cookie || "";
+
         const results = [];
         for (const s of steps) {
           const out = await html5RunStep(id, s, cookie);
@@ -1047,6 +861,7 @@ async function main(){
             parsed: out.final ? out.final.parsed : null,
           });
 
+          // atualiza cookie local para o próximo step
           cookie = (await loadCookieJar()).cookie || cookie;
 
           if (!stepOk(out)) {
