@@ -6,7 +6,7 @@ export const workerRoutes = Router();
 
 workerRoutes.post("/heartbeat", requireWorkerKey, (req, res) => {
   const body = req.body || {};
-  const worker_id = String(body.worker_id || "").trim();
+  const worker_id = String(body.worker_id || body.workerId || "").trim();
   if (!worker_id) return res.status(400).json({ ok: false, error: "MISSING_worker_id" });
 
   const hb = {

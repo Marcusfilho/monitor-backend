@@ -1,10 +1,10 @@
 "use strict";
 
 
-// === CAPTURE_A5: intercept fetch for ASSET_BASIC_LOAD ===
-const CAPTURES = {};
+// === CAPTURE_FETCHWRAP_V8: capture ASSET_BASIC_LOAD via fetch clone ===
+const __CAPTURES = {};
 
-function parseFirstTagAttributes(xml, tagName){
+function __parseFirstTagAttributes(xml, tagName){
   const t = String(xml || "");
   const re = new RegExp(`<${tagName}\\b([^>]*)\\/?>`, "i");
   const m = re.exec(t);
@@ -17,52 +17,48 @@ function parseFirstTagAttributes(xml, tagName){
   return attrs;
 }
 
-function safeSnippetMaybe(text, n){
-  try {
-    if (typeof safeSnippet === "function") return safeSnippet(text, n);
-  } catch {}
+function __snip(text, n){
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  return t.slice(0, n || 900);
+  return t.slice(0, (n || 900));
 }
 
-// Wrap fetch once
 try {
   const __origFetch = globalThis.fetch;
-  if (__origFetch && !__origFetch.__captureA5Wrapped) {
+  if (__origFetch && !__origFetch.__capV8Wrapped) {
     const wrapped = async function(url, init){
       const u = String(url || "");
       const body = init && init.body != null ? String(init.body) : "";
-      const wantAssetLoad = u.includes("AppEngine_2_1/default.aspx") && body.includes("action=ASSET_BASIC_LOAD");
+      const want = u.includes("AppEngine_2_1/default.aspx") && body.includes("action=ASSET_BASIC_LOAD");
 
       const res = await __origFetch(url, init);
 
-      if (wantAssetLoad && res && typeof res.clone === "function") {
-        res.clone().text().then((txt) => {
+      if (want && res && typeof res.clone === "function") {
+        res.clone().text().then((txt)=>{
           try {
-            CAPTURES.asset_load = {
+            __CAPTURES.asset_load = {
               action: "ASSET_BASIC_LOAD",
-              asset: parseFirstTagAttributes(txt, "DATA"),
-              snippet: safeSnippetMaybe(txt, 1200)
+              asset: __parseFirstTagAttributes(txt, "DATA"),
+              snippet: __snip(txt, 1200)
             };
           } catch {}
         }).catch(()=>{});
       }
-
       return res;
     };
-    wrapped.__captureA5Wrapped = true;
+    wrapped.__capV8Wrapped = true;
     globalThis.fetch = wrapped;
-    __origFetch.__captureA5Wrapped = true;
+    __origFetch.__capV8Wrapped = true;
   }
 } catch {}
-// === /CAPTURE_A5 ===
+// === /CAPTURE_FETCHWRAP_V8 ===
 
 /**
- * v7 - Guardrails anti-job-preso:
- * - timeout global por job (JOB_MAX_MS)
- * - COMPLETE sempre (ok/error) mesmo em exceção/timeout
- * - STAGE logs p/ saber onde travou
+ * v8 - HTML5 Actions (multi-step)
+ * - mantém guardrails anti-job-preso (JOB_MAX_MS + COMPLETE sempre)
  * - login HTML5 via APPLICATION_LOGIN (TFL_SESSION)
+ * - suporta executar uma lista de ações HTML5 por job (payload.html5Steps[])
+ *   permitindo UNINSTALL / MAINT_WITH_SWAP / CHANGE_COMPANY sem hardcode de payload.
+ * - INSTALL continua suportado via builder SAVE_VHCL_ACTIVATION_NEW (igual v7)
  */
 
 const fs = require("fs");
@@ -77,7 +73,9 @@ const HTTP_TIMEOUT_MS = Number(process.env.HTTP_TIMEOUT_MS || 20000);
 const JOB_MAX_MS = Number(process.env.JOB_MAX_MS || 60000);
 
 const DRY_RUN = String(process.env.DRY_RUN || "1") !== "0";
-const EXECUTE_HTML5 = String(process.env.EXECUTE_HTML5 || "0").toLowerCase() === "true" || String(process.env.EXECUTE_HTML5 || "0") === "1";
+const EXECUTE_HTML5 =
+  String(process.env.EXECUTE_HTML5 || "0").toLowerCase() === "true" ||
+  String(process.env.EXECUTE_HTML5 || "0") === "1";
 
 const HTML5_ACTION_URL = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
 const COOKIEJAR_PATH = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
@@ -87,8 +85,8 @@ const HTML5_PASSWORD = (process.env.HTML5_PASSWORD || "").trim();
 const HTML5_LANGUAGE = String(process.env.HTML5_LANGUAGE || "7001").trim();
 const HTML5_ORIG_ZOOM_ID = String(process.env.HTML5_ORIG_ZOOM_ID || "3472").trim();
 
-if (!BASE) { console.error("[html5_v7] missing JOB_SERVER_BASE_URL"); process.exit(2); }
-if (!WORKER_KEY) { console.error("[html5_v7] missing WORKER_KEY"); process.exit(2); }
+if (!BASE) { console.error("[html5_v8] missing JOB_SERVER_BASE_URL"); process.exit(2); }
+if (!WORKER_KEY) { console.error("[html5_v8] missing WORKER_KEY"); process.exit(2); }
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function nowISO(){ return new Date().toISOString(); }
@@ -167,7 +165,7 @@ async function fetchWithCookies(url, { method="GET", headers={}, body=null } = {
   try{
     const res = await fetch(url, {
       method,
-      headers: { ...headers, ...(cookie?{cookie}:{}), "user-agent":"monitor-backend-html5-worker/7" },
+      headers: { ...headers, ...(cookie?{cookie}:{}), "user-agent":"monitor-backend-html5-worker/8" },
       body,
       redirect:"manual",
       signal: controller.signal
@@ -197,15 +195,15 @@ async function httpFetch(path, { method="GET", params=null, json=null } = {}) {
   } finally { clearTimeout(t); }
 }
 async function completeJob(id, status, result){
-  // === CAPTURE_A5_ATTACH ===
-  try { if (result && typeof result === "object") result.captures = CAPTURES; } catch {}
-  // === /CAPTURE_A5_ATTACH ===
+  // === CAPTURE_FETCHWRAP_V8_ATTACH ===
+  try { if (result && typeof result === "object") result.captures = __CAPTURES; } catch {}
+  // === /CAPTURE_FETCHWRAP_V8_ATTACH ===
 
   return httpFetch(`/api/jobs/${encodeURIComponent(String(id))}/complete`, { method:"POST", json:{ status, result, workerId: WORKER_ID } });
 }
 async function completeJobLogged(id, status, result){
   const r = await completeJob(id, status, result);
-  console.log(`[html5_v7] COMPLETE_API id=${id} status=${status} http=${r.status}`);
+  console.log(`[html5_v8] COMPLETE_API id=${id} status=${status} http=${r.status}`);
   return r;
 }
 
@@ -258,16 +256,130 @@ async function html5LoginAndStoreCookies(existingCookie){
   return { status:r.status, cookie:r.cookie, cookieKeys:keys, snippet:safeSnippet(r.text), hasTfl };
 }
 
-function parseHtml5Message(text){
+function parseHtml5Message(text, actionName){
+  // === PATCH_LOGOFF_REDIRECT_V8 ===
+  // Alguns retornos vêm como <REDIRECT ...><ACTION>LOGOFF</ACTION></REDIRECT>
+  // (sem <MESSAGE>). Tratar isso como login negado para forçar relogin + retry.
+  const __t0 = String(text || "");
+  const __redir = /<REDIRECT\b[^>]*>/i.exec(__t0);
+  if (__redir) {
+    const __tag = __redir[0] || "";
+    const __isLogoff = /<ACTION>\s*LOGOFF\s*<\/ACTION>/i.test(__t0) || /\blogin\s*=\s*["']?-1["']?/i.test(__tag) || /index\.aspx\?node=-1/i.test(__t0);
+    if (__isLogoff) {
+      return { hasMessage:false, login:-1, isLoginNeg:true, status:"logoff", isErrorStatus:false, isRedirectLogoff:true };
+    }
+  }
+  // === /PATCH_LOGOFF_REDIRECT_V8 ===
+
   const t = String(text || "");
   const m = /<MESSAGE\b[^>]*>/i.exec(t);
   if (!m) return { hasMessage:false };
+
   const tag = m[0];
+
   const loginM = /\blogin\s*=\s*["']?(-?\d+)["']?/i.exec(tag);
   const login = loginM ? Number(loginM[1]) : null;
   const isLoginNeg = (login !== null && login < 0) || /login\s*=\s*["']?-1["']?/i.test(tag);
-  const isError = /Action:\s*SAVE_VHCL_ACTIVATION_NEW/i.test(t) && /error/i.test(t);
-  return { hasMessage:true, login, isLoginNeg, isError };
+
+  const statusM = /\bstatus\s*=\s*["']?([a-z0-9_-]+)["']?/i.exec(tag);
+  const status = statusM ? String(statusM[1]).toLowerCase() : null;
+  const isErrorStatus = status ? ["error","fail","failed","false","ko"].includes(status) : false;
+
+  // fallback leve (não usar pra “inventar” — só pra sinalizar erro óbvio)
+  const looksLikeErrorText = /\berror\b/i.test(t) && /\baction\b/i.test(t);
+
+  return { hasMessage:true, login, isLoginNeg, status, isErrorStatus: (isErrorStatus || looksLikeErrorText) };
+}
+
+
+// === PATCH_CF1_V8 ===
+function ensureCustomField1(fields){
+  try{
+    if (!fields || typeof fields !== "object") return;
+
+    const idsStr = String(fields.FIELD_IDS ?? "").trim();
+    const valStr = String(fields.FIELD_VALUE ?? "").trim();
+    if (!idsStr) return;
+
+    const ids = idsStr.split(",").map(x=>x.trim()).filter(Boolean);
+    if (ids.includes("1")) return;
+
+    // só aplica se for o caso clássico (tem 2 e/ou 6)
+    if (!ids.includes("2") && !ids.includes("6")) return;
+
+    const leadingComma = valStr.startsWith(",");
+    const tokens = valStr.split(",").filter(Boolean);
+
+    const map = {};
+    for (const t of tokens){
+      const i = t.indexOf(":");
+      if (i <= 0) continue;
+      const k = t.slice(0,i).trim();
+      const v = t.slice(i+1);
+      if (!k) continue;
+      map[k] = v;
+    }
+
+    const baseVal = (map["2"] !== undefined) ? map["2"] : ((map["6"] !== undefined) ? map["6"] : "");
+    map["1"] = baseVal;
+
+    const newIds = ["1", ...ids];
+    const outTokens = newIds.map(k => `${k}:${map[k] !== undefined ? map[k] : ""}`);
+
+    fields.FIELD_IDS = newIds.join(",");
+    fields.FIELD_VALUE = (leadingComma ? "," : "") + outTokens.join(",");
+  } catch (e) {
+    console.log("[html5_v8] warn ensureCustomField1:", e && (e.message || e.toString()));
+  }
+}
+// === /PATCH_CF1_V8 ===
+
+
+function ensureCustomField1_(fields, payload){
+  try{
+    const idsStr = String(fields.FIELD_IDS || "").trim();
+    const valStr = String(fields.FIELD_VALUE || "").trim();
+
+    const ids = idsStr.split(",").map(s=>s.trim()).filter(Boolean);
+    if (ids.includes("1")) return;
+
+    // parse ",2:aaa,6:bbb" -> map
+    const map = new Map();
+    const raw = valStr.replace(/^,/, "");
+    const parts = raw ? raw.split(",").map(s=>s.trim()).filter(Boolean) : [];
+    for (const p of parts){
+      const i = p.indexOf(":");
+      if (i > 0){
+        const k = p.slice(0,i).trim();
+        const v = p.slice(i+1);
+        if (k) map.set(k, v);
+      }
+    }
+
+    let v1 = "";
+    if (payload && typeof payload === "object") {
+      v1 = String(payload.customField1Value || payload.custom_field_1 || payload.customField1 || "").trim();
+    }
+    if (!v1) v1 = (map.get("2") || map.get("6") || "");
+
+    // força 1 na frente
+    ids.unshift("1");
+    const uniq = [];
+    const seen = new Set();
+    for (const x of ids){
+      if (!seen.has(x)) { seen.add(x); uniq.push(x); }
+    }
+    fields.FIELD_IDS = uniq.join(",");
+
+    map.set("1", v1);
+
+    // rebuild FIELD_VALUE seguindo a ordem dos ids
+    const out = [];
+    for (const code of uniq){
+      if (map.has(code)) out.push(code + ":" + map.get(code));
+    }
+    if (out.length) fields.FIELD_VALUE = "," + out.join(",");
+  }catch(e){}
 }
 
 function buildSaveActivationFields(payload){
@@ -352,6 +464,8 @@ function buildSaveActivationFields(payload){
       fields[String(k)] = String(v ?? "");
     }
   }
+  ensureCustomField1(fields);
+  ensureCustomField1_(fields, payload);
   return fields;
 }
 
@@ -361,9 +475,36 @@ function encodeForm(fields){
   return usp.toString();
 }
 
-async function html5CallSaveActivation(payload, cookieHeader){
-  const body = encodeForm(buildSaveActivationFields(payload));
+function normalizeStep(step, jobPayload){
+  const s = step && typeof step === "object" ? step : {};
+  const label = String(s.label || s.name || s.action || "step").slice(0, 40);
+  const action = String(s.action || "").trim();
+
+  // Se pedirem builder (para SAVE_VHCL_ACTIVATION_NEW), gera fields a partir do payload.
+  if (s.useBuilder) {
+    const src = (s.payload && typeof s.payload === "object") ? s.payload : jobPayload;
+    const built = buildSaveActivationFields(src || {});
+    return { label, action: built.action, fields: built, _from: "builder" };
+  }
+
+  const fields = (s.fields && typeof s.fields === "object") ? { ...s.fields } : null;
+  if (!action && fields && fields.action) {
+    return { label, action: String(fields.action), fields, _from: "fields.action" };
+  }
+  if (!action) throw new Error(`html5Steps step missing action (label=${label})`);
+  if (!fields) throw new Error(`html5Steps step missing fields for action=${action} (label=${label})`);
+  return { label, action, fields, _from: "fields" };
+}
+
+async function html5CallFormAction(actionName, fields, cookieHeader){
+  const f = { ...(fields || {}) };
+  f.action = String(f.action || actionName);
+  if (f.VERSION_ID === undefined) f.VERSION_ID = "2";
+  if (String(f.action) === "SAVE_VHCL_ACTIVATION_NEW") ensureCustomField1(f);
+
+  const body = encodeForm(f);
   const cookieFixed = ensureCookieDefaults(cookieHeader || "");
+
   const r = await fetchWithCookies(HTML5_ACTION_URL, {
     method:"POST",
     headers:{
@@ -375,24 +516,22 @@ async function html5CallSaveActivation(payload, cookieHeader){
   }, cookieFixed);
 
   const parsed = parseHtml5Message(r.text);
-  await saveCookieJar(r.cookie, { source:"action", httpStatus:r.status });
+  await saveCookieJar(r.cookie, { source:`action:${actionName}`, httpStatus:r.status });
+
   return { httpStatus:r.status, snippet:safeSnippet(r.text), parsed };
 }
 
-async function runInstallJob(id, payload){
-  const jar = await loadCookieJar();
-  let cookie = jar.cookie || "";
-
-  console.log(`[html5_v7] STAGE id=${id} step=save_attempt1`);
-  let r1 = await html5CallSaveActivation(payload, cookie);
+async function html5RunStep(jobId, step, cookie){
+  console.log(`[html5_v8] STAGE id=${jobId} step=${step.label} action=${step.action} attempt=1`);
+  const r1 = await html5CallFormAction(step.action, step.fields, cookie);
 
   if (r1.parsed && r1.parsed.isLoginNeg) {
-    console.log(`[html5_v7] STAGE id=${id} step=login`);
+    console.log(`[html5_v8] STAGE id=${jobId} step=login`);
     const loginRes = await html5LoginAndStoreCookies(cookie);
-    console.log(`[html5_v7] STAGE id=${id} step=login_done hasTfl=${loginRes.hasTfl} keys=${(loginRes.cookieKeys||[]).join(",")}`);
+    console.log(`[html5_v8] STAGE id=${jobId} step=login_done hasTfl=${loginRes.hasTfl} keys=${(loginRes.cookieKeys||[]).join(",")}`);
 
-    console.log(`[html5_v7] STAGE id=${id} step=save_attempt2`);
-    let r2 = await html5CallSaveActivation(payload, loginRes.cookie);
+    console.log(`[html5_v8] STAGE id=${jobId} step=${step.label} action=${step.action} attempt=2`);
+    const r2 = await html5CallFormAction(step.action, step.fields, loginRes.cookie);
 
     return { attempt:2, first:r1, login:loginRes, final:r2 };
   }
@@ -400,10 +539,47 @@ async function runInstallJob(id, payload){
   return { attempt:1, first:r1, login:null, final:r1 };
 }
 
-function normService(v){ return String(v || "").trim().toUpperCase(); }
+function stepOk(stepRun){
+  const f = stepRun && stepRun.final ? stepRun.final : null;
+  if (!f) return false;
+  if (f.httpStatus && Number(f.httpStatus) >= 400) return false;
+  if (f.parsed && f.parsed.isLoginNeg) return false;
+  if (f.parsed && f.parsed.isErrorStatus) return false;
+  // heurística leve: alguns responses não têm <MESSAGE>
+  return true;
+}
+
+function normService(v){
+  const s = String(v || "").trim().toUpperCase();
+  if (s === "DESINSTALACAO" || s === "DESINSTALAÇÃO") return "UNINSTALL";
+  if (s === "MANUTENCAO_COM_TROCA" || s === "MANUTENÇÃO_COM_TROCA") return "MAINT_WITH_SWAP";
+  if (s === "MANUTENCAO_SEM_TROCA" || s === "MANUTENÇÃO_SEM_TROCA") return "MAINT_NO_SWAP";
+  if (s === "TROCA_EMPRESA" || s === "TROCA_DE_EMPRESA") return "CHANGE_COMPANY";
+  return s;
+}
+
+function buildStepsForService(service, payload){
+  // Prioridade: payload.html5Steps (lista explícita, com payload idêntico ao da UI)
+  if (Array.isArray(payload.html5Steps) && payload.html5Steps.length) {
+    return payload.html5Steps.map(s => normalizeStep(s, payload));
+  }
+
+  // Compat: payload.html5Action + payload.html5Fields (1 passo)
+  if (payload.html5Action && payload.html5Fields) {
+    return [normalizeStep({ label: "custom", action: payload.html5Action, fields: payload.html5Fields }, payload)];
+  }
+
+  // Fallback: INSTALL conhecido (builder)
+  if (service === "INSTALL") {
+    return [normalizeStep({ label: "install", useBuilder: true }, payload)];
+  }
+
+  // Para as outras ações: NÃO inventar payload (regra do projeto)
+  return [];
+}
 
 async function main(){
-  console.log(`[html5_v7] started base=${BASE} worker=${WORKER_ID} poll=${POLL_MS}ms httpTimeout=${HTTP_TIMEOUT_MS} jobMax=${JOB_MAX_MS} dryRun=${DRY_RUN} exec=${EXECUTE_HTML5} cookiejar=${COOKIEJAR_PATH}`);
+  console.log(`[html5_v8] started base=${BASE} worker=${WORKER_ID} poll=${POLL_MS}ms httpTimeout=${HTTP_TIMEOUT_MS} jobMax=${JOB_MAX_MS} dryRun=${DRY_RUN} exec=${EXECUTE_HTML5} cookiejar=${COOKIEJAR_PATH}`);
 
   while(true){
     try{
@@ -415,12 +591,13 @@ async function main(){
       const id = job.id || job.jobId || job._id;
       const payload = job.payload || {};
       const service = normService(payload.service);
+      const hasSteps = Array.isArray(payload.html5Steps) && payload.html5Steps.length > 0;
 
-      console.log(`[html5_v7] GOT job id=${id} service=${service || "?"}`);
+      console.log(`[html5_v8] GOT job id=${id} service=${service || "?"}`);
 
-      // === CAPTURE_A5_RESET ===
-      for (const k of Object.keys(CAPTURES)) delete CAPTURES[k];
-      // === /CAPTURE_A5_RESET ===
+      // === CAPTURE_FETCHWRAP_V8_RESET ===
+      try { for (const k of Object.keys(__CAPTURES)) delete __CAPTURES[k]; } catch {}
+      // === /CAPTURE_FETCHWRAP_V8_RESET ===
       let done = false;
       const finish = async (status, result) => {
         if (done) return;
@@ -429,56 +606,111 @@ async function main(){
       };
 
       const jobRunner = async () => {
-        const html5WillMutate = (service === "INSTALL" || service === "UNINSTALL");
-        if (DRY_RUN || !EXECUTE_HTML5 || !html5WillMutate) {
+        const steps = buildStepsForService(service, payload);
+
+        // DEBUG: não chama HTML5, só monta o payload do SAVE_VHCL_ACTIVATION_NEW
+        if (service === "DEBUG_BUILD_SAVE_ACTIVATION_FIELDS") {
+          const built = buildSaveActivationFields(payload || {});
           await finish("ok", {
-            ok:true, dryRun:DRY_RUN, exec:EXECUTE_HTML5,
-            note: (!html5WillMutate ? "no HTML5 mutation by design for this service" : "DRY_RUN or EXECUTE_HTML5 off"),
+            ok: true,
+            service,
+            note: "build-only (no HTML5 call)",
+            built: {
+              FIELD_IDS: built.FIELD_IDS,
+              FIELD_VALUE: built.FIELD_VALUE,
+              LICENSE_NMBR: built.LICENSE_NMBR,
+              DIAL_NUMBER: built.DIAL_NUMBER,
+              INNER_ID: built.INNER_ID
+            }
+          });
+          return;
+        }
+
+        // serviços que deliberadamente NÃO mutam HTML5
+        const html5ShouldSkip = (service === "MAINT_NO_SWAP" && steps.length === 0);
+
+        if (DRY_RUN || !EXECUTE_HTML5) {
+          await finish("ok", {
+            ok:true,
+            dryRun: DRY_RUN,
+            exec: EXECUTE_HTML5,
+            service,
+            note: "DRY_RUN or EXECUTE_HTML5 off",
+            plannedSteps: steps.map(s => ({ label:s.label, action:s.action, from:s._from }))
+          });
+          return;
+        }
+
+        if (html5ShouldSkip) {
+          await finish("ok", {
+            ok:true,
+            service,
+            note: "no HTML5 mutation by design for this service",
             cookieKeys: cookieKeysFromCookieHeader((await loadCookieJar()).cookie || "")
           });
           return;
         }
 
-        if (service !== "INSTALL") {
-          await finish("error", { ok:false, error:`service=${service} not implemented for HTML5 mutation yet` });
+        if (!steps.length) {
+          await finish("error", {
+            ok:false,
+            service,
+            error:"missing_html5_payload",
+            message:"For this service, provide payload.html5Steps[] (exact UI fields) or payload.html5Action/html5Fields. INSTALL is the only allowed fallback builder.",
+          });
           return;
         }
 
-        const out = await runInstallJob(id, payload);
-        const final = out.final;
-        const cookieKeys = cookieKeysFromCookieHeader((await loadCookieJar()).cookie || "");
-        const authFail = final.parsed && final.parsed.isLoginNeg;
-        const actionErr = final.parsed && final.parsed.isError;
+        const jar = await loadCookieJar();
+        let cookie = jar.cookie || "";
 
-        const result = {
-          ok: !(authFail || actionErr),
-          attempt: out.attempt,
-          httpStatus: final.httpStatus,
-          cookieKeys,
-          snippet: final.snippet,
-          debug: {
-            first: out.first,
-            login: out.login ? { httpStatus: out.login.status, hasTfl: out.login.hasTfl, cookieKeys: out.login.cookieKeys, snippet: out.login.snippet } : null
+        const results = [];
+        for (const s of steps) {
+          const out = await html5RunStep(id, s, cookie);
+          results.push({
+            label: s.label,
+            action: s.action,
+            attempt: out.attempt,
+            httpStatus: out.final ? out.final.httpStatus : null,
+            ok: stepOk(out),
+            snippet: out.final ? out.final.snippet : null,
+            parsed: out.final ? out.final.parsed : null,
+          });
+
+          // atualiza cookie local para o próximo step
+          cookie = (await loadCookieJar()).cookie || cookie;
+
+          if (!stepOk(out)) {
+            const msg = out && out.final && out.final.parsed && out.final.parsed.isLoginNeg
+              ? "auth_failed_after_retry"
+              : "step_failed";
+            throw new Error(`${msg}:${s.label}:${s.action}`);
           }
-        };
+        }
 
-        await finish(result.ok ? "ok" : "error", result);
-        console.log(`[html5_v7] COMPLETE(${result.ok ? "ok" : "error"}) id=${id} cookieKeys=${cookieKeys.join(",")}`);
+        const cookieKeys = cookieKeysFromCookieHeader((await loadCookieJar()).cookie || "");
+
+        await finish("ok", {
+          ok:true,
+          service,
+          cookieKeys,
+          steps: results
+        });
       };
 
       try{
         await withTimeout(jobRunner(), JOB_MAX_MS, `job:${id}`);
       } catch (e){
         const msg = e && (e.message || e.toString());
-        console.log(`[html5_v7] JOB_FAIL id=${id} err=${msg}`);
-        await finish("error", { ok:false, error:"job_exception_or_timeout", message: msg });
+        console.log(`[html5_v8] JOB_FAIL id=${id} err=${msg}`);
+        await finish("error", { ok:false, service, error:"job_exception_or_timeout", message: msg });
       }
 
     } catch (e) {
-      console.log("[html5_v7] loop error:", e && (e.stack || e.message || e.toString()));
+      console.log("[html5_v8] loop error:", e && (e.stack || e.message || e.toString()));
       await sleep(POLL_MS);
     }
   }
 }
 
-main().catch(err => { console.error("[html5_v7] fatal:", err && (err.stack || err.message || err)); process.exit(1); });
+main().catch(err => { console.error("[html5_v8] fatal:", err && (err.stack || err.message || err)); process.exit(1); });

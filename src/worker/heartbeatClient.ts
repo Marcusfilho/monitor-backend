@@ -1,5 +1,6 @@
 export type HeartbeatPayload = {
   worker_id: string;
+  workerId?: string; // compat alias (camelCase)
   ts?: string;
   status?: string;
   checks?: Record<string, boolean>;
@@ -8,14 +9,20 @@ export type HeartbeatPayload = {
 
 export function startHeartbeat(opts: {
   baseUrl: string;
-  workerId: string;
+  
+  jobServerBaseUrl?: string; // target do heartbeat (job server)
+workerId: string;
   workerKey: string;
   intervalMs?: number;
   getState?: () => Omit<HeartbeatPayload, "worker_id">;
 }) {
   const intervalMs = opts.intervalMs ?? 30000;
   if (!opts.baseUrl) throw new Error("HB: missing BASE_URL");
-  if (!opts.workerKey) throw new Error("HB: missing WORKER_KEY");
+  
+    const targetBase = String(opts.jobServerBaseUrl || process.env.JOB_SERVER_BASE_URL || opts.baseUrl || "").trim();
+    if (!targetBase) throw new Error("HB: missing JOB_SERVER_BASE_URL/BASE_URL");
+    console.log("[hb] target:", targetBase);
+if (!opts.workerKey) throw new Error("HB: missing WORKER_KEY");
 
   // evita problemas de typing em TS antigo
   const fetchFn: any = (globalThis as any).fetch;
@@ -32,7 +39,7 @@ export function startHeartbeat(opts: {
     const t = setTimeout(() => ctrl.abort(), 20000);
 
     try {
-      const r = await fetchFn(`${opts.baseUrl}/api/worker/heartbeat`, {
+      const r = await fetchFn(`${targetBase}/api/worker/heartbeat`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -46,7 +53,7 @@ export function startHeartbeat(opts: {
         console.error("[hb] http", r.status, txt.slice(0, 200));
       }
     } catch (e: any) {
-      console.error("[hb] fail:", e?.message || e);
+      console.error("[hb] fail:", e?.message || e, "| cause:", e?.cause?.code || e?.cause?.message || "");
     } finally {
       clearTimeout(t);
     }

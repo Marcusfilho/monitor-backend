@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const schemeBuilderRoutes_1 = __importDefault(require("./routes/schemeBuilderRoutes"));
 const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 const workerSessionTokenRoutes_1 = __importDefault(require("./routes/workerSessionTokenRoutes"));
+const workerRoutes_1 = require("./routes/workerRoutes");
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
@@ -32,11 +33,11 @@ const corsMw = (0, cors_1.default)({
         return cb(new Error("CORS blocked origin=" + origin), false);
     },
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["content-type", "authorization"],
+    allowedHeaders: ["content-type", "authorization", "x-admin-key", "x-worker-key"],
     maxAge: 86400,
 });
 // --- CORS FIRST ---
-app.options("*", corsMw);
+app.options(/.*/, corsMw);
 app.use(corsMw);
 // Express/router aqui quebra com "*", então usamos regex:
 // Parser antes das rotas
@@ -58,6 +59,7 @@ app.use("/api/monitor", monitorRoutes_1.default);
 app.use("/api/jobs", jobRoutes_1.default);
 app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 app.use("/api/admin", adminRoutes_1.default);
+app.use("/api/worker", workerRoutes_1.workerRoutes);
 app.use("/api/worker", workerSessionTokenRoutes_1.default);
 async function main() {
     await (0, sessionTokenStore_1.initSessionTokenStore)();
