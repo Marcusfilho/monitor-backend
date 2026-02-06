@@ -1,6 +1,349 @@
 "use strict";
 
 
+
+
+
+
+
+/* === PATCH_C6A: VHCLS_FORCE_COOKIE v2 (wrap final fetch) ===
+ * Objetivo: garantir Cookie no request VHCLS (action=VHCLS) via fetch-hook (não httpFetch).
+ * - Injeta cookie do /tmp/html5_cookiejar.json se:
+ *     (a) não há Cookie, OU
+ *     (b) Cookie existe mas não contém TFL_SESSION= (caso comum de header incompleto/stale).
+ * - Loga APENAS tamanhos (sem vazar valores).
+ */
+(function(){
+  try{
+    if (globalThis.__VHCLS_FORCE_COOKIE_V2) return;
+    globalThis.__VHCLS_FORCE_COOKIE_V2 = true;
+
+    const fs = require("fs");
+    const COOKIEJAR_PATH = process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json";
+
+    function readCookieHeaderSafe(){
+      try{
+        if (!fs.existsSync(COOKIEJAR_PATH)) return "";
+        const raw = fs.readFileSync(COOKIEJAR_PATH, "utf8");
+        if (!raw) return "";
+        let j = null;
+        try { j = JSON.parse(raw); } catch { j = raw; }
+        if (!j) return "";
+        if (typeof j === "string") return j.trim();
+        if (typeof j.cookieHeader === "string") return j.cookieHeader.trim();
+        if (typeof j.cookie === "string") return j.cookie.trim();
+
+        if (Array.isArray(j.cookies)) {
+          const parts = [];
+          for (const c of j.cookies) {
+            if (!c) continue;
+            const name = String(c.name || c.key || c.n || "").trim();
+            const val  = String(c.value || c.v || "").trim();
+            if (name && val) parts.push(`${name}=${val}`);
+          }
+          return parts.join("; ");
+        }
+
+        const map = j.cookies || j.jar || j;
+        if (map && typeof map === "object") {
+          const parts = [];
+          for (const k of Object.keys(map)) {
+            const v = map[k];
+            if (typeof v === "string" && v) parts.push(`${k}=${v}`);
+            else if (v && typeof v === "object" && typeof v.value === "string" && v.value) parts.push(`${k}=${v.value}`);
+          }
+          return parts.join("; ");
+        }
+      }catch(e){}
+      return "";
+    }
+
+    function bodyText(init){
+      try{
+        const b = init && init.body;
+        if (!b) return "";
+        if (typeof b === "string") return b;
+        if (typeof URLSearchParams !== "undefined" && b instanceof URLSearchParams) return b.toString();
+        if (b && typeof b.toString === "function") {
+          const s = String(b);
+          if (s && s !== "[object Object]" && s !== "[object FormData]") return s;
+        }
+      }catch(e){}
+      return "";
+    }
+
+    process.nextTick(() => {
+      try{
+        const origFetch = globalThis.fetch;
+        if (typeof origFetch !== "function") return;
+
+        globalThis.fetch = async function(input, init){
+          const bt = bodyText(init);
+          const isVHCLS = /(^|[&?])action=VHCLS(&|$)/i.test(bt);
+
+          if (isVHCLS) {
+            const h = new Headers((init && init.headers) || (input && input.headers) || undefined);
+
+            const cur = String(h.get("cookie") || "").trim();
+            const curLen = cur.length;
+            const hasTfl = /(^|;\s*)TFL_SESSION=/.test(cur);
+
+            if (!cur || !hasTfl) {
+              const ck = readCookieHeaderSafe();
+              if (ck) {
+                h.set("cookie", ck);
+                console.log(`[VHCLS_FORCE_COOKIE] injected(cookieLen=${ck.length}) curLen=${curLen}`);
+                init = Object.assign({}, init || {}, { headers: h });
+              } else {
+                console.log(`[VHCLS_FORCE_COOKIE] WARN cookieLen=0 curLen=${curLen}`);
+              }
+            } else {
+              console.log(`[VHCLS_FORCE_COOKIE] pass(curLen=${curLen})`);
+            }
+          }
+
+          return origFetch(input, init);
+        };
+      } catch(e){}
+    });
+
+  } catch(e){}
+})();
+
+// [PATCH_VHCLS_FETCH_TAP] capture VHCLS response via Response.clone() (não consome body original)
+try {
+  if (!globalThis.__VHCLS_FETCH_TAP_INSTALLED && typeof globalThis.fetch === 'function') {
+    globalThis.__VHCLS_FETCH_TAP_INSTALLED = true;
+    const __origFetch = globalThis.fetch.bind(globalThis);
+
+    globalThis.fetch = async function(input, init) {
+      const res = await __origFetch(input, init);
+
+      try {
+        const url = (typeof input === 'string') ? input : ((input && input.url) ? input.url : '');
+        const body = (init && init.body) ? init.body : '';
+        const bodyStr = (typeof body === 'string') ? body : (body && body.toString ? body.toString() : '');
+
+        const want =
+          (bodyStr.indexOf('action=VHCLS') >= 0) ||
+          (bodyStr.indexOf('VHCLS') >= 0) ||
+          (url.indexOf('VHCLS') >= 0);
+
+        if (want) {
+          const c = res.clone();
+          const txt = await c.text();
+
+          const ts = Date.now();
+          const out = '/tmp/vhcls_raw_' + ts + '.txt';
+          require('fs').writeFileSync(out, txt, 'utf8');
+
+          // tenta extrair plate e vehicle_id para log rápido
+          let plate = '';
+          try {
+            const m1 = bodyStr.match(/LICENSE_NMBR=([^&]+)/);
+            plate = m1 ? decodeURIComponent(m1[1]) : '';
+          } catch (e) {}
+
+          let vid = '';
+          try {
+            const m2 = txt.match(/VEHICLE_ID\s*=\s*"(\d+)"/) || txt.match(/VEHICLE_ID\s*=\s*(\d+)/);
+            vid = m2 ? m2[1] : '';
+          } catch (e) {}
+
+          globalThis.__VHCLS_LAST = { ts: ts, url: url, plate: plate, vehicleId: vid, len: (txt || '').length, path: out };
+
+          console.log('[VHCLS_TAP] status=' + res.status + ' len=' + (txt || '').length + ' plate=' + plate + ' vehicleId=' + vid + ' saved=' + out);
+          console.log('[VHCLS_TAP_HEAD] ' + JSON.stringify((txt || '').slice(0, 1200)));
+        }
+      } catch (e) {
+        console.log('[VHCLS_TAP_ERR] ' + ((e && e.message) ? e.message : String(e)));
+      }
+
+      return res;
+    };
+  }
+} catch (e) {
+  console.log('[VHCLS_TAP_INIT_ERR] ' + ((e && e.message) ? e.message : String(e)));
+}
+
+// === PATCH_VHCLS_DIRECT_VEHICLE_ID v1 ===
+// Resolver universal: LICENSE (placa OU serial gravado em license no bench) -> VEHICLE_ID via VHCLS (REFRESH_FLG=1).
+// Motivo: wrapper html5RunStep às vezes não expõe body (len=0). Aqui fazemos fetch direto e parseamos XML.
+
+function _vhclsLog(ctx, msg) {
+  try {
+    if (ctx && typeof ctx.log === "function") ctx.log(msg);
+    else console.log(msg);
+  } catch (_) {
+    console.log(msg);
+  }
+}
+
+function _normLicenseKey(v) {
+  return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function _readCookieHeaderFromJarFile(ctx) {
+  const fs = require("fs");
+  const jarPath =
+    (ctx && (ctx.cookieCachePath || ctx.cookieJarPath || ctx.cookieJarFile)) ||
+    process.env.HTML5_COOKIEJAR_PATH ||
+    process.env.HTML5_COOKIE_CACHE ||
+    "/tmp/html5_cookiejar.json";
+
+  if (!fs.existsSync(jarPath)) return { cookie: "", jarPath, exists: false };
+
+  const raw = String(fs.readFileSync(jarPath, "utf8") || "").trim();
+  if (!raw) return { cookie: "", jarPath, exists: true };
+
+  try {
+    const j = JSON.parse(raw);
+
+    if (j && typeof j.cookie === "string") return { cookie: j.cookie.trim(), jarPath, exists: true };
+    if (j && typeof j.cookies === "string") return { cookie: j.cookies.trim(), jarPath, exists: true };
+
+    if (j && Array.isArray(j.cookies)) {
+      const parts = [];
+      for (const c of j.cookies) {
+        if (!c) continue;
+        if (typeof c.cookie === "string") parts.push(c.cookie.trim());
+        else if ((c.key || c.name) && (c.value !== undefined)) parts.push(String(c.key || c.name) + "=" + String(c.value));
+      }
+      return { cookie: parts.join("; "), jarPath, exists: true };
+    }
+
+    if (j && typeof j === "object") {
+      const parts = [];
+      for (const k of Object.keys(j)) {
+        const v = j[k];
+        if (v === null || v === undefined) continue;
+        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+          parts.push(String(k) + "=" + String(v));
+        }
+      }
+      return { cookie: parts.join("; "), jarPath, exists: true };
+    }
+  } catch (_) {}
+
+  const ck = String(raw || "")
+    .replace(/^\\s*cookie\\s*:\\s*/i, "")
+    .replace(/[\\r\\n]+/g, " ")
+    .trim();
+
+  return { cookie: ck, jarPath, exists: true };
+}
+
+function _extractAttr(tag, name) {
+  const re = new RegExp(name + '="([^"]*)"', "i");
+  const m = re.exec(tag);
+  return m ? m[1] : "";
+}
+
+function _parseVehicleIdFromVhclsXml(xml, licenseKey) {
+  const lk = _normLicenseKey(licenseKey);
+
+  if (/login\s*=\s*"-1"/i.test(xml) || /Action:\s*VHCLS\s+error/i.test(xml)) {
+    return { vehicleId: null, err: "unauthorized_or_vhcls_error" };
+  }
+
+  const dataTags = xml.match(/<DATA[^>]*\/>/gi) || [];
+  for (const tag of dataTags) {
+    const lic = _normLicenseKey(_extractAttr(tag, "LICENSE_NMBR"));
+    const vid = _extractAttr(tag, "VEHICLE_ID");
+    if (lic && vid && lic === lk) {
+      const n = Number(vid);
+      return { vehicleId: (n > 0 ? n : null), err: null };
+    }
+  }
+
+  if (dataTags.length === 1) {
+    const vid = _extractAttr(dataTags[0], "VEHICLE_ID");
+    const n = Number(vid);
+    if (n > 0) return { vehicleId: n, err: null };
+  }
+
+  return { vehicleId: null, err: "not_found" };
+}
+
+async function _vhclsResolveVehicleIdDirect(ctx, licenseKey) {
+  const html5Base =
+    (ctx && (ctx.html5Base || ctx.html5_base || ctx.baseHtml5 || ctx.baseURLHtml5)) ||
+    process.env.HTML5_BASE ||
+    process.env.HTML5_BASE_URL ||
+    "https://html5.traffilog.com";
+
+  const url = html5Base.replace(/\/+$/, "") + "/AppEngine_2_1/default.aspx";
+
+  const jar = _readCookieHeaderFromJarFile(ctx);
+  const cookie = String(jar.cookie || "").trim();
+
+  _vhclsLog(ctx, `[vhcls] direct: license=${licenseKey} jar=${jar.jarPath} exists=${jar.exists} hasCookie=${cookie && cookie.length > 0}`);
+  const body = new URLSearchParams({
+    action: "VHCLS",
+    REFRESH_FLG: "1",
+    LICENSE_NMBR: String(licenseKey || "")
+  }).toString();
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "accept": "*/*",
+
+      "origin": html5Base,
+      "referer": html5Base + "/",
+      "user-agent": "monitor-backend-worker/1.0"
+    },
+    body
+  });
+
+  const text = await res.text().catch(() => "");
+  _vhclsLog(ctx, `[vhcls] direct: http=${res.status} len=${(text && text.length) || 0}`);
+
+  const parsed = _parseVehicleIdFromVhclsXml(text, licenseKey);
+  if (parsed.err === "unauthorized_or_vhcls_error") {
+    const e = new Error("vhcls_unauthorized_or_error (session invalid)");
+    e.code = "VHCLS_UNAUTH";
+    e.httpStatus = res.status;
+    throw e;
+  }
+  return parsed.vehicleId;
+}
+
+async function ensureVehicleIdByVhcls_(ctx, payload) {
+  if (!payload) return null;
+
+  const cur = Number(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || 0);
+  if (cur > 0) {
+    payload.vehicle_id = cur;
+    payload.VEHICLE_ID = cur;
+    payload.vehicleId = cur;
+    return cur;
+  }
+
+  const service = String(payload.service || payload.servico || payload.serviceType || "").trim().toUpperCase();
+
+  const plateRaw  = payload.plate || payload.placa || payload.license || payload.licensePlate || "";
+  const serialRaw = payload.serial || payload.serie || payload.innerId || payload.INNER_ID || "";
+
+  const licenseKey = ((service === "INSTALL" || service === "UNINSTALL")) ? _normLicenseKey(serialRaw) : _normLicenseKey(plateRaw);
+  if (!licenseKey) return null;
+
+  const vid = await _vhclsResolveVehicleIdDirect(ctx, licenseKey);
+  if (vid) {
+    payload.vehicle_id = vid;
+    payload.VEHICLE_ID = vid;
+    payload.vehicleId = vid;
+    _vhclsLog(ctx, `[vhcls] resolved: license=${licenseKey} -> VEHICLE_ID=${vid}`);
+    return vid;
+  }
+
+  _vhclsLog(ctx, `[vhcls] not found: license=${licenseKey}`);
+  return null;
+}
+// === END PATCH_VHCLS_DIRECT_VEHICLE_ID v1 ===
+
+
 const patchC8 = require('./patchC8_allowedGroups'); // PATCH_C8_ALLOWED_GROUPS
 /* PATCH_C6_HTML5 v2026-02-02 (NO-BACKTICKS)
  * - SAVE_VHCL_ACTIVATION_NEW: garante FIELD_IDS=1,2,6 e FIELD_VALUE com campo 1 copiando 2 (fallback 6)
@@ -198,9 +541,120 @@ try {
       const want = u.includes("AppEngine_2_1/default.aspx") && (body.includes("action=ASSET_BASIC_LOAD") || body.includes("action=ASSET_BASIC_SAVE"));
 
       // chama o fetch anterior (que já inclui PATCH_C6)
-      const res = await __origFetch(url, init);
+      
+      // PATCH_C6_VHCLS_INJECT_COOKIE_V2 (antes do fetch original)
+      try {
+        const __in = (typeof input !== 'undefined') ? input :
+                     ((typeof arguments !== 'undefined' && arguments.length>0) ? arguments[0] : undefined);
+        const __init = (typeof init !== 'undefined') ? init :
+                       ((typeof arguments !== 'undefined' && arguments.length>1) ? arguments[1] : undefined);
 
-      if (!want) return res;
+        const __body = (__init && __init.body) ? __init.body : null;
+
+        // detecta action=VHCLS de forma robusta
+        let __action = '';
+        try {
+          if (__body && typeof __body.get === 'function') __action = String(__body.get('action') || '');
+        } catch(e) {}
+
+        let __bstr = '';
+        try {
+          if (typeof __body === 'string') __bstr = __body;
+          else if (__body && __body.toString) __bstr = __body.toString();
+        } catch(e) {}
+
+        if (!__action && __bstr) {
+          const m = __bstr.match(/(?:^|&)action=([^&]+)/i);
+          if (m) {
+            try { __action = decodeURIComponent(m[1]); } catch(e) { __action = m[1]; }
+          }
+        }
+
+        if (String(__action).toUpperCase() === 'VHCLS') {
+          // verifica se já tem cookie no request
+          let __hasCookie = false;
+          try {
+            const h = (__init && __init.headers) ? __init.headers : null;
+            if (h) {
+              if (typeof h.get === 'function') __hasCookie = !!(h.get('cookie') || h.get('Cookie'));
+              else __hasCookie = !!(h.cookie || h.Cookie);
+            }
+          } catch(e) {}
+
+          if (!__hasCookie) {
+            const ck = (typeof __cookieHeaderFromJarSafe === 'function') ? __cookieHeaderFromJarSafe() : '';
+            const ckLen = (ck||'').length;
+            if (ckLen > 0) {
+              try {
+                if (__init && __init.headers && typeof __init.headers.set === 'function') __init.headers.set('cookie', ck);
+                else {
+                  if (__init) {
+                    __init.headers = __init.headers || {};
+                    __init.headers.cookie = ck;
+                  }
+                }
+              } catch(e) {}
+              console.log('[VHCLS_FORCE_COOKIE] injected(cookieLen=' + ckLen + ')');
+            } else {
+              console.log('[VHCLS_FORCE_COOKIE] WARN cookieLen=0 (jar vazio/parse falhou)');
+            }
+          } else {
+            console.log('[VHCLS_FORCE_COOKIE] already_has_cookie');
+          }
+        }
+      } catch (e) {
+        console.log('[VHCLS_FORCE_COOKIE_ERR] ' + ((e && e.message) ? e.message : String(e)));
+      }
+
+const res = await __origFetch(url, init);
+
+      if (!want) 
+
+      // PATCH_VHCLS_DBG_C6: captura body do VHCLS sem vazar cookie (v2 - sem depender de input/init)
+      try {
+        const fs = require('fs');
+
+        const __in = (typeof input !== 'undefined') ? input :
+                     ((typeof arguments !== 'undefined' && arguments.length>0) ? arguments[0] : undefined);
+        const __init = (typeof init !== 'undefined') ? init :
+                       ((typeof arguments !== 'undefined' && arguments.length>1) ? arguments[1] : undefined);
+
+        const __url = (typeof __in === 'string') ? __in : (__in && __in.url ? String(__in.url) : '');
+        let __bodyStr = '';
+        try {
+          const b = (__init && __init.body) ? __init.body : '';
+          __bodyStr = (typeof b === 'string') ? b : (b && b.toString ? b.toString() : '');
+        } catch (e) {}
+
+        if (__bodyStr && __bodyStr.includes('action=VHCLS')) {
+          const c = (typeof res !== 'undefined' && res && typeof res.clone === 'function') ? res.clone() : null;
+          const txt = c ? await c.text() : '';
+
+          const ts = Date.now();
+          const out = '/tmp/vhcls_dbg_' + ts + '.txt';
+          fs.writeFileSync(out, txt || '', 'utf8');
+
+          let plate = '';
+          try {
+            const m1 = __bodyStr.match(/LICENSE_NMBR=([^&]+)/);
+            plate = m1 ? decodeURIComponent(m1[1]) : '';
+          } catch (e) {}
+
+          let vid = '';
+          try {
+            const m2 = (txt || '').match(/VEHICLE_ID\s*=\s*"(\d+)"/) || (txt || '').match(/VEHICLE_ID\s*=\s*(\d+)/);
+            vid = m2 ? m2[1] : '';
+          } catch (e) {}
+
+          const st = (typeof res !== 'undefined' && res && typeof res.status !== 'undefined') ? res.status : -1;
+          console.log('[VHCLS_DBG] status=' + st + ' len=' + (txt||'').length + ' plate=' + plate + ' vehicleId=' + vid + ' saved=' + out);
+          console.log('[VHCLS_DBG_HEAD] ' + JSON.stringify((txt||'').slice(0, 900)));
+        }
+      } catch (e) {
+        console.log('[VHCLS_DBG_ERR] ' + ((e && e.message) ? e.message : String(e)));
+      }
+
+return res;
 
       try {
         const txt = await res.clone().text();
@@ -257,6 +711,342 @@ const EXECUTE_HTML5 =
 const HTML5_ACTION_URL = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
 const COOKIEJAR_PATH = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
 
+
+
+
+// === PATCH_VA1_CANON_VHCLS_BEGIN ===
+// Objetivo: tirar VHCLS do fetch-hook/TAP e executar via caminho canônico (cookiejar + warmup/login).
+// - Sem logar cookies/tokens (apenas flags/tamanhos/status).
+// - Warmup GET para materializar ASP.NET_SessionId.
+// - Reusa __ensureTflSession() (APPLICATION_LOGIN) já existente.
+const __va_fs = require("fs");
+
+function __va_hasCookie(ck, name){
+  try { return new RegExp("(^|;\\s*)"+name.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+"=").test(String(ck||"")); }
+  catch(e){ return false; }
+}
+function __va_flags(ck){
+  return `ASP=${__va_hasCookie(ck,"ASP.NET_SessionId")?1:0} TFL=${__va_hasCookie(ck,"TFL_SESSION")?1:0} EULA=${__va_hasCookie(ck,"EULA_APPROVED")?1:0} ROOT=${__va_hasCookie(ck,"APPLICATION_ROOT_NODE")?1:0}`;
+}
+function __va_readJarRaw(){
+  try { return __va_fs.readFileSync(COOKIEJAR_PATH, "utf8"); } catch(e){ return ""; }
+}
+function __va_parseJarToMap(raw){
+  const txt = String(raw||"").trim();
+  if (!txt) return {};
+  // JSON map {TFL_SESSION:"...", ASP.NET_SessionId:"...", ...}
+  if (txt[0] === "{") {
+    try {
+      const j = JSON.parse(txt);
+      if (j && typeof j === "object" && !Array.isArray(j)) return j;
+    } catch(e){}
+  }
+  // JSON list [{name,value},...]
+  if (txt[0] === "[") {
+    try {
+      const j = JSON.parse(txt);
+      const out = {};
+      if (Array.isArray(j)) {
+        for (const it of j) {
+          if (it && typeof it === "object" && it.name && (it.value !== undefined)) out[String(it.name)] = String(it.value);
+        }
+      }
+      return out;
+    } catch(e){}
+  }
+  // cookie header string "A=B; C=D"
+  const out = {};
+  for (const part of txt.split(";")) {
+    const kv = part.trim();
+    if (!kv) continue;
+    const i = kv.indexOf("=");
+    if (i <= 0) continue;
+    const k = kv.slice(0,i).trim();
+    const v = kv.slice(i+1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
+function __va_cookieHeaderFromMap(m){
+  const keys = Object.keys(m||{});
+  // mantém ordenação estável e evita header gigante: prioriza cookies "core"
+  const core = ["ASP.NET_SessionId","TFL_SESSION","EULA_APPROVED","APPLICATION_ROOT_NODE","LOGIN_DATA","AWSALB","AWSALBCORS"];
+  const ordered = [];
+  for (const k of core) if (k in m) ordered.push(k);
+  for (const k of keys) if (!ordered.includes(k)) ordered.push(k);
+  const parts = [];
+  for (const k of ordered) {
+    const v = (m||{})[k];
+    if (v === undefined || v === null || v === "") continue;
+    parts.push(`${k}=${String(v)}`);
+  }
+  return parts.join("; ");
+}
+function __va_writeJarMap(m){
+  try {
+    const tmp = COOKIEJAR_PATH + ".tmp." + Date.now();
+    __va_fs.writeFileSync(tmp, JSON.stringify(m||{}), "utf8");
+    __va_fs.renameSync(tmp, COOKIEJAR_PATH);
+  } catch(e) {
+    console.log("[html5_v8] [VA1] WARN writeJar failed: " + (e && (e.message||e.toString())));
+  }
+}
+function __va_getSetCookieList(res){
+  try {
+    if (res && res.headers) {
+      if (typeof res.headers.getSetCookie === "function") return res.headers.getSetCookie();
+      const sc = res.headers.get && res.headers.get("set-cookie");
+      // fallback frágil (melhor que nada): se não dá pra separar com segurança, não atualiza jar
+      if (sc && sc.indexOf(",") < 0) return [sc];
+    }
+  } catch(e){}
+  return [];
+}
+function __va_mergeSetCookieIntoMap(m, setCookies){
+  const out = Object.assign({}, m||{});
+  for (const sc of (setCookies||[])) {
+    const s = String(sc||"");
+    const first = s.split(";")[0];
+    const i = first.indexOf("=");
+    if (i <= 0) continue;
+    const k = first.slice(0,i).trim();
+    const v = first.slice(i+1).trim();
+    if (!k) continue;
+    out[k] = v;
+  }
+  return out;
+}
+async function __va_warmupAsp(){
+  // GET simples para receber ASP.NET_SessionId via Set-Cookie
+  try {
+    const res = await fetch(HTML5_ACTION_URL, { method:"GET", redirect:"manual" });
+    const sc = __va_getSetCookieList(res);
+    if (sc && sc.length) {
+      const raw = __va_readJarRaw();
+      const m = __va_parseJarToMap(raw);
+      const merged = __va_mergeSetCookieIntoMap(m, sc);
+      __va_writeJarMap(merged);
+      const ck = __va_cookieHeaderFromMap(merged);
+      console.log(`[html5_v8] [VA1] warmupAsp status=${res.status} setCookie=${sc.length} jarFlags=${__va_flags(ck)} jarBytes=${raw.length}`);
+    } else {
+      console.log(`[html5_v8] [VA1] warmupAsp status=${res && res.status} setCookie=0`);
+    }
+  } catch(e) {
+    console.log("[html5_v8] [VA1] warmupAsp ERR " + (e && (e.message||e.toString())));
+  }
+}
+async function __va_ensureHtml5Session(){
+  const raw0 = __va_readJarRaw();
+  const m0 = __va_parseJarToMap(raw0);
+  const ck0 = __va_cookieHeaderFromMap(m0);
+  const hasAsp0 = __va_hasCookie(ck0,"ASP.NET_SessionId");
+  const hasTfl0 = __va_hasCookie(ck0,"TFL_SESSION");
+
+  if (!hasAsp0) await __va_warmupAsp();
+
+  // reusa o ensure já existente (ele chama login via APPLICATION_LOGIN)
+  if (!hasTfl0 && (typeof __ensureTflSession === "function")) {
+    try { await __ensureTflSession(); } catch(e){ /* keep going */ }
+  }
+
+  const raw1 = __va_readJarRaw();
+  const m1 = __va_parseJarToMap(raw1);
+  const ck1 = __va_cookieHeaderFromMap(m1);
+  const flags = __va_flags(ck1);
+  console.log(`[html5_v8] [VA1] ensureHtml5Session flags=${flags} jarBytes=${raw1.length} cookieHeaderLen=${ck1.length}`);
+  return { map:m1, cookie:ck1, flags };
+}
+async function __va_appenginePost(action, fields, tag){
+  const sess = await __va_ensureHtml5Session();
+  const params = new URLSearchParams();
+  params.set("action", String(action||""));
+  for (const [k,v] of Object.entries(fields||{})) params.set(k, String(v ?? ""));
+  const body = params.toString();
+
+  const res = await fetch(HTML5_ACTION_URL, {
+    method:"POST",
+    headers: {
+      "content-type":"application/x-www-form-urlencoded; charset=UTF-8",
+      "cookie": sess.cookie
+    },
+    body
+  });
+
+  const txt = await res.text().catch(()=> "");
+  const sc = __va_getSetCookieList(res);
+  if (sc && sc.length) {
+    const merged = __va_mergeSetCookieIntoMap(sess.map, sc);
+    __va_writeJarMap(merged);
+  }
+
+  const loginNeg = (String(txt||"").indexOf('login="-1"') >= 0);
+  const vid = (action === "VHCLS") ? __va_parseVehicleIdFromVhcls(txt, (fields||{}).LICENSE_NMBR) : null;
+
+  console.log(`[html5_v8] [VA1] ${tag||action} status=${res.status} len=${(txt||"").length} loginNeg=${loginNeg?1:0} jarFlags=${sess.flags}`);
+  return { status: res.status, text: txt, loginNeg, vehicleId: vid, jarFlags: sess.flags };
+}
+function __va_parseVehicleIdFromVhcls(txt, plate){
+  const t = String(txt||"");
+  const p = String(plate||"").trim();
+  if (!t) return null;
+  if (p) {
+    const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re1 = new RegExp('LICENSE_NMBR="\\s*' + esc + '\\s*"[^>]{0,1600}?VEHICLE_ID="(\\d+)"', 'i');
+    const m1 = t.match(re1);
+    if (m1 && m1[1]) return m1[1];
+  }
+  const m2 = t.match(/VEHICLE_ID="(\d+)"/i);
+  return (m2 && m2[1]) ? m2[1] : null;
+}
+async function __va_vhclsRefresh(plate){
+  const pl = String(plate||"").trim();
+  const r = await __va_appenginePost("VHCLS", { REFRESH_FLG:"1", LICENSE_NMBR:pl }, "VHCLS_CANON");
+  const head = String(r.text||"").slice(0, 900); // não tem segredo aqui; resposta é pública, mas limita tamanho
+  return { plate:pl, status:r.status, len:(r.text||"").length, loginNeg:r.loginNeg, vehicleId:r.vehicleId, jarFlags:r.jarFlags, head };
+}
+
+async function __va_deactivateVehicleHistCan(vehicleId, plate){
+  const vid = String(vehicleId||"").trim();
+  const pl  = String(plate||"").trim();
+  // payload mínimo (mesmo do remap)
+  const fields = {
+    VERSION_ID: "2",
+    VEHICLE_ID: vid,
+    LICENSE_NMBR: pl,
+    REASON_CODE: "5501",
+    DELIVER_CODE: "5511",
+  };
+  const r = await __va_appenginePost("DEACTIVATE_VEHICLE_HIST", fields, "DEACTIVATE_CANON");
+  const head = String(r.text||"").slice(0,220).replace(/\s+/g," ");
+  console.log(`[html5_v8] [VA2] DEACTIVATE_CANON head="${head}"`);
+  return r;
+}
+// === PATCH_VA1_CANON_VHCLS_END ===
+// PATCH_VHCLS_FORCE_COOKIE_V1: monta Cookie header a partir do cookiejar (sem logar valores)
+function __cookieHeaderFromJarSafe() {
+  const fs = require('fs');
+  try {
+    if (!fs.existsSync(COOKIEJAR_PATH)) return '';
+    const raw = fs.readFileSync(COOKIEJAR_PATH, 'utf8') || '';
+    // tenta JSON.parse
+    try {
+      const j = JSON.parse(raw);
+      // formato: {cookies:[{name,value},...]}
+      if (j && Array.isArray(j.cookies)) {
+        const parts = [];
+        for (const c of j.cookies) {
+          if (c && c.name && (c.value !== undefined)) parts.push(String(c.name) + '=' + String(c.value));
+        }
+        return parts.join('; ');
+      }
+      // formato: [{name,value},...]
+      if (Array.isArray(j)) {
+        const parts = [];
+        for (const c of j) {
+          if (c && c.name && (c.value !== undefined)) parts.push(String(c.name) + '=' + String(c.value));
+        }
+        return parts.join('; ');
+      }
+      // formato: {TFL_SESSION:"...", ASP.NET_SessionId:"...", ...}
+      if (j && typeof j === 'object') {
+        const parts = [];
+        for (const k of Object.keys(j)) {
+          const v = j[k];
+          if (typeof v === 'string' && /^[A-Z0-9_]{3,}$/i.test(k)) parts.push(String(k) + '=' + v);
+        }
+        return parts.join('; ');
+      }
+    } catch(e) {
+      // fallback regex direto no texto
+    }
+    // fallback: tenta extrair name/value no texto
+    const parts = [];
+    for (const mm of raw.matchAll(/"name"\s*:\s*"([A-Z0-9_]{3,})"\s*,\s*"value"\s*:\s*"([^"]*)"/gi)) {
+      if (mm && mm[1]) parts.push(mm[1] + '=' + (mm[2]||''));
+    }
+    if (parts.length) return parts.join('; ');
+    // fallback final: se já existir algo tipo "TFL_SESSION=..."
+    const m2 = raw.match(/TFL_SESSION\s*=\s*[^;,"\s]+/i);
+    return m2 ? String(m2[0]) : '';
+  } catch(e) { return ''; }
+}
+// [PATCH_ENSURE_TFL_SESSION] garante TFL_SESSION no cookiejar (sem vazar valores)
+async function __ensureTflSession() {
+  try {
+    if (globalThis.__HTML5_HAS_TFL) return true;
+    if (globalThis.__HTML5_LOGIN_BUSY) {
+      // espera curta (máx ~10s)
+      for (let i=0;i<50;i++) {
+        await new Promise(r=>setTimeout(r,200));
+        if (globalThis.__HTML5_HAS_TFL) return true;
+        if (!globalThis.__HTML5_LOGIN_BUSY) break;
+      }
+    }
+
+    const fs = require('fs');
+    let raw = '';
+    try { raw = fs.existsSync(COOKIEJAR_PATH) ? fs.readFileSync(COOKIEJAR_PATH,'utf8') : ''; } catch(e) {}
+    // [PATCH_ENSURE_TFL_SESSION_V2B] parser robusto (cookie header + JSON jar)
+    const names = new Set();
+    try {
+      const r = String(raw || '');
+      for (const x of (r.match(/([A-Z0-9_]{3,})\s*=/g) || [])) {
+        names.add(x.replace(/\s*=.*$/,'').toUpperCase());
+      }
+      for (const m of r.matchAll(/"name"\s*:\s*"([A-Z0-9_]{3,})"/gi)) if (m && m[1]) names.add(String(m[1]).toUpperCase());
+      for (const m of r.matchAll(/"key"\s*:\s*"([A-Z0-9_]{3,})"/gi))  if (m && m[1]) names.add(String(m[1]).toUpperCase());
+    } catch (e) {}
+const hasTfl = names.has('TFL_SESSION');
+    console.log('[html5_v8] [ensureTfl] before hasTfl=' + hasTfl + ' keys=' + Array.from(names).slice(0,20).join(','));
+    if (hasTfl) { globalThis.__HTML5_HAS_TFL = true; return true; }
+
+    globalThis.__HTML5_LOGIN_BUSY = true;
+    try {
+      console.log('[html5_v8] [ensureTfl] missing TFL_SESSION -> running login fn: html5LoginAndStoreCookies');
+      await html5LoginAndStoreCookies();
+    } finally {
+      globalThis.__HTML5_LOGIN_BUSY = false;
+    }
+
+    
+    // [PATCH_ENSURE_TFL_SESSION_V2B] espera o cookiejar materializar TFL_SESSION (até ~3s)
+    const __sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+    for (let i=0;i<20;i++) {
+      let rr='';
+      try { rr = fs.existsSync(COOKIEJAR_PATH) ? fs.readFileSync(COOKIEJAR_PATH,'utf8') : ''; } catch(e) {}
+      const __has = (String(rr||'').includes('TFL_SESSION=') || /"name"\s*:\s*"TFL_SESSION"/i.test(String(rr||'')));
+      if (__has) break;
+      await __sleep(150);
+    }
+let raw2 = '';
+    try { raw2 = fs.existsSync(COOKIEJAR_PATH) ? fs.readFileSync(COOKIEJAR_PATH,'utf8') : ''; } catch(e) {}
+    // [PATCH_ENSURE_TFL_SESSION_V2B] parser robusto (cookie header + JSON jar)
+    const names2 = new Set();
+    try {
+      const r = String(raw2 || '');
+      for (const x of (r.match(/([A-Z0-9_]{3,})\s*=/g) || [])) {
+        names2.add(x.replace(/\s*=.*$/,'').toUpperCase());
+      }
+      for (const m of r.matchAll(/"name"\s*:\s*"([A-Z0-9_]{3,})"/gi)) if (m && m[1]) names2.add(String(m[1]).toUpperCase());
+      for (const m of r.matchAll(/"key"\s*:\s*"([A-Z0-9_]{3,})"/gi))  if (m && m[1]) names2.add(String(m[1]).toUpperCase());
+    } catch (e) {}
+const hasTfl2 = names2.has('TFL_SESSION');
+    console.log('[html5_v8] [ensureTfl] after hasTfl=' + hasTfl2 + ' keys=' + Array.from(names2).slice(0,20).join(','));
+    // PATCH_NO_ABORT_ENSURETFL
+    if (!hasTfl2) {
+      try {
+        const __sz = (()=>{ try { return require('fs').existsSync(COOKIEJAR_PATH) ? require('fs').statSync(COOKIEJAR_PATH).size : 0; } catch(e){ return 0; } })();
+        console.log('[html5_v8] [ensureTfl] WARN: no TFL_SESSION detected; proceeding (cookiejar_size=' + __sz + ')');
+      } catch(e) {}
+      return true;
+    }
+    globalThis.__HTML5_HAS_TFL = true;
+    return true;
+  } catch (e) {
+    console.log('[html5_v8] [ensureTfl] FAIL: ' + ((e && e.message) ? e.message : String(e)));
+    throw e;
+  }
+}
 const HTML5_LOGIN_NAME = (process.env.HTML5_LOGIN_NAME || "").trim();
 const HTML5_PASSWORD = (process.env.HTML5_PASSWORD || "").trim();
 const HTML5_LANGUAGE = String(process.env.HTML5_LANGUAGE || "7001").trim();
@@ -336,6 +1126,7 @@ function mergeCookies(existingCookieHeader, setCookieArr){
 }
 
 async function fetchWithCookies(url, { method="GET", headers={}, body=null } = {}, cookieHeader=""){
+  if (!globalThis.__HTML5_LOGIN_BUSY) { await __ensureTflSession(); }
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
   let cookie = ensureCookieDefaults(cookieHeader || "");
@@ -347,7 +1138,12 @@ async function fetchWithCookies(url, { method="GET", headers={}, body=null } = {
       redirect:"manual",
       signal: controller.signal
     });
-    cookie = mergeCookies(cookie, extractSetCookies(res.headers));
+    
+      // === PATCH_CAPTURE_FETCH_TEXT_V1 ===
+      let __rawText = "";
+      try { __rawText = await res.text(); } catch (_) {}
+      // mantém uma cópia acessível para quem consome o retorno
+cookie = mergeCookies(cookie, extractSetCookies(res.headers));
     const text = await res.text().catch(() => "");
     return { status: res.status, text, cookie, headers: res.headers };
   } finally { clearTimeout(t); }
@@ -355,6 +1151,55 @@ async function fetchWithCookies(url, { method="GET", headers={}, body=null } = {
 
 // Job server
 async function httpFetch(path, { method="GET", params=null, json=null } = {}) {
+  // PATCH_HTTPFETCH_VHCLS_INJECT_COOKIE_V1
+  try {
+    const __o = (typeof arguments !== 'undefined' && arguments.length>1) ? arguments[1] : null;
+    const __b = (__o && __o.body) ? String(__o.body) : '';
+    if (__b.includes('action=VHCLS')) {
+      // detecta se já tem cookie
+      let __has = false;
+      try {
+        const h = (__o && __o.headers) ? __o.headers : null;
+        if (h) {
+          if (typeof h.get === 'function') __has = !!(h.get('cookie') || h.get('Cookie'));
+          else __has = !!(h.cookie || h.Cookie);
+        }
+      } catch(e) {}
+      if (!__has) {
+        const ck = __cookieHeaderFromJarSafe();
+        const ckLen = (ck||'').length;
+        // injeta cookie se conseguiu montar
+        if (ckLen > 0) {
+          try {
+            if (__o.headers && typeof __o.headers.set === 'function') __o.headers.set('cookie', ck);
+            else {
+              __o.headers = __o.headers || {};
+              __o.headers.cookie = ck;
+            }
+          } catch(e) {}
+          console.log('[VHCLS_FORCE_COOKIE] injected cookieLen=' + ckLen);
+        } else {
+          console.log('[VHCLS_FORCE_COOKIE] WARN cookieLen=0 (jar vazio/parse falhou)');
+        }
+      }
+    }
+  } catch(e) {
+    console.log('[VHCLS_FORCE_COOKIE_ERR] ' + ((e && e.message) ? e.message : String(e)));
+  }
+
+  // [PATCH_VHCLS_COOKIE_LEN] loga cookieLen só para VHCLS (sem mostrar cookie)
+  try {
+    const __o = (arguments && arguments.length>1) ? arguments[1] : null;
+    const __b = (__o && __o.body) ? String(__o.body) : '';
+    if (__b.includes('action=VHCLS')) {
+      let __ck='';
+      try {
+        const h = (__o && __o.headers) ? __o.headers : {};
+        __ck = (h && (h.cookie || h.Cookie)) ? String(h.cookie || h.Cookie) : (h && h.get ? String(h.get('cookie') || h.get('Cookie') || '') : '');
+      } catch(e) {}
+      console.log('[VHCLS_REQ] cookieLen=' + (__ck||'').length);
+    }
+  } catch(e) {}
   const u = new URL(BASE + path);
   if (params) for (const [k,v] of Object.entries(params)) u.searchParams.set(k, String(v));
   const controller = new AbortController();
@@ -742,6 +1587,85 @@ const body = encodeForm(f);
 }
 
 async function html5RunStep(jobId, step, cookie){
+  // === PATCH_VHCLS_RESOLVE_IN_RUNSTEP v1 ===
+  // Resolve VEHICLE_ID via VHCLS (REFRESH_FLG=1) quando ausente, antes de ações que exigem VEHICLE_ID.
+  try {
+    const __ctx = arguments[0];
+    const __step = arguments[1];
+    const __payload = arguments[2];
+
+    const __act = String((__step && (__step.action || __step.actionName || __step.name || __step.fn || "")) || "").toUpperCase();
+
+    const __needsVid =
+      __act.indexOf("DEACTIVATE_VEHICLE_HIST") >= 0 ||
+      __act.indexOf("SAVE_VHCL_ACTIVATION_NEW") >= 0 ||
+      __act.indexOf("ASSET_BASIC_SAVE") >= 0 ||
+      __act.indexOf("ASSET_BASIC_LOAD") >= 0 ||
+      __act.indexOf("GET_VHCL_ACTIVATION_DATA_NEW") >= 0;
+
+    if (__needsVid) {
+      await ensureVehicleIdByVhcls_(__ctx, __payload);
+    }
+  } catch (e) {
+    try { console.log("[vhcls] pre-runstep resolve skipped:", (e && e.message) ? e.message : e); } catch (_) {}
+  }
+  // === END PATCH_VHCLS_RESOLVE_IN_RUNSTEP v1 ===
+
+  // PATCH_UNINSTALL_SAVE_TO_DEACTIVATE_V4 (payload-safe)
+try {
+  const __pl =
+    ((typeof payload !== 'undefined') && payload) ? payload :
+    ((typeof job !== 'undefined') && job && job.payload) ? job.payload :
+    ((typeof currentJob !== 'undefined') && currentJob && currentJob.payload) ? currentJob.payload :
+    ((typeof j !== 'undefined') && j && j.payload) ? j.payload :
+    ((globalThis && globalThis.__JOB_PAYLOAD) ? globalThis.__JOB_PAYLOAD : null);
+
+  if (__pl && typeof __pl === 'object') {
+    try { globalThis.__JOB_PAYLOAD = __pl; } catch(e) {}
+  }
+
+  const svc = String((__pl && (__pl.service || __pl.SERVICE)) || '').toUpperCase();
+
+  // só remapeia quando for UNINSTALL + step SAVE (ou label install)
+  if (svc === 'UNINSTALL' && step && (step.action === 'SAVE_VHCL_ACTIVATION_NEW' || step.label === 'install')) {
+    let vid = String((__pl && (__pl.VEHICLE_ID || __pl.vehicle_id || __pl.vehicleId)) || '');
+    if (!vid && globalThis && globalThis.__VHCLS_LAST && globalThis.__VHCLS_LAST.vehicleId) {
+      vid = String(globalThis.__VHCLS_LAST.vehicleId || '');
+    }
+    const plate = String((__pl && (__pl.plate || __pl.LICENSE_NMBR || __pl.license || __pl.licensePlate)) || '').trim();
+    if (!vid) throw new Error('uninstall_missing_vehicle_id_before_deactivate');
+
+    // propaga de volta no payload (se existir)
+    try {
+      if (__pl && typeof __pl === 'object') { __pl.VEHICLE_ID = vid; __pl.vehicle_id = vid; __pl.vehicleId = vid; }
+    } catch(e) {}
+
+    step.label = 'uninstall';
+    step.action = 'DEACTIVATE_VEHICLE_HIST';
+    step.fields = {
+      VERSION_ID: '2',
+      VEHICLE_ID: vid,
+      LICENSE_NMBR: plate,
+      REASON_CODE: '5501',
+      DELIVER_CODE: '5511'
+    };
+
+    console.log(`[html5_v8] [PATCH] UNINSTALL remap SAVE->DEACTIVATE vehicle_id=${vid} plate=${plate}`);
+  }
+} catch (e) {
+  console.log(`[html5_v8] [PATCH] UNINSTALL remap err: ${e && (e.message || e.toString())}`);
+  throw e;
+}
+  // PATCH_LAST_STEP_BEFORE_STAGE
+  try {
+    globalThis.__LAST_STEP = {
+      id: (typeof id !== 'undefined') ? String(id) : '',
+      step: (step && step.label) ? String(step.label) : '',
+      action: (step && step.action) ? String(step.action) : '',
+      attempt: (typeof attempt !== 'undefined') ? attempt : null
+    };
+  } catch(e) {}
+  
   console.log(`[html5_v8] STAGE id=${jobId} step=${step.label} action=${step.action} attempt=1`);
   const r1 = await html5CallFormAction(step.action, step.fields, cookie);
 
@@ -791,7 +1715,7 @@ function buildStepsForService(service, payload){
   }
 
   // Fallback: INSTALL conhecido (builder)
-  if (service === "INSTALL") {
+  if ((service === "INSTALL" || service === "UNINSTALL")) {
     return [normalizeStep({ label: "install", useBuilder: true }, payload)];
   }
 
@@ -922,10 +1846,102 @@ async function main(){
       const job = r.data.job || r.data;
       const id = job.id || job.jobId || job._id;
       const payload = job.payload || {};
-      const service = normService(payload.service);
+      
+  // === PATCH_R_PLATE_RESOLVE_V1 (normalize payload keys for vehicle resolve) ===
+  try {
+    const _p = payload || {};
+
+    // plate/licenca aliases -> payload.plate
+    const _rawPlate =
+      (_p.plate ?? _p.placa ?? _p.license ?? _p.licensePlate ?? _p.LICENSE_NMBR ?? _p.license_nmbr ?? _p.licenseNmbr ?? "");
+    if (!_p.plate && _rawPlate) _p.plate = String(_rawPlate);
+    if (!_p.license && _p.plate) _p.license = _p.plate;
+
+    // normalize plate string (upper, strip spaces/hyphen/etc)
+    if (_p.plate) _p.plate = String(_p.plate).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (_p.license) _p.license = String(_p.license).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+    // serial aliases -> payload.serial
+    const _rawSerial =
+      (_p.serial ?? _p.serie ?? _p.innerId ?? _p.inner_id ?? _p.INNER_ID ?? _p.SERIAL ?? "");
+    if (!_p.serial && _rawSerial) _p.serial = String(_rawSerial).trim();
+
+    // serial_new aliases (MAINT_WITH_SWAP) -> payload.serial_new
+    const _rawSerialNew =
+      (_p.serial_new ?? _p.serialNew ?? _p.new_serial ?? _p.SERIAL_NEW ?? "");
+    if (!_p.serial_new && _rawSerialNew) _p.serial_new = String(_rawSerialNew).trim();
+
+    // vehicle_id aliases -> payload.vehicle_id / payload.VEHICLE_ID
+    const _rawVid = (_p.vehicle_id ?? _p.vehicleId ?? _p.VEHICLE_ID ?? _p.VEHICLEID ?? "");
+    if (!_p.vehicle_id && _rawVid) _p.vehicle_id = String(_rawVid).trim();
+    if (!_p.VEHICLE_ID && _p.vehicle_id) _p.VEHICLE_ID = _p.vehicle_id;
+
+    // (debug leve) só quando falta vehicle_id
+    if (!_p.vehicle_id) {
+      console.log(`[html5_v8] RESOLVE_INPUT service=${_p.service||""} plate=${_p.plate||""} serial=${_p.serial||""}`);
+    }
+  } catch (e) {
+    console.log("[html5_v8] WARN normalize payload failed:", e && (e.message || e.toString()));
+  }
+  // === END PATCH_R_PLATE_RESOLVE_V1 ===
+const service = normService(payload.service);
       const hasSteps = Array.isArray(payload.html5Steps) && payload.html5Steps.length > 0;
 
       console.log(`[html5_v8] GOT job id=${id} service=${service || "?"}`);
+
+/* __PATCH_UNINSTALL_AUTOSTEPS_V1
+ * Se service=UNINSTALL e html5Steps vazio, injeta DEACTIVATE_VEHICLE_HIST via payload.html5Steps.
+ * Também garante defaults mínimos (VERSION/REASON/DELIVER/plate).
+ */
+try{
+  const __p =
+    (typeof payload !== "undefined" && payload && typeof payload === "object") ? payload :
+    (typeof job !== "undefined" && job && job.payload && typeof job.payload === "object") ? job.payload :
+    (globalThis.__JOB_PAYLOAD && typeof globalThis.__JOB_PAYLOAD === "object") ? globalThis.__JOB_PAYLOAD :
+    null;
+
+  const __svc = (__p && (__p.service || __p.SERVICE)) ? String(__p.service || __p.SERVICE) : "";
+  if (__p && __svc === "UNINSTALL") {
+    __p.VERSION_ID   = __p.VERSION_ID   || 2;
+    __p.REASON_CODE  = __p.REASON_CODE  || 5501;
+    __p.DELIVER_CODE = __p.DELIVER_CODE || 5511;
+
+    const __plate = __p.LICENSE_NMBR || __p.license_nmbr || __p.plate || __p.PLATE;
+    if (__plate) {
+      __p.LICENSE_NMBR = __p.LICENSE_NMBR || __plate;
+      __p.license_nmbr = __p.license_nmbr || __plate;
+    }
+
+    if (!Array.isArray(__p.html5Steps) || __p.html5Steps.length === 0) {
+      __p.html5Steps = ["DEACTIVATE_VEHICLE_HIST"];
+      console.log("[UNINSTALL_AUTOSTEPS] set html5Steps=[DEACTIVATE_VEHICLE_HIST]");
+    } else {
+      const has = __p.html5Steps.some(x => String(x).indexOf("DEACTIVATE_VEHICLE_HIST") >= 0);
+      if (!has) {
+        __p.html5Steps.push("DEACTIVATE_VEHICLE_HIST");
+        console.log("[UNINSTALL_AUTOSTEPS] append DEACTIVATE_VEHICLE_HIST");
+      } else {
+        console.log("[UNINSTALL_AUTOSTEPS] already has DEACTIVATE_VEHICLE_HIST");
+      }
+    }
+
+    globalThis.__JOB_PAYLOAD = __p;
+  }
+}catch(e){
+  console.log("[UNINSTALL_AUTOSTEPS_ERR] " + ((e && e.message) ? e.message : e));
+}
+/* __PATCH_UNINSTALL_AUTOSTEPS_V1 END */
+
+
+      // PATCH_SAVE_JOBCTX_V1
+      try {
+        const __j = (typeof job !== 'undefined') ? job : ((typeof currentJob !== 'undefined') ? currentJob : null);
+        const __pl = (__j && __j.payload) ? __j.payload : ((typeof payload !== 'undefined') ? payload : null);
+        const __svc = (__pl && (__pl.service || __pl.SERVICE)) ? String(__pl.service || __pl.SERVICE) : '';
+        globalThis.__JOB_PAYLOAD = __pl || globalThis.__JOB_PAYLOAD;
+        globalThis.__JOB_SERVICE = __svc || globalThis.__JOB_SERVICE;
+      } catch(e) {}
+      
 
       // === CAPTURE_FETCHWRAP_V8_RESET ===
       try { for (const k of Object.keys(__CAPTURES)) delete __CAPTURES[k]; } catch {}
@@ -939,7 +1955,384 @@ async function main(){
 
             const jobRunner = async () => {
         // PATCH_D2: preflight ASSET_BASIC_LOAD when needed
-        let steps = buildStepsForService(service, payload);
+// [PATCH_U3] resolve VEHICLE_ID by plate without touching 'cookie' (avoid TDZ)
+try {
+  const svcNeedVid = new Set(["UNINSTALL","MAINT_WITH_SWAP","CHANGE_COMPANY"]);
+  const hasVid = !!(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId);
+  const plate = String(payload.plate || payload.LICENSE_NMBR || payload.license || payload.licensePlate || "").trim();
+  // [VA1] resolve_by_plate prefer VHCLS_CANON (cookiejar + warmup/login); fallback mantém caminho antigo.
+  try {
+    if (plate && typeof __va_vhclsRefresh === "function") {
+      const __va = await __va_vhclsRefresh(plate);
+      if (__va && __va.vehicleId) {
+        console.log(`[html5_v8] [VA1] resolve_by_plate rescued VEHICLE_ID=${__va.vehicleId} plate=${__va.plate} status=${__va.status} len=${__va.len} loginNeg=${__va.loginNeg?1:0} jarFlags=${__va.jarFlags}`);
+        // persist best-effort nas chaves usuais do payload (sem vazar nada)
+        try {
+          if (payload && typeof payload === "object") {
+            payload.VEHICLE_ID = payload.VEHICLE_ID || __va.vehicleId;
+            payload.LICENSE_NMBR = payload.LICENSE_NMBR || __va.plate;
+            payload.license_nmbr = payload.license_nmbr || __va.plate;
+          }
+          globalThis.__VHCLS_LAST = __va.head || "";
+          globalThis.__VHCLS_LAST_VID = __va.vehicleId;
+          globalThis.__VHCLS_LAST_PLATE = __va.plate;
+        } catch(e) {}
+      } else {
+        console.log(`[html5_v8] [VA1] resolve_by_plate VHCLS_CANON no_vid plate=${plate} status=${__va && __va.status} loginNeg=${__va && __va.loginNeg?1:0}`);
+      }
+    }
+  } catch(e) {
+    console.log(`[html5_v8] [VA1] resolve_by_plate VHCLS_CANON err ${e && (e.message||e.toString())}`);
+  }
+
+  if (!hasVid && svcNeedVid.has(service) && plate) {
+    let cookieForResolve = "";
+    try {
+      const cj = (typeof loadCookieJar === "function") ? await loadCookieJar() : null;
+      cookieForResolve = (cj && cj.cookie) ? cj.cookie : "";
+    } catch (_) {}
+    const resolveStep = {
+      label: "resolve_by_plate",
+      action: "VHCLS",
+      fields: { REFRESH_FLG: "1", LICENSE_NMBR: plate, CLIENT_DESCR: "", OWNER_DESCR: "", DIAL_NMBR: "", INNER_ID: "", VERSION_ID: "2" }
+    };
+    console.log(`[html5_v8] [PATCH_U3] resolving VEHICLE_ID by plate=${plate} service=${service}`);
+    const outR = await html5RunStep(id, resolveStep, cookieForResolve);
+    
+    
+    // === PATCH_VHCLS_VID_EXTRACT_V1 ===
+    try {
+      const raw = (() => {
+        const f = (outR && outR.final) ? outR.final : outR;
+        return String((f && (f.text || f.body || f.raw || f.xml || f.responseText)) || "");
+      })();
+
+      if (raw && !payload.vehicle_id) {
+        const plateUp = String(plate||"").trim().toUpperCase();
+        const esc = plateUp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // pega o <DATA ... LICENSE_NMBR="XYZ1234" ... VEHICLE_ID="123" .../>
+        const re1 = new RegExp('LICENSE_NMBR="\\s*' + esc + '\\s*"[^>]{0,1200}?VEHICLE_ID="(\\d+)"', 'i');
+        const m1 = re1.exec(raw);
+        const vid = m1 ? m1[1] : null;
+
+        if (vid) {
+          payload.vehicle_id = String(vid);
+          payload.VEHICLE_ID  = String(vid);
+          payload.vehicleId   = String(vid);
+          console.log(`[html5_v8] [${MARK}] extracted VEHICLE_ID=${vid} from VHCLS for plate=${plate}`);
+        } else {
+          console.log(`[html5_v8] [${MARK}] no VEHICLE_ID in VHCLS for plate=${plate} (raw_len=${raw.length})`);
+        }
+      }
+    } catch (e) {
+      console.log(`[html5_v8] [${MARK}] error: ${e && (e.message || e.toString())}`);
+    }
+    // === END PATCH_VHCLS_VID_EXTRACT_V1 ===
+// === PATCH_U3_DEBUG_DISPLAY_V1 ===
+    try {
+      const raw = (() => {
+        const f = (outR && outR.final) ? outR.final : outR;
+        return String((f && (f.text || f.body || f.raw || f.xml || f.responseText)) || "");
+      })();
+      const plateNorm = String(plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const sample = raw.replace(/\s+/g," ").slice(0,220);
+      // [PATCH_U3_AUTH_GUARD] fallback pro texto do TAP + falha explícita se VHCLS não autenticou
+      try {
+        const fs = require('fs');
+        const last = (globalThis && globalThis.__VHCLS_LAST) ? globalThis.__VHCLS_LAST : null;
+        const lastPath = (last && last.path) ? last.path : '';
+        let __u3txt = (typeof respText !== 'undefined' && respText) || (typeof text !== 'undefined' && text) || (typeof raw !== 'undefined' && raw) || (typeof xml !== 'undefined' && xml) || (typeof body !== 'undefined' && body) || '';
+        if ((!__u3txt || __u3txt.length === 0) && lastPath && fs.existsSync(lastPath)) {
+          const t = fs.readFileSync(lastPath, 'utf8') || '';
+          __u3txt = t;
+          if (typeof respText !== 'undefined') respText = t;
+          if (typeof text !== 'undefined') text = t;
+          if (typeof raw !== 'undefined') raw = t;
+          if (typeof xml !== 'undefined') xml = t;
+          if (typeof body !== 'undefined') body = t;
+          console.log('[PATCH_U3_AUTH_GUARD] used VHCLS_TAP file=' + lastPath + ' len=' + (__u3txt||'').length);
+        }
+        if ((__u3txt || '').includes('login="-1"') || (__u3txt || '').includes('Action: VHCLS error')) {
+          console.log('[PATCH_U3_AUTH_GUARD] VHCLS not authenticated (login=-1). Aborting job.');
+          throw new Error('vhcls_not_authenticated');
+        }
+      } catch (e) {
+        if (e && e.message === 'vhcls_not_authenticated') throw e;
+        console.log('[PATCH_U3_AUTH_GUARD_ERR] ' + ((e && e.message) ? e.message : String(e)));
+      }
+            console.log(`[html5_v8] [U3_DEBUG] DISPLAY_OBJECTS len=${raw.length} hasVEHICLE_ID=${/VEHICLE_ID/i.test(raw)} hasPlate=${raw.toUpperCase().includes(plateNorm)} sample="${sample}"`);
+    } catch (e) {
+      console.log(`[html5_v8] [U3_DEBUG] failed: ${e && (e.message||e.toString())}`);
+    }
+    // === END PATCH_U3_DEBUG_DISPLAY_V1 ===
+const parsed = (outR && outR.final && outR.final.parsed) ? outR.final.parsed : (outR && outR.parsed ? outR.parsed : null);
+    const seen = new Set();
+    const findVid = (obj) => {
+      if (!obj || typeof obj !== "object") return null;
+      if (seen.has(obj)) return null;
+      seen.add(obj);
+      if (Object.prototype.hasOwnProperty.call(obj, "VEHICLE_ID")) return obj.VEHICLE_ID;
+      if (Object.prototype.hasOwnProperty.call(obj, "vehicle_id")) return obj.vehicle_id;
+      if (Array.isArray(obj)) {
+        for (const it of obj) { const v = findVid(it); if (v) return v; }
+        return null;
+      }
+      for (const k of Object.keys(obj)) {
+        const v = findVid(obj[k]);
+        if (v) return v;
+      }
+      return null;
+    };
+    const vid = findVid(parsed);
+    if (vid) {
+      const v = String(vid).trim();
+      payload.vehicle_id = v;
+      payload.VEHICLE_ID  = v;
+      payload.vehicleId   = v;
+      console.log(`[html5_v8] [PATCH_U3] resolved vehicle_id=${v} plate=${plate}`);
+    } else {
+      // [PATCH_U3_VHCLS_DUMP] dump resposta quando não acha VEHICLE_ID
+      try {
+        const __t = (typeof respText !== 'undefined' && respText) || (typeof text !== 'undefined' && text) || (typeof raw !== 'undefined' && raw) || (typeof xml !== 'undefined' && xml) || (typeof body !== 'undefined' && body) || '';
+        const __p = '/tmp/vhcls_last_' + Date.now() + '.txt';
+        require('fs').writeFileSync(__p, __t, 'utf8');
+        console.log('[PATCH_U3_VHCLS_DUMP] saved=' + __p + ' len=' + (__t || '').length);
+        console.log('[PATCH_U3_VHCLS_HEAD] ' + JSON.stringify((__t || '').slice(0, 800)));
+      } catch (e) {
+        console.log('[PATCH_U3_VHCLS_DUMP_ERR] ' + ((e && e.message) ? e.message : String(e)));
+      }
+            // PATCH_U3_TAP_FALLBACK2: se o texto local estiver vazio, usa o VHCLS capturado pelo TAP
+            try {
+              const fs = require('fs');
+              const last = (globalThis && globalThis.__VHCLS_LAST) ? globalThis.__VHCLS_LAST : null;
+              const lastPath = (last && last.path) ? String(last.path) : '';
+              if (lastPath && fs.existsSync(lastPath)) {
+                const t = fs.readFileSync(lastPath, 'utf8') || '';
+                const empty = (v)=> (!v || String(v).length===0);
+                const need = (typeof respText !== 'undefined' && empty(respText)) ||
+                             (typeof text    !== 'undefined' && empty(text)) ||
+                             (typeof raw     !== 'undefined' && empty(raw)) ||
+                             (typeof xml     !== 'undefined' && empty(xml)) ||
+                             (typeof body    !== 'undefined' && empty(body));
+                if (need && t.length) {
+                  if (typeof respText !== 'undefined' && empty(respText)) respText = t;
+                  if (typeof text    !== 'undefined' && empty(text))    text    = t;
+                  if (typeof raw     !== 'undefined' && empty(raw))     raw     = t;
+                  if (typeof xml     !== 'undefined' && empty(xml))     xml     = t;
+                  if (typeof body    !== 'undefined' && empty(body))    body    = t;
+                  console.log('[html5_v8] [U3_FALLBACK2] used VHCLS_TAP len=' + t.length +
+                    ' plate=' + (last && last.plate ? last.plate : '') + ' vehicleId=' + (last && last.vehicleId ? last.vehicleId : '') +
+                    ' path=' + lastPath);
+                }
+              }
+            } catch (e) {
+              console.log('[html5_v8] [U3_FALLBACK2_ERR] ' + ((e && e.message) ? e.message : String(e)));
+            }
+                        
+            // [PATCH_U3_RESOLVE_FROM_TAP] tenta resolver pelo VHCLS_TAP (__VHCLS_LAST) antes de falhar
+            try {
+              const fs = require('fs');
+              const last = (globalThis && (globalThis.__VHCLS_LAST || globalThis.__VHCLS_DBG)) ? (globalThis.__VHCLS_LAST || globalThis.__VHCLS_DBG) : null;
+
+              let vid = '';
+              if (last && last.vehicleId) vid = String(last.vehicleId || '');
+
+              if (!vid && last && last.path && fs.existsSync(String(last.path))) {
+                const t = fs.readFileSync(String(last.path), 'utf8') || '';
+                const mm = t.match(/VEHICLE_ID\s*=\s*"(\d+)"/i) || t.match(/VEHICLE_ID\s*=\s*(\d+)/i);
+                if (mm) vid = String(mm[1] || '');
+              }
+
+              if (vid) {
+                // tenta propagar em todos os lugares comuns
+                try { payload.VEHICLE_ID = vid; payload.vehicle_id = vid; payload.vehicleId = vid; } catch(e) {}
+                try { if (typeof built !== 'undefined' && built) { built.VEHICLE_ID = vid; built.vehicle_id = vid; built.vehicleId = vid; } } catch(e) {}
+                console.log(`[html5_v8] [PATCH_U3] resolve_by_plate: rescued VEHICLE_ID=${vid} from VHCLS_TAP`);
+
+/* __PATCH_U3_PERSIST_VEHICLE_ID_V2
+ * Persistir vehicleId no payload exatamente após o log do "rescued".
+ * (sem vazar valores, só loga o ID)
+ */
+try{
+  const __p =
+    (typeof payload !== "undefined" && payload && typeof payload === "object") ? payload :
+    (typeof job !== "undefined" && job && job.payload && typeof job.payload === "object") ? job.payload :
+    (globalThis.__JOB_PAYLOAD && typeof globalThis.__JOB_PAYLOAD === "object") ? globalThis.__JOB_PAYLOAD :
+    null;
+
+  const __vid =
+    (typeof vehicleId !== "undefined" && vehicleId) ? vehicleId :
+    (typeof VEHICLE_ID !== "undefined" && VEHICLE_ID) ? VEHICLE_ID :
+    null;
+
+  if (__p && __vid) {
+    __p.VEHICLE_ID = __p.VEHICLE_ID || __vid;
+    __p.vehicle_id = __p.vehicle_id || __vid;
+    __p.vehicleId  = __p.vehicleId  || __vid;
+
+    const __plate = __p.plate || __p.PLATE || __p.LICENSE_NMBR || __p.license_nmbr;
+    if (__plate) {
+      __p.LICENSE_NMBR = __p.LICENSE_NMBR || __plate;
+      __p.license_nmbr = __p.license_nmbr || __plate;
+    }
+
+    globalThis.__JOB_PAYLOAD = __p;
+    console.log(`[PATCH_U3] resolve_by_plate: persisted VEHICLE_ID=${__vid}`);
+  } else {
+    console.log(`[PATCH_U3] resolve_by_plate: persist SKIP payload=${!!__p} vid=${!!__vid}`);
+  }
+}catch(e){
+  console.log(`[PATCH_U3] resolve_by_plate: persist ERR ${(e && e.message) ? e.message : e}`);
+}
+
+
+
+/* __PATCH_U3_PERSIST_VEHICLE_ID_V1
+ * Após rescue do vehicleId no resolve_by_plate, persiste em job/payload/globalThis:
+ * - VEHICLE_ID / vehicle_id / vehicleId
+ * - LICENSE_NMBR / license_nmbr (fallback plate)
+ * Sem vazar dados; só loga o id.
+ */
+try{
+  const __p =
+    (typeof payload !== "undefined" && payload && typeof payload === "object") ? payload :
+    (typeof job !== "undefined" && job && job.payload && typeof job.payload === "object") ? job.payload :
+    (globalThis.__JOB_PAYLOAD && typeof globalThis.__JOB_PAYLOAD === "object") ? globalThis.__JOB_PAYLOAD :
+    null;
+
+  if (__p && typeof vehicleId !== "undefined" && vehicleId) {
+    __p.VEHICLE_ID = __p.VEHICLE_ID || vehicleId;
+    __p.vehicle_id = __p.vehicle_id || vehicleId;
+    __p.vehicleId  = __p.vehicleId  || vehicleId;
+
+    // placa/licença (ajuda o DEACTIVATE/VHCL templates)
+    const plate = __p.plate || __p.PLATE || __p.license_nmbr || __p.LICENSE_NMBR;
+    __p.LICENSE_NMBR = __p.LICENSE_NMBR || plate;
+    __p.license_nmbr = __p.license_nmbr || plate;
+
+    globalThis.__JOB_PAYLOAD = __p;
+
+    console.log(`[PATCH_U3] resolve_by_plate: persisted VEHICLE_ID=${vehicleId} into payload keys`);
+  } else {
+    console.log(`[PATCH_U3] resolve_by_plate: WARN cannot persist (payload?=${!!__p} vehicleId?=${typeof vehicleId !== "undefined" && !!vehicleId})`);
+  }
+}catch(e){
+  console.log(`[PATCH_U3] resolve_by_plate: persist ERR ${(e && e.message) ? e.message : e}`);
+}
+
+
+                return vid;
+              }
+            } catch (e) {
+              console.log(`[html5_v8] [PATCH_U3] resolve_by_plate: tap rescue err: ${e && (e.message || e.toString())}`);
+            }
+
+            
+            // PATCH_U3_RESOLVE_RESCUE_VHCLS_LAST
+            try {
+              const fs = require('fs');
+              const last = (globalThis && globalThis.__VHCLS_LAST) ? globalThis.__VHCLS_LAST : null;
+
+              let vid = '';
+              if (last && last.vehicleId) vid = String(last.vehicleId || '');
+
+              if (!vid && last && last.path && fs.existsSync(String(last.path))) {
+                const t = fs.readFileSync(String(last.path), 'utf8') || '';
+                const mm = t.match(/VEHICLE_ID\s*=\s*"(\d+)"/i) || t.match(/VEHICLE_ID\s*=\s*(\d+)/i);
+                if (mm) vid = String(mm[1] || '');
+              }
+
+              if (vid) {
+                try { payload.VEHICLE_ID = vid; payload.vehicle_id = vid; payload.vehicleId = vid; } catch(e) {}
+                try { if (typeof built !== 'undefined' && built) { built.VEHICLE_ID = vid; built.vehicle_id = vid; built.vehicleId = vid; } } catch(e) {}
+                console.log(`[html5_v8] [PATCH_U3] resolve_by_plate: rescued VEHICLE_ID=${vid} from VHCLS_TAP`);
+                return vid;
+              }
+            } catch (e) {
+              console.log(`[html5_v8] [PATCH_U3] resolve_by_plate: rescue err: ${e && (e.message || e.toString())}`);
+            }
+
+            console.log(`[html5_v8] [PATCH_U3] resolve_by_plate: VEHICLE_ID not found in response`);
+            throw new Error('resolve_by_plate_vehicle_id_not_found');
+
+            throw new Error('resolve_by_plate_vehicle_id_not_found');
+
+    }
+  }
+} catch (e) {
+  console.log(`[html5_v8] [PATCH_U3] resolve_by_plate error: ${e && (e.message || e.toString())}`);
+}
+
+let steps = buildStepsForService(service, payload);
+      
+
+/* __PATCH_UNINSTALL_APPEND_DEACTIVATE_V1
+ * Se service=UNINSTALL, garante que:
+ * - payload tenha defaults mínimos para DEACTIVATE_VEHICLE_HIST
+ * - steps inclua DEACTIVATE_VEHICLE_HIST após resolve_by_plate
+ */
+try{
+  const __p =
+    (typeof payload !== "undefined" && payload && typeof payload === "object") ? payload :
+    (typeof job !== "undefined" && job && job.payload && typeof job.payload === "object") ? job.payload :
+    (globalThis.__JOB_PAYLOAD && typeof globalThis.__JOB_PAYLOAD === "object") ? globalThis.__JOB_PAYLOAD :
+    null;
+
+  const __svc = (__p && (__p.service || __p.SERVICE)) ? String(__p.service || __p.SERVICE) : "";
+
+  if (__p && __svc === "UNINSTALL" && Array.isArray(steps)) {
+    // defaults mínimos (não sobrepõe se já existir)
+    __p.VERSION_ID  = __p.VERSION_ID  || 2;
+    __p.REASON_CODE = __p.REASON_CODE || 5501;
+    __p.DELIVER_CODE= __p.DELIVER_CODE|| 5511;
+
+    const __plate = __p.LICENSE_NMBR || __p.license_nmbr || __p.plate || __p.PLATE;
+    if (__plate) {
+      __p.LICENSE_NMBR = __p.LICENSE_NMBR || __plate;
+      __p.license_nmbr = __p.license_nmbr || __plate;
+    }
+
+    // append DEACTIVATE se ainda não existir
+    const hasDeactivate =
+      steps.some(x => (typeof x === "string" && x === "DEACTIVATE_VEHICLE_HIST") ||
+                      (x && typeof x === "object" && (x.step === "DEACTIVATE_VEHICLE_HIST" || x.action === "DEACTIVATE_VEHICLE_HIST")));
+
+    if (!hasDeactivate) {
+      // suporta steps como array de strings OU objetos
+      if (steps.length && typeof steps[0] === "string") {
+        steps.push("DEACTIVATE_VEHICLE_HIST");
+      } else {
+        steps.push({ step: "DEACTIVATE_VEHICLE_HIST", action: "DEACTIVATE_VEHICLE_HIST" });
+      }
+      console.log(`[UNINSTALL_FIX] appended DEACTIVATE_VEHICLE_HIST (steps=${steps.length})`);
+    } else {
+      console.log(`[UNINSTALL_FIX] DEACTIVATE already present (steps=${steps.length})`);
+    }
+  }
+}catch(e){
+  console.log(`[UNINSTALL_FIX_ERR] ${(e && e.message) ? e.message : e}`);
+}
+
+// [PATCH_U6] ensure required fields for DEACTIVATE_VEHICLE_HIST
+      try {
+        const _rc = String(payload.REASON_CODE || payload.reason_code || 5501);
+        const _dc = String(payload.DELIVER_CODE || payload.deliver_code || 5511);
+        const _in = String(payload.INSTALLER_NAME || payload.installer_name || payload.installer || "monitor-backend");
+        const _cm = String(payload.COMMENTS || payload.comments || payload.notes || "");
+        const list = Array.isArray(steps) ? steps : (Array.isArray(payload.html5Steps) ? payload.html5Steps : null);
+        if (list) {
+          for (const st of list) {
+            if (st && st.action === "DEACTIVATE_VEHICLE_HIST") {
+              st.fields = st.fields || {};
+              if (!st.fields.REASON_CODE) st.fields.REASON_CODE = _rc;
+              if (!st.fields.DELIVER_CODE) st.fields.DELIVER_CODE = _dc;
+              if (!st.fields.INSTALLER_NAME) st.fields.INSTALLER_NAME = _in;
+              if (!st.fields.COMMENTS && _cm) st.fields.COMMENTS = _cm;
+            }
+          }
+        }
+      } catch (e) {}
+
 
         // DEBUG: não chama HTML5, só monta o payload do SAVE_VHCL_ACTIVATION_NEW
         if (service === "DEBUG_BUILD_SAVE_ACTIVATION_FIELDS") {
@@ -1012,7 +2405,7 @@ async function main(){
         }
 
         // serviços que deliberadamente NÃO mutam HTML5
-        const html5ShouldSkip = ((service === "MAINT_NO_SWAP" || service === "MAINT_WITH_SWAP") && steps.length === 0);
+        const html5ShouldSkip = (service === "MAINT_NO_SWAP" && steps.length === 0);
 
         if (html5ShouldSkip) {
           await finish("ok", {
@@ -1029,7 +2422,7 @@ async function main(){
             ok:false,
             service,
             error:"missing_html5_payload",
-            message:"For this service, provide payload.html5Steps[] (exact UI fields) or payload.html5Action/html5Fields. INSTALL is the only allowed fallback builder.",
+            message:"For this service, provide payload.html5Steps[] (exact UI fields) or payload.html5Action/html5Fields. INSTALL/UNINSTALL are allowed fallback builders.",
           });
           return;
         }
@@ -1089,10 +2482,534 @@ async function main(){
         console.log('[html5_v8] warn: AbortError (timeout) url=' + lu);
       } else {
       console.log("[html5_v8] loop error:", e && (e.stack || e.message || e.toString()));
-      }
+      
+        // PATCH_LOOP_ERROR_CAUSE
+        try {
+          const __e = (typeof e !== 'undefined') ? e : ((typeof err !== 'undefined') ? err : ((typeof error !== 'undefined') ? error : null));
+          console.log('[html5_v8] loop lastStep=' + JSON.stringify(globalThis.__LAST_STEP || {}));
+          const c = (__e && __e.cause) ? (__e.cause.message || String(__e.cause)) : '';
+          if (c) console.log('[html5_v8] loop cause=' + c);
+        } catch(_e) {}
+}
       await sleep(POLL_MS);
     }
   }
 }
 
 main().catch(err => { console.error("[html5_v8] fatal:", err && (err.stack || err.message || err)); process.exit(1); });
+
+
+
+/* === PATCH_C6B: VHCLS_FORCE_COOKIE v3 (FORCE override + host/flags) ===
+ * - Sempre sobrescreve Cookie do VHCLS com cookie do cookiejar (se existir)
+ * - Loga apenas host + lens + flags (ASP/TFL/EULA/ROOT), sem vazar valores.
+ * - Usa setImmediate para ser "o último wrapper", mesmo se houver nextTick wrappers.
+ */
+(function(){
+  try{
+    if (globalThis.__VHCLS_FORCE_COOKIE_V3) return;
+    globalThis.__VHCLS_FORCE_COOKIE_V3 = true;
+
+    const fs = require("fs");
+    const COOKIEJAR_PATH = process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json";
+
+    function readCookieHeaderSafe(){
+      try{
+        if (!fs.existsSync(COOKIEJAR_PATH)) return "";
+        const raw = fs.readFileSync(COOKIEJAR_PATH, "utf8");
+        if (!raw) return "";
+        try{
+          const j = JSON.parse(raw);
+          if (!j) return "";
+          if (typeof j.cookieHeader === "string") return j.cookieHeader.trim();
+          if (typeof j.cookie === "string") return j.cookie.trim();
+        }catch(e){
+          // não é JSON -> pode já ser cookie header puro
+          return String(raw).trim();
+        }
+      }catch(e){}
+      return "";
+    }
+
+    function hasCookie(cookieStr, name){
+      try{
+        return new RegExp("(^|;\\s*)" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=").test(cookieStr);
+      }catch(e){ return false; }
+    }
+
+    function bodyText(init){
+      try{
+        const b = init && init.body;
+        if (!b) return "";
+        if (typeof b === "string") return b;
+        if (typeof URLSearchParams !== "undefined" && b instanceof URLSearchParams) return b.toString();
+        if (b && typeof b.toString === "function") {
+          const s = String(b);
+          if (s && s !== "[object Object]" && s !== "[object FormData]") return s;
+        }
+      }catch(e){}
+      return "";
+    }
+
+    function getHost(input){
+      try{
+        if (typeof input === "string") return (new URL(input)).host;
+        if (input && typeof input.url === "string") return (new URL(input.url)).host;
+      }catch(e){}
+      return "unknown";
+    }
+
+    setImmediate(() => {
+      try{
+        const origFetch = globalThis.fetch;
+        if (typeof origFetch !== "function") return;
+
+        globalThis.fetch = async function(input, init){
+          const bt = bodyText(init);
+          const isVHCLS = /(^|[&?])action=VHCLS(&|$)/i.test(bt);
+
+          if (isVHCLS) {
+            const host = getHost(input);
+            const h = new Headers((init && init.headers) || (input && input.headers) || undefined);
+
+            const cur = String(h.get("cookie") || "").trim();
+            const ck  = readCookieHeaderSafe();
+
+            const curFlags = `ASP=${hasCookie(cur,"ASP.NET_SessionId")?1:0} TFL=${hasCookie(cur,"TFL_SESSION")?1:0} EULA=${hasCookie(cur,"EULA_APPROVED")?1:0} ROOT=${hasCookie(cur,"APPLICATION_ROOT_NODE")?1:0}`;
+            const jarFlags = `ASP=${hasCookie(ck,"ASP.NET_SessionId")?1:0} TFL=${hasCookie(ck,"TFL_SESSION")?1:0} EULA=${hasCookie(ck,"EULA_APPROVED")?1:0} ROOT=${hasCookie(ck,"APPLICATION_ROOT_NODE")?1:0}`;
+
+            if (ck) {
+              // FORÇA override sempre
+              h.set("cookie", ck);
+              console.log(`[VHCLS_FORCE_COOKIE] override host=${host} cookieLen=${ck.length} curLen=${cur.length} curFlags={${curFlags}} jarFlags={${jarFlags}}`);
+              init = Object.assign({}, init || {}, { headers: h });
+            } else {
+              console.log(`[VHCLS_FORCE_COOKIE] WARN host=${host} cookieLen=0 curLen=${cur.length} curFlags={${curFlags}}`);
+            }
+          }
+
+          return origFetch(input, init);
+        };
+      }catch(e){}
+    });
+
+  }catch(e){}
+})();
+
+
+
+
+/* === PATCH_C6C: JOBSERVER_FETCH timeout+log v1 ===
+ * Objetivo: detectar travas em chamadas ao Job Server (complete/fail/heartbeat).
+ * - Aplica somente quando host == host(JOB_SERVER_BASE_URL).
+ * - Loga apenas host+pathname, status e duração (sem query/headers).
+ * - Timeout padrão 20s (env JOBSERVER_FETCH_TIMEOUT_MS).
+ */
+(function(){
+  try{
+    if (globalThis.__JOBSERVER_FETCH_TIMEOUT_V1) return;
+    globalThis.__JOBSERVER_FETCH_TIMEOUT_V1 = true;
+
+    const base = process.env.JOB_SERVER_BASE_URL || "";
+    let jobHost = "";
+    try { jobHost = base ? (new URL(base)).host : ""; } catch(e) { jobHost = ""; }
+
+    if (!jobHost) {
+      console.log("[JOBSERVER_FETCH] WARN no JOB_SERVER_BASE_URL host");
+      return;
+    }
+
+    const install = () => {
+      const origFetch = globalThis.fetch;
+      if (typeof origFetch !== "function") return;
+
+      globalThis.fetch = async function(input, init){
+        let urlStr = "";
+        try { urlStr = (typeof input === "string") ? input : (input && input.url) ? input.url : ""; } catch(e) {}
+        let host = "", path = "";
+        try {
+          if (urlStr) { const u = new URL(urlStr); host = u.host; path = u.pathname; }
+        } catch(e) {}
+
+        if (host && host === jobHost) {
+          const ms = Number(process.env.JOBSERVER_FETCH_TIMEOUT_MS || 20000);
+          const ac = new AbortController();
+          const t = setTimeout(() => ac.abort(), ms);
+          const t0 = Date.now();
+          try{
+            const res = await origFetch(input, Object.assign({}, init || {}, { signal: ac.signal }));
+            console.log(`[JOBSERVER_FETCH] ok status=${res.status} ms=${Date.now()-t0} path=${path}`);
+            return res;
+          } catch(err){
+            const name = (err && err.name) ? err.name : "ERR";
+            console.log(`[JOBSERVER_FETCH] ERR name=${name} ms=${Date.now()-t0} path=${path}`);
+            throw err;
+          } finally {
+            clearTimeout(t);
+          }
+        }
+
+        return origFetch(input, init);
+      };
+    };
+
+    // tenta ser o “último wrapper”
+    setImmediate(install);
+  } catch(e){}
+})();
+
+
+
+
+/* __PATCH_LOGHOOK_PERSIST_VID_V1
+ * Objetivo: garantir que o VEHICLE_ID resgatado pelo resolve_by_plate seja persistido no payload,
+ * sem depender de ancoragem frágil no bundle.
+ * - JOB_TAP: quando fetch em /api/jobs/next retorna job, guarda globalThis.__JOB_PAYLOAD
+ * - LOGHOOK: quando aparecer "rescued VEHICLE_ID=123", escreve em __JOB_PAYLOAD.VEHICLE_ID/vehicle_id/vehicleId
+ * Logs: somente id e flags, sem vazar cookies/tokens.
+ */
+(function(){
+  try{
+    if (globalThis.__PATCH_LOGHOOK_PERSIST_VID_V1) return;
+    globalThis.__PATCH_LOGHOOK_PERSIST_VID_V1 = true;
+
+    // --- util ---
+    function safeStr(x){
+      try{
+        if (typeof x === "string") return x;
+        if (x && typeof x.message === "string") return x.message;
+        return JSON.stringify(x);
+      }catch(e){ return String(x); }
+    }
+
+    // --- JOB_TAP (/api/jobs/next) ---
+    const base = process.env.JOB_SERVER_BASE_URL || "";
+    let jobHost = "";
+    try { jobHost = base ? (new URL(base)).host : ""; } catch(e) { jobHost = ""; }
+
+    const wrapFetch = () => {
+      try{
+        const origFetch = globalThis.fetch;
+        if (typeof origFetch !== "function") return;
+
+        globalThis.fetch = async function(input, init){
+          const res = await origFetch(input, init);
+
+          try{
+            const urlStr = (typeof input === "string") ? input : (input && input.url) ? input.url : "";
+            if (urlStr && jobHost) {
+              const u = new URL(urlStr);
+              if (u.host === jobHost && /\/api\/jobs\/next\b/.test(u.pathname)) {
+                res.clone().json().then((data)=>{
+                  const job = data && (data.job || data);
+                  if (job && job.payload && typeof job.payload === "object") {
+                    globalThis.__JOB_PAYLOAD = job.payload;
+                    globalThis.__JOB_LAST = { id: job.id, type: job.type };
+                    // log mínimo
+                    const k = Object.keys(job.payload || {}).length;
+                    console.log(`[JOB_TAP] stored payload for job id=${job.id||"?"} keys=${k}`);
+                  }
+                }).catch(()=>{});
+              }
+            }
+          }catch(e){}
+
+          return res;
+        };
+      }catch(e){}
+    };
+
+    // tenta ser “último wrapper”
+    setImmediate(wrapFetch);
+
+    // --- LOGHOOK (persist VID quando ver o log do rescued) ---
+    if (!globalThis.__LOGHOOK_VID_INSTALLED) {
+      globalThis.__LOGHOOK_VID_INSTALLED = true;
+
+      const origLog = console.log.bind(console);
+
+      console.log = function(...args){
+        try{
+          const msg = args.map(safeStr).join(" ");
+          const m = msg.match(/resolve_by_plate:\s*rescued\s+VEHICLE_ID=(\d+)/);
+          if (m) {
+            const vid = m[1];
+            const p = globalThis.__JOB_PAYLOAD;
+            if (p && typeof p === "object") {
+              p.VEHICLE_ID = p.VEHICLE_ID || vid;
+              p.vehicle_id = p.vehicle_id || vid;
+              p.vehicleId  = p.vehicleId  || vid;
+
+              const plate = p.plate || p.PLATE || p.LICENSE_NMBR || p.license_nmbr;
+              if (plate) {
+                p.LICENSE_NMBR = p.LICENSE_NMBR || plate;
+                p.license_nmbr = p.license_nmbr || plate;
+              }
+
+              origLog(`[PATCH_U3] loghook persisted VEHICLE_ID=${vid}`);
+            } else {
+              origLog(`[PATCH_U3] loghook WARN no __JOB_PAYLOAD for VEHICLE_ID=${vid}`);
+            }
+          }
+        }catch(e){}
+        return origLog(...args);
+      };
+    }
+  }catch(e){}
+})();
+
+
+
+
+/* __PATCH_UNINSTALL_DIRECT_DEACTIVATE_V1
+ * Hotfix robusto: ao detectar no log "rescued VEHICLE_ID=xxxx" dentro de UNINSTALL,
+ * dispara imediatamente DEACTIVATE_VEHICLE_HIST via AppEngine_2_1.
+ * - Sem depender do step-list.
+ * - Força Cookie do cookiejar também no DEACTIVATE.
+ * - Loga só status/len/login=-1 (sem vazar cookies).
+ */
+(function(){
+  try{
+    if (globalThis.__PATCH_UNINSTALL_DIRECT_DEACTIVATE_V1) return;
+    globalThis.__PATCH_UNINSTALL_DIRECT_DEACTIVATE_V1 = true;
+
+    const fs = require("fs");
+    const COOKIEJAR_PATH = process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json";
+    const APPENGINE_2_1 = (process.env.HTML5_APPENGINE_2_1 || "https://html5.traffilog.com/AppEngine_2_1/default.aspx");
+
+    // guarda contexto do job atual
+    globalThis.__CUR_JOB_ID = globalThis.__CUR_JOB_ID || null;
+    globalThis.__CUR_SERVICE = globalThis.__CUR_SERVICE || null;
+
+    // anti-replay por job
+    globalThis.__UNINSTALL_DEACT_DONE = globalThis.__UNINSTALL_DEACT_DONE || Object.create(null);
+
+    function readCookieHeaderSafe(){
+      try{
+        if (!fs.existsSync(COOKIEJAR_PATH)) return "";
+        const raw = fs.readFileSync(COOKIEJAR_PATH, "utf8");
+        if (!raw) return "";
+        try{
+          const j = JSON.parse(raw);
+          if (j && typeof j.cookieHeader === "string") return j.cookieHeader.trim();
+          if (j && typeof j.cookie === "string") return j.cookie.trim();
+        }catch(e){
+          return String(raw).trim();
+        }
+      }catch(e){}
+      return "";
+    }
+
+    function bodyText(init){
+      try{
+        const b = init && init.body;
+        if (!b) return "";
+        if (typeof b === "string") return b;
+        if (typeof URLSearchParams !== "undefined" && b instanceof URLSearchParams) return b.toString();
+      }catch(e){}
+      return "";
+    }
+
+    // 1) fetch wrapper: forçar cookie no DEACTIVATE também
+    setImmediate(() => {
+      try{
+        const origFetch = globalThis.fetch;
+        if (typeof origFetch !== "function") return;
+
+        globalThis.fetch = async function(input, init){
+          const bt = bodyText(init);
+          const isDeactivate = /(^|[&?])action=DEACTIVATE_VEHICLE_HIST(&|$)/i.test(bt);
+
+          if (isDeactivate) {
+            const h = new Headers((init && init.headers) || (input && input.headers) || undefined);
+            const ck = readCookieHeaderSafe();
+            if (ck) {
+              h.set("cookie", ck);
+              console.log(`[DEACTIVATE_FORCE_COOKIE] override(cookieLen=${ck.length})`);
+              init = Object.assign({}, init || {}, { headers: h });
+            } else {
+              console.log("[DEACTIVATE_FORCE_COOKIE] WARN cookieLen=0");
+            }
+          }
+          return origFetch(input, init);
+        };
+      }catch(e){}
+    });
+
+    async function runDeactivate(vid){
+      try{
+        const jobId = globalThis.__CUR_JOB_ID || "unknown";
+        const key = String(jobId);
+        if (globalThis.__UNINSTALL_DEACT_DONE[key]) return;
+        globalThis.__UNINSTALL_DEACT_DONE[key] = true;
+
+        // tenta pegar placa do payload "tapado" (se existir)
+        const p = globalThis.__JOB_PAYLOAD || {};
+        const plate = p.LICENSE_NMBR || p.license_nmbr || p.plate || p.PLATE || "";
+
+        // body mínimo (URL-encoded)
+        const params = new URLSearchParams();
+        params.set("action", "DEACTIVATE_VEHICLE_HIST");
+        params.set("VERSION_ID", String(p.VERSION_ID || 2));
+        params.set("VEHICLE_ID", String(vid));
+        if (plate) params.set("LICENSE_NMBR", String(plate));
+        params.set("REASON_CODE", String(p.REASON_CODE || 5501));
+        params.set("DELIVER_CODE", String(p.DELIVER_CODE || 5511));
+
+
+  const __jobId = (globalThis && globalThis.__CUR_JOB_ID) ? globalThis.__CUR_JOB_ID : "";
+  console.log(`[UNINSTALL_DEACTIVATE] start job=${__jobId} vid=${vid} plateLen=${String(plate||"").length}`);
+  const __r = (typeof __va_deactivateVehicleHistCan === "function")
+    ? await __va_deactivateVehicleHistCan(vid, plate)
+    : await __va_appenginePost("DEACTIVATE_VEHICLE_HIST", {
+        VERSION_ID:"2", VEHICLE_ID:String(vid), LICENSE_NMBR:String(plate),
+        REASON_CODE:"5501", DELIVER_CODE:"5511"
+      }, "DEACTIVATE_FALLBACK_CANON");
+  console.log(`[UNINSTALL_DEACTIVATE] done status=${__r && __r.status} len=${__r && (__r.text||"").length} loginNeg=${__r && __r.loginNeg?1:0}`);
+      }catch(e){
+        console.log(`[UNINSTALL_DEACTIVATE] ERR ${(e && e.message)?e.message:e}`);
+      }
+    }
+
+    // 2) console hook: detectar GOT job e rescued VID
+    const prevLog = console.log;
+    console.log = function(...args){
+      try{
+        const msg = args.map(a => (typeof a === "string" ? a : (a && a.message) ? a.message : String(a))).join(" ");
+
+        // captura job atual (UNINSTALL)
+        let m = msg.match(/\[html5_v8\]\s+GOT job id=([0-9a-f]+)\s+service=([A-Z_]+)/i);
+        if (m) {
+          globalThis.__CUR_JOB_ID = m[1];
+          globalThis.__CUR_SERVICE = m[2];
+        }
+
+        // quando resgatar VEHICLE_ID em UNINSTALL -> dispara DEACTIVATE já
+        m = msg.match(/resolve_by_plate:\s*rescued\s+VEHICLE_ID=(\d+)/i);
+        if (m && String(globalThis.__CUR_SERVICE||"") === "UNINSTALL") {
+          const vid = m[1];
+          globalThis.__LAST_VEHICLE_ID = vid;
+          // fire-and-forget (não bloquear o log)
+          setTimeout(() => runDeactivate(vid), 0);
+        }
+      }catch(e){}
+      return prevLog.apply(console, args);
+    };
+
+  }catch(e){}
+})();
+
+
+
+
+/* __PATCH_DEACTIVATE_FORCE_COOKIE_V2
+ * Monta cookie header robusto do cookiejar (string | cookieHeader | cookies[] | map),
+ * e loga apenas flags (ASP/TFL/EULA/ROOT) + len, sem vazar valores.
+ */
+(function(){
+  try{
+    if (globalThis.__PATCH_DEACTIVATE_FORCE_COOKIE_V2) return;
+    globalThis.__PATCH_DEACTIVATE_FORCE_COOKIE_V2 = true;
+
+    const fs = require("fs");
+    const COOKIEJAR_PATH = process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json";
+
+    function hasCookie(cookieStr, name){
+      try{
+        return new RegExp("(^|;\\s*)" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=").test(cookieStr);
+      }catch(e){ return false; }
+    }
+
+    function buildCookieHeader(j){
+      if (!j) return "";
+      if (typeof j === "string") return j.trim();
+      if (typeof j.cookieHeader === "string") return j.cookieHeader.trim();
+      if (typeof j.cookie === "string") return j.cookie.trim();
+
+      // cookies array
+      if (Array.isArray(j.cookies)) {
+        const parts = [];
+        for (const c of j.cookies) {
+          if (!c) continue;
+          const name = String(c.name || c.key || c.n || "").trim();
+          const val  = String(c.value || c.v || "").trim();
+          if (name && val) parts.push(`${name}=${val}`);
+        }
+        return parts.join("; ");
+      }
+
+      // map-like
+      const map = j.cookies || j.jar || j;
+      if (map && typeof map === "object") {
+        const parts = [];
+        for (const k of Object.keys(map)) {
+          const v = map[k];
+          if (typeof v === "string" && v) parts.push(`${k}=${v}`);
+          else if (v && typeof v === "object" && typeof v.value === "string" && v.value) parts.push(`${k}=${v.value}`);
+        }
+        return parts.join("; ");
+      }
+      return "";
+    }
+
+    function readCookieHeaderSafe(){
+      try{
+        if (!fs.existsSync(COOKIEJAR_PATH)) return "";
+        const raw = fs.readFileSync(COOKIEJAR_PATH, "utf8");
+        if (!raw) return "";
+        try{
+          const j = JSON.parse(raw);
+          return buildCookieHeader(j);
+        }catch(e){
+          // pode ser header puro
+          return String(raw).trim();
+        }
+      }catch(e){}
+      return "";
+    }
+
+    function bodyText(init){
+      try{
+        const b = init && init.body;
+        if (!b) return "";
+        if (typeof b === "string") return b;
+        if (typeof URLSearchParams !== "undefined" && b instanceof URLSearchParams) return b.toString();
+      }catch(e){}
+      return "";
+    }
+
+    // instala “por último”
+    setTimeout(() => {
+      try{
+        const origFetch = globalThis.fetch;
+        if (typeof origFetch !== "function") return;
+
+        globalThis.fetch = async function(input, init){
+          const bt = bodyText(init);
+          const isDeactivate = /(^|[&?])action=DEACTIVATE_VEHICLE_HIST(&|$)/i.test(bt);
+
+          if (isDeactivate) {
+            const h = new Headers((init && init.headers) || (input && input.headers) || undefined);
+            const cur = String(h.get("cookie") || "").trim();
+            const ck  = readCookieHeaderSafe();
+
+            const curFlags = `ASP=${hasCookie(cur,"ASP.NET_SessionId")?1:0} TFL=${hasCookie(cur,"TFL_SESSION")?1:0} EULA=${hasCookie(cur,"EULA_APPROVED")?1:0} ROOT=${hasCookie(cur,"APPLICATION_ROOT_NODE")?1:0}`;
+            const jarFlags = `ASP=${hasCookie(ck,"ASP.NET_SessionId")?1:0} TFL=${hasCookie(ck,"TFL_SESSION")?1:0} EULA=${hasCookie(ck,"EULA_APPROVED")?1:0} ROOT=${hasCookie(ck,"APPLICATION_ROOT_NODE")?1:0}`;
+
+            if (ck) {
+              h.set("cookie", ck);
+              console.log(`[DEACTIVATE_FORCE_COOKIE_V2] override cookieLen=${ck.length} curLen=${cur.length} curFlags={${curFlags}} jarFlags={${jarFlags}}`);
+              init = Object.assign({}, init || {}, { headers: h });
+            } else {
+              console.log(`[DEACTIVATE_FORCE_COOKIE_V2] WARN cookieLen=0 curLen=${cur.length} curFlags={${curFlags}}`);
+            }
+          }
+
+          return origFetch(input, init);
+        };
+      }catch(e){}
+    }, 20);
+
+  }catch(e){}
+})();
+

@@ -22,3 +22,14 @@ node_modules/
 
 # backups locais
 *.bak_*
+
+# --- local backups / scratch (do not commit) ---
+dist/worker/*.bak*
+dist/worker/*.fix_*
+dist/worker/*.hotfix*
+dist/worker/*.relax_*
+dist/worker/*.vhcls_*
+tools/*.bak.*
+tools/sb_run_vm_softallow_RUN.js*
+Não
+Observação:
