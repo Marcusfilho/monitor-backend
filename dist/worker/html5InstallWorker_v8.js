@@ -1,5 +1,85 @@
 "use strict";
 
+// === PATCH_MWS_SAVEBASELINE_V2 ===
+// Nota: postcheck/act_load não são HTML; são XML do GET_VHCL_ACTIVATION_DATA_NEW (REFRESH).
+function mwsExtractActivationAttrs(xmlText) {
+  try {
+    if (!xmlText || typeof xmlText !== "string") return {};
+    var m = xmlText.match(/<DATA\s+[^>]*DATASOURCE="GET_VHCL_ACTIVATION_DATA_NEW"[^>]*\/>/i);
+    if (!m) return {};
+    var tag = m[0];
+    var attrs = {};
+    var reAttr = /\b([A-Za-z0-9_]+)="([^"]*)"/g;
+    var am;
+    while ((am = reAttr.exec(tag))) attrs[am[1]] = am[2];
+    return attrs;
+  } catch (e) { return {}; }
+}
+
+function mwsReadBaselineXml(jobId) {
+  try {
+    var fs = require("fs");
+    var cand = [
+      "/tmp/mws_act_load_resp_" + jobId + ".txt",
+      "/tmp/mws_postcheck_form_" + jobId + ".html",
+      "/tmp/mws_postcheck_resp_" + jobId + ".txt"
+    ];
+    for (var i=0;i<cand.length;i++){
+      try {
+        if (fs.existsSync(cand[i])) {
+          var t = fs.readFileSync(cand[i], "utf8");
+          if (t && t.indexOf("GET_VHCL_ACTIVATION_DATA_NEW") >= 0) return t;
+        }
+      } catch(e){}
+    }
+  } catch(e){}
+  return "";
+}
+
+function mwsEnrichSavePayloadFromBaseline(jobId, savePayload, baselineXmlText) {
+  try {
+    var payload = Object.assign({}, savePayload || {});
+    var needs = (!payload.ASSET_TYPE || !payload.FIELD_IDS || !payload.FIELD_VALUE || !payload.GROUP_ID);
+    if (!needs) return payload;
+
+    var xml = (baselineXmlText && typeof baselineXmlText === "string") ? baselineXmlText : "";
+    if (!xml || xml.indexOf("GET_VHCL_ACTIVATION_DATA_NEW") < 0) xml = mwsReadBaselineXml(jobId);
+
+    var base = mwsExtractActivationAttrs(xml);
+    var keep = {
+      VERSION_ID: payload.VERSION_ID,
+      VEHICLE_ID: payload.VEHICLE_ID,
+      LICENSE_NMBR: payload.LICENSE_NMBR,
+      DIAL_NUMBER: payload.DIAL_NUMBER,
+      INNER_ID: payload.INNER_ID
+    };
+
+    payload = Object.assign({}, base, payload);
+
+    // preserva o que o caller setou explicitamente
+    Object.keys(keep).forEach(function(k){
+      if (keep[k] !== undefined && keep[k] !== null) payload[k] = keep[k];
+    });
+
+    if (payload.VERSION_ID == null || payload.VERSION_ID === "") payload.VERSION_ID = "2";
+    return payload;
+  } catch (e) {
+    return savePayload || {};
+  }
+}
+
+function mwsSaveResponseHasError(text) {
+  try {
+    if (!text) return false;
+    if (/Action:\s*SAVE_VHCL_ACTIVATION_NEW\s*error\./i.test(text)) return true;
+    if (/<ERROR\b/i.test(text)) return true;
+    return false;
+  } catch (e) { return false; }
+}
+// === /PATCH_MWS_SAVEBASELINE_V2 ===
+/* PATCH_VHCLS_RESOLVE_ROBUST_V1 */
+/* FIX_MWS_COOKIEJAR_V1 */
+
 
 
 
@@ -246,7 +326,7 @@ function _parseVehicleIdFromVhclsXml(xml, licenseKey) {
     return { vehicleId: null, err: "unauthorized_or_vhcls_error" };
   }
 
-  const dataTags = xml.match(/<DATA[^>]*\/>/gi) || [];
+  const dataTags = xml.match(/<DATA\b[^>]*\/>/gi) || [];
   for (const tag of dataTags) {
     const lic = _normLicenseKey(_extractAttr(tag, "LICENSE_NMBR"));
     const vid = _extractAttr(tag, "VEHICLE_ID");
@@ -266,6 +346,21 @@ function _parseVehicleIdFromVhclsXml(xml, licenseKey) {
 }
 
 async function _vhclsResolveVehicleIdDirect(ctx, licenseKey) {
+  // PATCH_VHCLS_DIRECT_COOKIE_V3
+  // - request em /tmp/mws_vhcls_req_<JOB>.txt (url, license, jarPath, cookie_len, cookie_has_tfl, body...)
+  // - response em /tmp/mws_vhcls_<JOB>.txt (xml bruto)
+  // - payload VHCLS alinhado ao VHCLS_CANON: inclui VERSION_ID=2 + campos vazios comuns do HTML5
+  const fs = require("fs");
+
+  const jobIdRaw = (ctx && (ctx.jobId || ctx.id)) ? String(ctx.jobId || ctx.id) : "";
+  const jobId = jobIdRaw.replace(/[^a-zA-Z0-9_-]/g, "");
+  const reqPath = jobId ? ("/tmp/mws_vhcls_req_" + jobId + ".txt") : "";
+  const rspPath = jobId ? ("/tmp/mws_vhcls_" + jobId + ".txt") : "";
+
+  function writeSafe(p, content) {
+    try { if (p) fs.writeFileSync(p, String(content || ""), "utf8"); } catch (e) {}
+  }
+
   const html5Base =
     (ctx && (ctx.html5Base || ctx.html5_base || ctx.baseHtml5 || ctx.baseURLHtml5)) ||
     process.env.HTML5_BASE ||
@@ -276,39 +371,90 @@ async function _vhclsResolveVehicleIdDirect(ctx, licenseKey) {
 
   const jar = _readCookieHeaderFromJarFile(ctx);
   const cookie = String(jar.cookie || "").trim();
+  const cookieLen = cookie.length;
+  const hasTfl = /(^|;\s*)TFL_SESSION=/.test(cookie);
 
-  _vhclsLog(ctx, `[vhcls] direct: license=${licenseKey} jar=${jar.jarPath} exists=${jar.exists} hasCookie=${cookie && cookie.length > 0}`);
-  const body = new URLSearchParams({
+  const license = String(licenseKey || "").trim();
+
+  // payload “canon” (igual ao usado no resolve_by_plate via html5RunStep)
+  const params = new URLSearchParams({
     action: "VHCLS",
     REFRESH_FLG: "1",
-    LICENSE_NMBR: String(licenseKey || "")
-  }).toString();
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "accept": "*/*",
-
-      "origin": html5Base,
-      "referer": html5Base + "/",
-      "user-agent": "monitor-backend-worker/1.0"
-    },
-    body
+    LICENSE_NMBR: license,
+    CLIENT_DESCR: "",
+    OWNER_DESCR: "",
+    DIAL_NMBR: "",
+    INNER_ID: "",
+    VERSION_ID: "2"
   });
+  const body = params.toString();
 
-  const text = await res.text().catch(() => "");
-  _vhclsLog(ctx, `[vhcls] direct: http=${res.status} len=${(text && text.length) || 0}`);
+  const headers = {
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "accept": "*/*",
+    "x-requested-with": "XMLHttpRequest",
+    "origin": html5Base,
+    "referer": url,
+    "cookie": cookie,
+    "user-agent": "monitor-backend-worker/1.0"
+  };
 
-  const parsed = _parseVehicleIdFromVhclsXml(text, licenseKey);
+  // artefato de request (sem vazar cookie)
+  try {
+    const head = body.slice(0, 400) + (body.length > 400 ? "..." : "");
+    const reqTxt = [
+      "PATCH_VHCLS_DIRECT_COOKIE_V3",
+      "ts=" + (new Date()).toISOString(),
+      "url=" + url,
+      "license=" + license,
+      "jarPath=" + String(jar.jarPath || ""),
+      "jarExists=" + (jar.exists ? "1" : "0"),
+      "cookie_len=" + String(cookieLen),
+      "cookie_has_tfl=" + (hasTfl ? "1" : "0"),
+      "body_len=" + String(body.length),
+      "body_head=" + head
+    ].join("\n") + "\n";
+    writeSafe(reqPath, reqTxt);
+  } catch (e) {}
+
+  _vhclsLog(ctx, `[vhcls] direct_v3: license=${license} cookieLen=${cookieLen} hasTfl=${hasTfl?1:0} jar=${jar && jar.jarPath} exists=${jar && jar.exists}`);
+
+  const controller = new AbortController();
+  const timeoutMs = Number((ctx && ctx.vhclsTimeoutMs) || process.env.VHCLS_TIMEOUT_MS || 25000);
+  const to = setTimeout(() => { try { controller.abort(); } catch(e) {} }, timeoutMs);
+
+  let res = null;
+  let text = "";
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers,
+      body,
+      signal: controller.signal
+    });
+    text = await res.text().catch(() => "");
+  } catch (e) {
+    try { writeSafe(rspPath, "FETCH_ERR " + (e && (e.message || e.toString())) + "\n"); } catch(_) {}
+    throw e;
+  } finally {
+    try { clearTimeout(to); } catch (e) {}
+  }
+
+  // artefato de response
+  writeSafe(rspPath, text);
+
+  _vhclsLog(ctx, `[vhcls] direct_v3: http=${res ? res.status : "NA"} len=${(text && text.length) || 0} saved=${rspPath}`);
+
+  const parsed = _parseVehicleIdFromVhclsXml(text, license);
   if (parsed.err === "unauthorized_or_vhcls_error") {
-    const e = new Error("vhcls_unauthorized_or_error (session invalid)");
+    const e = new Error("vhcls_unauthorized_or_error (session invalid or action error)");
     e.code = "VHCLS_UNAUTH";
-    e.httpStatus = res.status;
+    e.httpStatus = res ? res.status : 0;
     throw e;
   }
   return parsed.vehicleId;
 }
+
 
 async function ensureVehicleIdByVhcls_(ctx, payload) {
   if (!payload) return null;
@@ -326,7 +472,7 @@ async function ensureVehicleIdByVhcls_(ctx, payload) {
   const plateRaw  = payload.plate || payload.placa || payload.license || payload.licensePlate || "";
   const serialRaw = payload.serial || payload.serie || payload.innerId || payload.INNER_ID || "";
 
-  const licenseKey = ((service === "INSTALL" || service === "UNINSTALL")) ? _normLicenseKey(serialRaw) : _normLicenseKey(plateRaw);
+  const licenseKey = (service === "INSTALL" && String(serialRaw||"").trim()) ? _normLicenseKey(serialRaw) : _normLicenseKey(plateRaw);
   if (!licenseKey) return null;
 
   const vid = await _vhclsResolveVehicleIdDirect(ctx, licenseKey);
@@ -538,7 +684,7 @@ try {
       globalThis.__LAST_FETCH_URL = u; // PATCH_A11
       globalThis.__LAST_FETCH_URL = u;
       const body = init && init.body != null ? String(init.body) : "";
-      const want = u.includes("AppEngine_2_1/default.aspx") && (body.includes("action=ASSET_BASIC_LOAD") || body.includes("action=ASSET_BASIC_SAVE"));
+      const want = u.includes("AppEngine_2_1/default.aspx") && (body.includes("action=ASSET_BASIC_LOAD") || body.includes("action=ASSET_BASIC_SAVE") || body.includes("action=GET_VHCL_ACTIVATION_DATA_NEW"));
 
       // chama o fetch anterior (que já inclui PATCH_C6)
       
@@ -660,7 +806,7 @@ return res;
         const txt = await res.clone().text();
         const attrs = __parseFirstTagAttributes(txt, "DATA") || __parseFirstTagAttributes(txt, "ASSET") || __parseFirstTagAttributes(txt, "VHCL") || null;
 
-        const __capKey = body.includes("action=ASSET_BASIC_SAVE") ? "ASSET_BASIC_SAVE" : "ASSET_BASIC_LOAD";
+        const __capKey = body.includes("action=ASSET_BASIC_SAVE") ? "ASSET_BASIC_SAVE" : (body.includes("action=GET_VHCL_ACTIVATION_DATA_NEW") ? "GET_VHCL_ACTIVATION_DATA_NEW" : "ASSET_BASIC_LOAD");
         __CAPTURES[__capKey] = {
           ts: Date.now(),
           url: u,
@@ -895,12 +1041,28 @@ function __va_parseVehicleIdFromVhcls(txt, plate){
     const m1 = t.match(re1);
     if (m1 && m1[1]) return m1[1];
   }
-  const m2 = t.match(/VEHICLE_ID="(\d+)"/i);
+  const m2 = t.match(/VEHICLE_ID\s*=\s*["\']?(\d+)/i);
   return (m2 && m2[1]) ? m2[1] : null;
 }
 async function __va_vhclsRefresh(plate){
   const pl = String(plate||"").trim();
-  const r = await __va_appenginePost("VHCLS", { REFRESH_FLG:"1", LICENSE_NMBR:pl }, "VHCLS_CANON");
+  let r = await __va_appenginePost("VHCLS", { REFRESH_FLG:"1", LICENSE_NMBR:pl }, "VHCLS_CANON");;
+  // PATCH_VA1_VHCLS_RETRY_LOGINNEG_V1
+  try {
+    if (r && r.loginNeg) {
+      console.log('[html5_v8] [VA1] VHCLS_CANON loginNeg=1 -> forcing relogin + retry');
+      try {
+        const raw = __va_readJarRaw();
+        const mm = __va_parseJarToMap(raw);
+        try { delete mm.TFL_SESSION; } catch(e) {}
+        __va_writeJarMap(mm);
+      } catch(e) {}
+      try { globalThis.__HTML5_HAS_TFL = false; } catch(e) {}
+      try { if (typeof __ensureTflSession === "function") await __ensureTflSession(); } catch(e) {}
+      r = await __va_appenginePost("VHCLS", { REFRESH_FLG:"1", LICENSE_NMBR:pl }, "VHCLS_CANON_RETRY");
+    }
+  } catch(e) {}
+
   const head = String(r.text||"").slice(0, 900); // não tem segredo aqui; resposta é pública, mas limita tamanho
   return { plate:pl, status:r.status, len:(r.text||"").length, loginNeg:r.loginNeg, vehicleId:r.vehicleId, jarFlags:r.jarFlags, head };
 }
@@ -990,7 +1152,7 @@ async function __ensureTflSession() {
     const names = new Set();
     try {
       const r = String(raw || '');
-      for (const x of (r.match(/([A-Z0-9_]{3,})\s*=/g) || [])) {
+      for (const x of (r.match(/\b([A-Z0-9_]{3,})\s*=/g) || [])) {
         names.add(x.replace(/\s*=.*$/,'').toUpperCase());
       }
       for (const m of r.matchAll(/"name"\s*:\s*"([A-Z0-9_]{3,})"/gi)) if (m && m[1]) names.add(String(m[1]).toUpperCase());
@@ -1024,7 +1186,7 @@ let raw2 = '';
     const names2 = new Set();
     try {
       const r = String(raw2 || '');
-      for (const x of (r.match(/([A-Z0-9_]{3,})\s*=/g) || [])) {
+      for (const x of (r.match(/\b([A-Z0-9_]{3,})\s*=/g) || [])) {
         names2.add(x.replace(/\s*=.*$/,'').toUpperCase());
       }
       for (const m of r.matchAll(/"name"\s*:\s*"([A-Z0-9_]{3,})"/gi)) if (m && m[1]) names2.add(String(m[1]).toUpperCase());
@@ -1091,9 +1253,49 @@ function ensureCookieDefaults(cookieHeader){
 async function loadCookieJar(){
   try {
     const raw = await fsp.readFile(COOKIEJAR_PATH, "utf-8");
-    const j = JSON.parse(raw);
-    return { cookie: String(j.cookie || ""), updatedAt: j.updatedAt || null };
-  } catch { return { cookie: "", updatedAt: null }; }
+    let j = null;
+    try { j = JSON.parse(raw); } catch (_) { return { cookie: "", updatedAt: null }; }
+
+    // formato canônico: {cookie, keys, updatedAt, meta}
+    if (j && typeof j === "object" && typeof j.cookie === "string") {
+      return { cookie: String(j.cookie || ""), updatedAt: j.updatedAt || null };
+    }
+
+    // formato: {cookies:[{name,value},...]}
+    if (j && typeof j === "object" && Array.isArray(j.cookies)) {
+      const parts = [];
+      for (const c of j.cookies) {
+        if (c && c.name && (c.value !== undefined)) parts.push(String(c.name) + "=" + String(c.value));
+      }
+      return { cookie: parts.join("; "), updatedAt: null };
+    }
+
+    // formato: [{name,value},...]
+    if (Array.isArray(j)) {
+      const parts = [];
+      for (const c of j) {
+        if (c && c.name && (c.value !== undefined)) parts.push(String(c.name) + "=" + String(c.value));
+      }
+      return { cookie: parts.join("; "), updatedAt: null };
+    }
+
+    // formato "map": {TFL_SESSION:"..", ASP.NET_SessionId:"..", ...}
+    if (j && typeof j === "object") {
+      const skip = new Set(["cookie","keys","updatedAt","meta","cookies"]);
+      const parts = [];
+      for (const k of Object.keys(j)) {
+        if (skip.has(k)) continue;
+        const v = j[k];
+        if (v === undefined || v === null) continue;
+        if (typeof v === "string" || typeof v === "number") parts.push(String(k) + "=" + String(v));
+      }
+      return { cookie: parts.join("; "), updatedAt: null };
+    }
+
+    return { cookie: "", updatedAt: null };
+  } catch (e) {
+    return { cookie: "", updatedAt: null };
+  }
 }
 async function saveCookieJar(cookieHeader, meta){
   const cookie = ensureCookieDefaults(cookieHeader || "");
@@ -1144,7 +1346,7 @@ async function fetchWithCookies(url, { method="GET", headers={}, body=null } = {
       try { __rawText = await res.text(); } catch (_) {}
       // mantém uma cópia acessível para quem consome o retorno
 cookie = mergeCookies(cookie, extractSetCookies(res.headers));
-    const text = await res.text().catch(() => "");
+    const text = __rawText || "";
     return { status: res.status, text, cookie, headers: res.headers };
   } finally { clearTimeout(t); }
 }
@@ -1405,7 +1607,7 @@ function ensureCustomField1_(fields, payload){
 }
 
 function buildSaveActivationFields(payload){
-  const serial = String(payload.serial || payload.DIAL_NUMBER || payload.INNER_ID || "").trim();
+  const serial = String(payload.serial || payload.serial_new || payload.SERIAL_NEW || payload.DIAL_NUMBER || payload.INNER_ID || "").trim();
   const plate  = String(payload.plate || payload.LICENSE_NMBR || "").trim();
   const installationDate = String(payload.installationDate || payload.INSTALLATION_DATE || "").trim();
   const assetType = payload.assetType != null ? String(payload.assetType) : "";
@@ -1568,7 +1770,7 @@ async function html5CallFormAction(actionName, fields, cookieHeader){
   
   if (String(f.action) === "ASSET_BASIC_SAVE") ensureAssetBasicSaveDefaults(f);
 const body = encodeForm(f);
-  const cookieFixed = ensureCookieDefaults(cookieHeader || "");
+  let cookieFixed = ensureCookieDefaults(cookieHeader || "");
 
   const r = await fetchWithCookies(HTML5_ACTION_URL, {
     method:"POST",
@@ -1693,6 +1895,185 @@ function stepOk(stepRun){
   return true;
 }
 
+
+// [VA3.1] Robust form parser for GET_VHCL_ACTIVATION_DATA_NEW baseline (input/select/textarea)
+function __va_htmlDecode(s){
+  const t = String(s == null ? "" : s);
+  return t
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);/g, (_, n) => {
+      const c = Number(n);
+      return Number.isFinite(c) ? String.fromCharCode(c) : _;
+    });
+}
+function __va_getAttr(tag, name){
+  const re = new RegExp(name + String.raw`\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`, "i");
+  const m = re.exec(String(tag || ""));
+  return __va_htmlDecode(m ? (m[1] || m[2] || m[3] || "") : "");
+}
+function __va_parseFormFieldsFromHtml(html){
+  const t = String(html || "");
+  const out = {};
+
+  // INPUTs
+  const reInp = /<input\b[^>]*>/gi;
+  let m;
+  while ((m = reInp.exec(t))) {
+    const tag = m[0];
+    const name = __va_getAttr(tag, "name");
+    if (!name) continue;
+
+    const type = String(__va_getAttr(tag, "type") || "").toLowerCase();
+    if (type === "checkbox" || type === "radio") {
+      if (!/\bchecked\b/i.test(tag)) continue;
+    }
+    const value = __va_getAttr(tag, "value");
+    out[name] = value;
+  }
+
+  // TEXTAREA
+  const reTa = /<textarea\b[^>]*name\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/textarea>/gi;
+  while ((m = reTa.exec(t))) {
+    const name = __va_htmlDecode(m[1] || m[2] || m[3] || "");
+    if (!name) continue;
+    const value = __va_htmlDecode(m[4] || "").replace(/\r\n/g, "\n");
+    out[name] = value;
+  }
+
+  // SELECT (capture selected option value)
+  const reSel = /<select\b[^>]*name\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/select>/gi;
+  while ((m = reSel.exec(t))) {
+    const name = __va_htmlDecode(m[1] || m[2] || m[3] || "");
+    if (!name) continue;
+
+    const inner = m[4] || "";
+    let val = "";
+
+    // try selected option
+    const reOpt = /<option\b[^>]*>([\s\S]*?)<\/option>/gi;
+    let mo;
+    let found = false;
+    while ((mo = reOpt.exec(inner))) {
+      const optTag = mo[0];
+      if (/\bselected\b/i.test(optTag)) {
+        val = __va_getAttr(optTag, "value");
+        if (!val) val = __va_htmlDecode(mo[1] || "").trim();
+        found = true;
+        break;
+      }
+    }
+
+    // fallback: first option
+    if (!found) {
+      reOpt.lastIndex = 0;
+      mo = reOpt.exec(inner);
+      if (mo) {
+        val = __va_getAttr(mo[0], "value");
+        if (!val) val = __va_htmlDecode(mo[1] || "").trim();
+      }
+    }
+
+    out[name] = val;
+  }
+
+  return out;
+}
+// [VA3.1] end parser
+
+// [VA3] Activation baseline load + swap save builder (keep existing fields)
+async function __va_getActivationBaseline(vehicleId){
+  const vid = String(vehicleId || "").trim();
+  if (!vid) return { ok:false, status:0, len:0, loginNeg:false, attrs:null, jarFlags:"", text:"" };
+
+  const r = await __va_appenginePost("GET_VHCL_ACTIVATION_DATA_NEW", { VEHICLE_ID: vid }, "ACTIVATION_LOAD");
+
+  let aTag = null;
+  try { aTag = __parseFirstTagAttributes(r.text, "DATA"); } catch(e) {}
+  if (!aTag) { try { aTag = __parseFirstTagAttributes(r.text, "VHCL"); } catch(e) {} }
+
+  let aForm = null;
+  try { aForm = __va_parseFormFieldsFromHtml(r.text); } catch(e) {}
+
+  let attrs = null;
+  try {
+    const merged = {};
+    if (aTag && typeof aTag === "object") {
+      for (const k of Object.keys(aTag)) merged[k] = (aTag[k] == null) ? "" : String(aTag[k]);
+    }
+    if (aForm && typeof aForm === "object") {
+      for (const k of Object.keys(aForm)) merged[k] = (aForm[k] == null) ? "" : String(aForm[k]);
+    }
+    if (Object.keys(merged).length) attrs = merged;
+  } catch(e) {}
+
+  const cnt = attrs ? Object.keys(attrs).length : 0;
+  console.log(`[html5_v8] [VA3] ACTIVATION_LOAD status=${r.status} len=${(r.text||"").length} loginNeg=${r.loginNeg?1:0} attrs=${cnt} jarFlags=${r.jarFlags||""}`);
+  return { ...r, attrs };
+}
+
+function __va_buildSwapSaveFields(payload, baselineAttrs){
+  const f = {};
+  const base = (baselineAttrs && typeof baselineAttrs === "object") ? baselineAttrs : {};
+  for (const k of Object.keys(base)) f[k] = (base[k] === null || base[k] === undefined) ? "" : String(base[k]);
+
+  // Completa somente CLIENT_ID a partir do ASSET_BASIC_LOAD (quando disponível).
+  // (Não inferir GROUP_ID / VEHICLE_TYPE aqui — baseline do Cadastro é a fonte de verdade.)
+  const attrs = (payload && payload.__assetLoadAttrs && typeof payload.__assetLoadAttrs === "object") ? payload.__assetLoadAttrs : {};
+  if (!f.CLIENT_ID && attrs.CLIENT_ID != null) f.CLIENT_ID = String(attrs.CLIENT_ID);
+
+  const vid = String((payload && (payload.vehicle_id || payload.vehicleId || payload.VEHICLE_ID)) || f.VEHICLE_ID || "").trim();
+  const plate = String((payload && (payload.plate || payload.LICENSE_NMBR || payload.license || payload.licensePlate)) || f.LICENSE_NMBR || "").trim();
+  const serialNew = String((payload && (payload.serial_new || payload.serialNew || payload.new_serial || payload.SERIAL_NEW || payload.serial || payload.inner_id || payload.INNER_ID || payload.unit || payload.UNIT)) || "").trim();
+
+  if (vid) f.VEHICLE_ID = vid;
+  if (plate) f.LICENSE_NMBR = plate;
+
+  if (serialNew) {
+    f.DIAL_NUMBER = serialNew;
+    f.INNER_ID = serialNew;
+    if (Object.prototype.hasOwnProperty.call(f, "UNIT")) f.UNIT = serialNew;
+    if (Object.prototype.hasOwnProperty.call(f, "UNIT_NUMBER")) f.UNIT_NUMBER = serialNew;
+    if (Object.prototype.hasOwnProperty.call(f, "UNIT_SN")) f.UNIT_SN = serialNew;
+  }
+
+  // defaults mínimos (somente quando ausente)
+  try {
+    if (!f.MILAGE_SOURCE_ID) f.MILAGE_SOURCE_ID = "5067";
+    if (!f.WARRANTY_PERIOD_ID) f.WARRANTY_PERIOD_ID = "1";
+    if (!f.UNIT_TYPE_ID) f.UNIT_TYPE_ID = "1";
+
+    if (!f.INSTALLATION_DATE) {
+      if (typeof __fmtDDMMYYYY === "function") f.INSTALLATION_DATE = __fmtDDMMYYYY(new Date());
+    }
+    if (!f.WARRANTY_START_DATE && f.INSTALLATION_DATE) f.WARRANTY_START_DATE = f.INSTALLATION_DATE;
+    if (!f.LOG_UNIT_DATA_UNTIL_DATE && f.INSTALLATION_DATE) f.LOG_UNIT_DATA_UNTIL_DATE = f.INSTALLATION_DATE;
+  } catch(e){}
+
+  f.action = "SAVE_VHCL_ACTIVATION_NEW";
+  if (f.VERSION_ID === undefined) f.VERSION_ID = "2";
+
+  // Custom fields: manter exatamente como o baseline devolveu.
+  // Só remover se o job pedir explicitamente (payload.strip_fields=1).
+  const wantStrip = !!(payload && (payload.strip_fields === 1 || payload.strip_fields === "1" || payload.strip_fields === true));
+  if (wantStrip) {
+    try { delete f.FIELD_IDS; } catch(e){}
+    try { delete f.FIELD_VALUE; } catch(e){}
+    try { delete f.FIELD_ID; } catch(e){}
+    try { delete f.field_id; } catch(e){}
+    try { delete f.field_value; } catch(e){}
+  }
+
+  return f;
+}
+
+
 function normService(v){
   const s = String(v || "").trim().toUpperCase();
   if (s === "DESINSTALACAO" || s === "DESINSTALAÇÃO") return "UNINSTALL";
@@ -1739,6 +2120,7 @@ function buildStepsForService(service, payload){
         REASON_CODE: String(reason),
         DELIVER_CODE: String(deliver),
         COMMENTS: String(comments),
+        LICENSE_NMBR: String(payload.plate || payload.LICENSE_NMBR || payload.license || payload.licensePlate || ""),
         VEHICLE_ID: String(vId),
         action: "DEACTIVATE_VEHICLE_HIST",
         VERSION_ID: "2"
@@ -1775,14 +2157,28 @@ function buildStepsForService(service, payload){
 
   if (service === "MAINT_WITH_SWAP") {
     if (!vId) return [];
-    const newSerial = payload.serial || payload.inner_id || payload.INNER_ID || payload.unit || payload.UNIT;
+    const newSerial = (
+      payload.serial_new || payload.serialNew || payload.new_serial || payload.SERIAL_NEW ||
+      payload.serial || payload.inner_id || payload.INNER_ID || payload.unit || payload.UNIT
+    );
     const cur = payload.__assetLoadAttrs && (payload.__assetLoadAttrs.UNIT || payload.__assetLoadAttrs.INNER_ID);
     if (cur && newSerial && String(cur) === String(newSerial)) return []; // já está com o serial desejado
     if (!newSerial) return [];
+
+    // compat: builder legado lê payload.serial
+    if (!payload.serial) payload.serial = String(newSerial);
+
     const steps = [];
     const d = mkDeactivate("swap_deactivate_old", "swap");
     if (d && !payload.skip_deactivate) steps.push(d);
-    steps.push(normalizeStep({ label: "swap_activate", useBuilder: true }, payload));
+
+    // Preferir baseline do GET_VHCL_ACTIVATION_DATA_NEW para manter campos existentes
+    if (payload.__activationBaselineAttrs && typeof payload.__activationBaselineAttrs === "object") {
+      const f = __va_buildSwapSaveFields(payload, payload.__activationBaselineAttrs);
+      steps.push(normalizeStep({ label: "swap_activate", action: "SAVE_VHCL_ACTIVATION_NEW", fields: f }, payload));
+    } else {
+      steps.push(normalizeStep({ label: "swap_activate", useBuilder: true }, payload));
+    }
     return steps;
   }
 
@@ -1871,6 +2267,22 @@ async function main(){
       (_p.serial_new ?? _p.serialNew ?? _p.new_serial ?? _p.SERIAL_NEW ?? "");
     if (!_p.serial_new && _rawSerialNew) _p.serial_new = String(_rawSerialNew).trim();
 
+    // PATCH_MWS_DEFINITIVE_V1_SERIALMAP: MAINT_WITH_SWAP aceita serial_new como serial efetivo
+    try {
+      const __svc = String(_p.service || _p.SERVICE || "").toUpperCase();
+      if (__svc === "MAINT_WITH_SWAP") {
+        if (!_p.serial && _p.serial_new) _p.serial = _p.serial_new;
+        if (!_p.inner_id && _p.serial) _p.inner_id = _p.serial;
+        if (!_p.INNER_ID && _p.serial) _p.INNER_ID = _p.serial;
+      }
+    } catch(e) {}
+
+    // PATCH_MWS_SERIALMAP_IN_NORMALIZE_V1: se app enviar só serial_new, tratar como serial
+    if (!_p.serial && _p.serial_new) _p.serial = _p.serial_new;
+    if (!_p.inner_id && _p.serial) _p.inner_id = _p.serial;
+    if (!_p.INNER_ID && _p.serial) _p.INNER_ID = _p.serial;
+
+
     // vehicle_id aliases -> payload.vehicle_id / payload.VEHICLE_ID
     const _rawVid = (_p.vehicle_id ?? _p.vehicleId ?? _p.VEHICLE_ID ?? _p.VEHICLEID ?? "");
     if (!_p.vehicle_id && _rawVid) _p.vehicle_id = String(_rawVid).trim();
@@ -1884,10 +2296,470 @@ async function main(){
     console.log("[html5_v8] WARN normalize payload failed:", e && (e.message || e.toString()));
   }
   // === END PATCH_R_PLATE_RESOLVE_V1 ===
-const service = normService(payload.service);
+const service = normService(payload.service || payload.SERVICE || payload.servico || payload.serviceType || payload.service_type);
       const hasSteps = Array.isArray(payload.html5Steps) && payload.html5Steps.length > 0;
 
       console.log(`[html5_v8] GOT job id=${id} service=${service || "?"}`);
+
+/* PATCH_MWS_CANON_FLOW_V1
+ * MAINT_WITH_SWAP canônico:
+ * VHCLS(plate->vehicle_id) + DEACTIVATE + GET_VHCL_ACTIVATION_DATA_NEW + SAVE (troca só serial)
+ * Bypass total dos patches U3/steps quando service=MAINT_WITH_SWAP.
+ */
+try {
+  if (service === "MAINT_WITH_SWAP") {
+    const plate = String(payload.plate || payload.LICENSE_NMBR || payload.license_nmbr || payload.PLATE || "").trim().toUpperCase();
+    const newSerial = String(
+      payload.serial_new || payload.serialNew || payload.new_serial || payload.SERIAL_NEW ||
+      payload.serial || payload.inner_id || payload.INNER_ID || payload.unit || payload.UNIT || ""
+    ).trim();
+
+    if (!plate) throw new Error("mws_missing_plate");
+    if (!newSerial) throw new Error("mws_missing_serial_new");
+
+    // garante aliases (para logs/consistência)
+    payload.serial = newSerial;
+    payload.serial_new = payload.serial_new || newSerial;
+    payload.inner_id = payload.inner_id || newSerial;
+    payload.INNER_ID = payload.INNER_ID || newSerial;
+
+    // 1) Resolve VEHICLE_ID (prefer payload.*; fallback VHCLS canônico)
+    let vid = Number(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || 0);
+    let vh = null;
+    if (!vid) {
+      // PATCH_PLATEONLY_RESOLVE_VID_V1: resolve VEHICLE_ID por placa/serial via VHCLS direto (gera /tmp/mws_vhcls_<JOB>.txt)
+      try {
+        const ctx = { log: (m)=>console.log(String(m)), jobId: id };
+        const vv = await ensureVehicleIdByVhcls_(ctx, payload);
+        if (vv) vid = Number(vv||0);
+      } catch(e) {}
+
+      // fallback: método antigo (VA1) — também salva por job
+      if (!vid) {
+        vh = await __va_appenginePost("VHCLS", { REFRESH_FLG: "1", LICENSE_NMBR: plate }, "MWS_VHCLS");
+        try { require("fs").writeFileSync(`/tmp/mws_vhcls_${id}.txt`, String(vh.text||""), "utf8"); } catch(e) {}
+        const mt = String(vh.text || "").match(/VEHICLE_ID\s*=\s*["\']?(\d+)/i);
+        vid = Number(vh.vehicleId || (mt && mt[1]) || 0);
+      }
+      // PATCH_PLATEONLY_VHCLS_VHNULL_GUARD: não acessar vh.text quando vh==null
+      if (!vid && vh) {
+        const mt = String(vh.text || "").match(/VEHICLE_ID\s*=\s*["\']?(\d+)/i);
+        vid = Number(vh.vehicleId || (mt && mt[1]) || 0);
+      }
+    }
+    if (!vid) {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        plate,
+        serial_new: newSerial,
+        error: "mws_vehicle_id_not_found",
+        vhcls: vh ? { http: vh.status, loginNeg: vh.loginNeg ? 1 : 0, head: safeSnippet(vh.text, 220) } : null
+      });
+      continue;
+    }
+
+    payload.vehicle_id = vid; payload.VEHICLE_ID = vid; payload.vehicleId = vid;
+
+    if (!EXECUTE_HTML5) {
+      await completeJobLogged(id, "success", { dryRun: true, flow: "MAINT_WITH_SWAP", plate, vehicle_id: vid, serial_new: newSerial });
+      continue;
+    }
+
+    // 2) DEACTIVATE (desinstala serial antigo daquele vehicle_id)
+    const de = await __va_appenginePost("DEACTIVATE_VEHICLE_HIST", {
+      VERSION_ID: "2",
+      VEHICLE_ID: String(vid),
+      LICENSE_NMBR: plate,
+      INSTALLER_NAME: String(payload.installer_name || payload.installer || payload.INSTALLER_NAME || "installer"),
+      COMMENTS: String(payload.comments || payload.note || payload.notes || "swap"),
+      REASON_CODE: "5501",
+      DELIVER_CODE: "5511"
+    }, "MWS_DEACTIVATE");
+
+    // MWS_DEACTIVATE_POSTCHECK_V1: detectar "Action error" mesmo com HTTP 200
+    try {
+      const fs = require("fs");
+      fs.writeFileSync(`/tmp/mws_deactivate_resp_${id}.txt`, de.text || "", "utf8");
+    } catch (e) {}
+    const deText = String(de.text || "");
+    const deIsActionError =
+      /<TEXT>\s*Action:\s*DEACTIVATE_VEHICLE_HIST\s*error/i.test(deText) ||
+      /DEACTIVATE_VEHICLE_HIST\s*error/i.test(deText) ||
+      /<ERROR\b/i.test(deText);
+    if (deIsActionError) {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        plate, vehicle_id: vid, serial_new: newSerial,
+        error: "mws_deactivate_action_error",
+        http: de.status,
+        head: safeSnippet(de.text, 220)
+      });
+      continue;
+    }
+    if (de.loginNeg) throw new Error("mws_deactivate_loginneg");
+
+    // 3) Carrega o form com TODOS os campos atuais (após desinstalar, serial fica vazio, resto permanece)
+    const lo = await __va_appenginePost("GET_VHCL_ACTIVATION_DATA_NEW", {
+      VERSION_ID: "2",
+      VEHICLE_ID: String(vid)
+    }, "MWS_ACT_LOAD");
+    if (lo.loginNeg) throw new Error("mws_activation_load_loginneg");
+
+    // dump raw baseline (GET_VHCL_ACTIVATION_DATA_NEW)
+    try { const fs = require("fs"); fs.writeFileSync(`/tmp/mws_act_load_resp_${id}.txt`, lo.text || "", "utf8"); } catch (e) {}
+
+    // Parser robusto de form (input/select/textarea) para map — preserva valores prefill
+    // === PATCH_MWS_FORM_PARSER_V5 ===
+    const base = (function(html){
+      const out = {};
+      const t = String(html || "");
+
+      const decode = (v) => String(v || "")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">");
+
+      const getAttr = (tag, key) => {
+        const re = new RegExp("\\b" + key + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", "i");
+        const m = re.exec(tag);
+        return m ? (m[1] || m[2] || m[3] || "") : "";
+      };
+
+      // inputs
+      const inRe = /<input\b[^>]*>/ig;
+      let m;
+      while ((m = inRe.exec(t))) {
+        const tag = m[0];
+        const nm = getAttr(tag, "name");
+        if (!nm) continue;
+        const typ = String(getAttr(tag, "type") || "").toLowerCase();
+        const checked = /\bchecked\b/i.test(tag);
+
+        
+        const disabled = /\bdisabled\b/i.test(tag);
+        if (disabled) continue;
+        if (typ === "submit" || typ === "button" || typ === "image" || typ === "reset" || typ === "file") continue;
+if (typ === "checkbox" || typ === "radio") {
+          if (!checked) continue; // browser só envia se marcado
+          const v = getAttr(tag, "value") || "on";
+          out[nm] = decode(v);
+          continue;
+        }
+
+        const v = getAttr(tag, "value") || "";
+        out[nm] = decode(v);
+      }
+
+      // selects
+      const selRe = /<select\b[^>]*name\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))[^>]*>([\s\S]*?)<\/select>/ig;
+      let sm;
+      while ((sm = selRe.exec(t))) {
+        const nm = sm[1] || sm[2] || sm[3] || "";
+        if (!nm) continue;
+        const inner = sm[4] || "";
+
+        // selected option, fallback first option
+        let opt = inner.match(/<option\b[^>]*\bselected\b[^>]*>/i) || inner.match(/<option\b[^>]*>/i);
+        if (!opt) { out[nm] = ""; continue; }
+
+        const tag = opt[0];
+        let v = getAttr(tag, "value");
+        if (!v) {
+          // tenta texto da option
+          const mtxt = inner.match(/<option\b[^>]*\bselected\b[^>]*>([\s\S]*?)<\/option>/i) ||
+                       inner.match(/<option\b[^>]*>([\s\S]*?)<\/option>/i);
+          v = mtxt ? String(mtxt[1] || "").replace(/<[^>]+>/g, "").trim() : "";
+        }
+        out[nm] = decode(v);
+      }
+
+      // textareas
+      const taRe = /<textarea\b[^>]*name\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))[^>]*>([\s\S]*?)<\/textarea>/ig;
+      let tm;
+      while ((tm = taRe.exec(t))) {
+        const nm = tm[1] || tm[2] || tm[3] || "";
+        if (!nm) continue;
+        const v = String(tm[4] || "").replace(/\r\n/g, "\n");
+        out[nm] = decode(v);
+      }
+
+            // PATCH_MWS_SELECT_TEXTAREA_V3 — capturar campos pré-preenchidos do form (select/textarea)
+      try {
+        function _mwsDec(v){
+          return String(v || "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">");
+        }
+
+        // <textarea name="X">...</textarea>
+        const taRe = /<textarea\b[^>]*\bname\s*=\s*["']?([^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/textarea>/ig;
+        let tm;
+        while ((tm = taRe.exec(t))) {
+          const nm = tm[1];
+          if (!nm) continue;
+          out[nm] = _mwsDec((tm[2] || "").trim());
+        }
+
+        // <select name="X"> ... <option selected value="V"> ...
+        const selRe = /<select\b[^>]*\bname\s*=\s*["']?([^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/select>/ig;
+        let sm;
+        while ((sm = selRe.exec(t))) {
+          const nm = sm[1];
+          if (!nm) continue;
+          const body = sm[2] || "";
+
+          // option selected, fallback first option
+          let opt = (body.match(/<option\b[^>]*selected[^>]*>/i) || [])[0];
+          if (!opt) opt = (body.match(/<option\b[^>]*>/i) || [])[0];
+          if (!opt) continue;
+
+          // value="..."
+          const mv = opt.match(/\bvalue\s*=\s*["']([^"']*)["']/i);
+          const val = _mwsDec((mv && mv[1]) ? mv[1] : "");
+          out[nm] = val;
+        }
+      } catch(e) {}
+return out;
+    })(lo.text);
+
+    // PATCH_MWS_XML_BASE_MERGE_V1: baseline real vem como XML attrs (<DATA .../>)
+    try {
+      const __ax = mwsExtractActivationAttrs(String(lo.text || ""));
+      if (__ax && typeof __ax === "object" && Object.keys(__ax).length) {
+        for (const k of Object.keys(__ax)) {
+          const v = (__ax[k] == null) ? "" : String(__ax[k]);
+          // sempre sobrescreve estes (são críticos pro SAVE)
+          if (k === "ASSET_TYPE" || k === "FIELD_IDS" || k === "FIELD_VALUE" || k === "GROUP_ID") {
+            base[k] = v;
+            continue;
+          }
+          // só preenche se estiver vazio
+          if (base[k] === undefined || base[k] === null || String(base[k]).trim() === "") base[k] = v;
+        }
+      }
+    } catch(e) {}
+
+    // === /PATCH_MWS_FORM_PARSER_V5 ===
+
+    // 4) Override só o serial + garantir ids básicos
+    base.VERSION_ID = String(base.VERSION_ID || 2);
+    base.VEHICLE_ID = String(vid);
+    base.LICENSE_NMBR = String(base.LICENSE_NMBR || plate || "");
+
+    // Campos comuns do serial (Unit_Number / Dial_Number)
+    base.DIAL_NUMBER = newSerial;
+    base.INNER_ID = newSerial;
+    if (base.UNIT !== undefined) base.UNIT = newSerial;
+    if (base.UNIT_NUMBER !== undefined) base.UNIT_NUMBER = newSerial;
+    if (base.UNIT_SN !== undefined) base.UNIT_SN = newSerial;
+    if (base.INNERID !== undefined) base.INNERID = newSerial;
+
+    // MWS_SAVE_BASELINE_ONLY_V1
+// - Não inferir CLIENT_ID/GROUP_ID/VEHICLE_TYPE (template real do Cadastro não usa GROUP_ID aqui)
+// - Não injetar custom fields (FIELD_IDS/FIELD_VALUE) no swap: isso costuma quebrar o SAVE
+try {
+  const today = (typeof __fmtDDMMYYYY === "function") ? __fmtDDMMYYYY(new Date()) : "";
+  if (!base.INSTALLATION_DATE && today) base.INSTALLATION_DATE = today;
+  if (!base.WARRANTY_START_DATE && base.INSTALLATION_DATE) base.WARRANTY_START_DATE = base.INSTALLATION_DATE;
+  if (!base.MILAGE_SOURCE_ID) base.MILAGE_SOURCE_ID = "5067";
+  if (!base.WARRANTY_PERIOD_ID) base.WARRANTY_PERIOD_ID = "1";
+} catch(e) {}
+
+// KEEP FIELD_IDS/FIELD_VALUE (required by HTML5 em alguns cenários)
+// // PATCH_MWS_SAVEBASELINE_KEEP_FIELDS_V1: NÃO remover FIELD_IDS/FIELD_VALUE (podem ser obrigatórios)
+// // PATCH_MWS_KEEP_CUSTOM_FIELDS_V1: manter FIELD_IDS/FIELD_VALUE (necessários em muitos casos)
+    // Só remover se o job pedir explicitamente payload.strip_fields=1
+    try {
+      const __strip = !!(payload && (payload.strip_fields === 1 || payload.strip_fields === "1" || payload.strip_fields === true));
+      if (__strip) { try { delete base.FIELD_IDS; delete base.FIELD_VALUE; } catch(e) {} }
+    } catch(e) {}
+
+    // MWS_CLEAN_UNDEFINED_V1: evitar "undefined"/"null" que quebram o SAVE
+    try {
+      for (const k of Object.keys(base || {})) {
+        const v = base[k];
+        if (v === undefined || v === null) continue;
+        const ss = String(v).trim().toLowerCase();
+        if (ss === "undefined" || ss === "null") base[k] = "";
+      }
+    } catch(e) {}
+
+try { delete base.action; delete base.ACTION; } catch(e) {}
+/* MWS_SAVE_CAPTURE_V2 */
+    try {
+      const fs = require("fs");
+      const must = ["VERSION_ID","VEHICLE_ID","LICENSE_NMBR","DIAL_NUMBER","INNER_ID","INSTALLATION_DATE","MILAGE_SOURCE_ID","WARRANTY_PERIOD_ID"];
+      const missing = [];
+      for (const k of must) {
+        if (base[k] === undefined || base[k] === null || String(base[k]).trim() === "") missing.push(k);
+      }
+      const meta = {
+        ts: Date.now(),
+        flow: "MAINT_WITH_SWAP",
+        job_id: id,
+        plate,
+        vehicle_id: vid,
+        serial_new: newSerial,
+        keyCount: Object.keys(base||{}).length,
+        missing
+      };
+      fs.writeFileSync(`/tmp/mws_save_${id}.json`, JSON.stringify({ meta, payload: base }, null, 2), "utf8");
+      console.log(`[MWS_SAVE_CAPTURE] wrote /tmp/mws_save_${id}.json keys=${meta.keyCount} missing=${missing.join(",")||"-"}`);
+    } catch (e) {
+      console.log("[MWS_SAVE_CAPTURE_ERR]", e && (e.message || String(e)));
+    }
+        // PATCH_MWS_SAVEBASELINE_APPLY_V1: garante ASSET_TYPE/FIELD_IDS/FIELD_VALUE/GROUP_ID vindos do baseline (XML)
+    try {
+      base = mwsEnrichSavePayloadFromBaseline(id, base, (lo && lo.text) ? lo.text : "");
+    } catch(e) {}
+    const sv = await __va_appenginePost("SAVE_VHCL_ACTIVATION_NEW", base, "MWS_SAVE");
+
+    // === PATCH_MWS_SAVE_POSTCHECK_V1 ===
+    try {
+      const fs = require("fs");
+      fs.writeFileSync(`/tmp/mws_save_resp_${id}.txt`, sv.text || "", "utf8");
+    // PATCH_MWS_SAVE_ACTION_ERROR_V1: se SAVE retornou "Action ... error", parar aqui
+    const __svTxt = String(sv.text || "");
+    if (/Action:\s*SAVE_VHCL_ACTIVATION_NEW\s*error\./i.test(__svTxt) || /<ERROR\b/i.test(__svTxt)) {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        plate, vehicle_id: vid, serial_new: newSerial,
+        error: "mws_save_action_error",
+        http: sv.status,
+        head: safeSnippet(__svTxt, 240)
+      });
+      continue;
+    }
+
+    // PATCH_MWS_SAVE_ERROR_DETECT_V1: se o SAVE voltou "Action ... error", parar aqui (não virar "dial vazio")
+    try {
+      if (mwsSaveResponseHasError(String(sv.text || ""))) {
+        throw new Error("mws_save_error: SAVE_VHCL_ACTIVATION_NEW");
+      }
+    } catch (e) { throw e; }
+
+    } catch (e) {}
+
+    // Confirma se o serial realmente foi aplicado (evita "rodou uninstall" sem install)
+    const pc = await __va_appenginePost("GET_VHCL_ACTIVATION_DATA_NEW", {
+      VERSION_ID: "2",
+      VEHICLE_ID: String(vid)
+    }, "MWS_POSTCHECK");
+
+    try { const fs = require("fs"); fs.writeFileSync(`/tmp/mws_postcheck_resp_${id}.txt`, pc.text || "", "utf8"); } catch (e) {}
+
+    const pcTxt = String(pc.text || "");
+    let dial = "";
+    // PATCH_MWS_POSTCHECK_XML_V1: resposta é XML do GET_VHCL_ACTIVATION_DATA_NEW (attrs), não HTML <input>
+    try {
+      const attrs = mwsExtractActivationAttrs(pcTxt) || {};
+      dial = String(attrs.DIAL_NUMBER || attrs.INNER_ID || attrs.DIALNUMBER || "").trim();
+    } catch (e) {}
+if (String(dial || "").trim() !== String(newSerial || "").trim()) {
+      try {
+        const fs = require("fs");
+        fs.writeFileSync(`/tmp/mws_postcheck_form_${id}.html`, pcTxt, "utf8");
+      } catch (e) {}
+      throw new Error("mws_save_not_applied: dial=" + String(dial || "<empty>"));
+    }
+    // === /PATCH_MWS_SAVE_POSTCHECK_V1 ===
+
+    /* MWS_SAVE_CAPTURE_RESP_V2 */
+    try {
+      const fs = require("fs");
+      const txt = String(sv.text || "");
+      const meta = { ts: Date.now(), job_id: id, status: sv.status, len: txt.length, loginNeg: sv.loginNeg ? 1 : 0 };
+      fs.writeFileSync(`/tmp/mws_save_${id}_resp.meta.json`, JSON.stringify(meta, null, 2), "utf8");
+      fs.writeFileSync(`/tmp/mws_save_${id}_resp.head.txt`, txt.slice(0, 20000), "utf8");
+      console.log(`[MWS_SAVE_CAPTURE] wrote /tmp/mws_save_${id}_resp.* status=${meta.status} len=${meta.len}`);
+    } catch (e) {
+      console.log("[MWS_SAVE_CAPTURE_RESP_ERR]", e && (e.message || String(e)));
+    }
+
+    if (sv.loginNeg) throw new Error("mws_save_loginneg");
+
+        // PATCH: detectar "Action error" mesmo com HTTP 200
+    const svText = String(sv.text || "");
+    const svIsActionError =
+      /<TEXT>\s*Action:\s*SAVE_VHCL_ACTIVATION_NEW\s*error/i.test(svText) ||
+      /SAVE_VHCL_ACTIVATION_NEW\s*error/i.test(svText) ||
+      /<ERROR\b/i.test(svText);
+
+    if (svIsActionError) {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        plate, vehicle_id: vid, serial_new: newSerial,
+        error: "mws_save_action_error",
+        http: sv.status,
+        head: safeSnippet(sv.text, 220)
+      });
+      continue;
+    }
+
+    // PATCH: pós-check (confirmar que o serial mudou de fato)
+    const lo2 = await __va_appenginePost(
+      "GET_VHCL_ACTIVATION_DATA_NEW",
+      { VERSION_ID: "2", VEHICLE_ID: String(vid) },
+      "MWS_ACT_LOAD2"
+    );
+    if (lo2.loginNeg) throw new Error("mws_act_load2_loginneg");
+
+    const t2 = String(lo2.text || "");
+    const esc = String(newSerial).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const ok2 =
+      new RegExp("(DIAL_NUMBER|INNER_ID)[\\s\\S]{0,160}" + esc, "i").test(t2) ||
+      new RegExp('value=["\\\']' + esc + '["\\\']', "i").test(t2);
+
+    if (!ok2) {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        plate, vehicle_id: vid, serial_new: newSerial,
+        error: "mws_save_no_effect",
+        save_http: sv.status,
+        post_http: lo2.status,
+        save_head: safeSnippet(sv.text, 220),
+        post_head: safeSnippet(lo2.text, 220)
+      });
+      continue;
+    }
+const low = String(sv.text || "").toLowerCase();
+    if (/(already|exists|in use|used|vinculad|associad|ocupad)/i.test(low)) {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        plate, vehicle_id: vid, serial_new: newSerial,
+        error: "serial_in_use_or_already_linked",
+        http: sv.status,
+        head: safeSnippet(sv.text, 220)
+      });
+      continue;
+    }
+
+    await completeJobLogged(id, "success", {
+      flow: "MAINT_WITH_SWAP",
+      plate, vehicle_id: vid, serial_new: newSerial,
+      deactivate: { http: de.status, loginNeg: de.loginNeg ? 1 : 0 },
+      save: { http: sv.status, loginNeg: sv.loginNeg ? 1 : 0 }
+    });
+    continue;
+  }
+} catch (e) {
+  try {
+    if (service === "MAINT_WITH_SWAP") {
+      await completeJobLogged(id, "error", {
+        flow: "MAINT_WITH_SWAP",
+        error: String(e && (e.message || e.toString())),
+        plate: String(payload.plate || payload.LICENSE_NMBR || ""),
+        serial_new: String(payload.serial_new || payload.serial || "")
+      });
+      continue;
+    }
+  } catch (_) {}
+}
 
 /* __PATCH_UNINSTALL_AUTOSTEPS_V1
  * Se service=UNINSTALL e html5Steps vazio, injeta DEACTIVATE_VEHICLE_HIST via payload.html5Steps.
@@ -1970,6 +2842,10 @@ try {
         try {
           if (payload && typeof payload === "object") {
             payload.VEHICLE_ID = payload.VEHICLE_ID || __va.vehicleId;
+            // PATCH_VA1_PERSIST_VID_ALLKEYS_V1
+            payload.vehicle_id = payload.vehicle_id || __va.vehicleId;
+            payload.vehicleId  = payload.vehicleId  || __va.vehicleId;
+
             payload.LICENSE_NMBR = payload.LICENSE_NMBR || __va.plate;
             payload.license_nmbr = payload.license_nmbr || __va.plate;
           }
@@ -1985,7 +2861,8 @@ try {
     console.log(`[html5_v8] [VA1] resolve_by_plate VHCLS_CANON err ${e && (e.message||e.toString())}`);
   }
 
-  if (!hasVid && svcNeedVid.has(service) && plate) {
+  const hasVidNow = !!(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId); // PATCH_VA1_HASVID_RECHECK_V1
+  if (!hasVidNow && svcNeedVid.has(service) && plate) {
     let cookieForResolve = "";
     try {
       const cj = (typeof loadCookieJar === "function") ? await loadCookieJar() : null;
@@ -2019,18 +2896,19 @@ try {
           payload.vehicle_id = String(vid);
           payload.VEHICLE_ID  = String(vid);
           payload.vehicleId   = String(vid);
-          console.log(`[html5_v8] [${MARK}] extracted VEHICLE_ID=${vid} from VHCLS for plate=${plate}`);
+          console.log(`[html5_v8] [VHCLS_VID_EXTRACT] extracted VEHICLE_ID=${vid} from VHCLS for plate=${plate}`);
         } else {
-          console.log(`[html5_v8] [${MARK}] no VEHICLE_ID in VHCLS for plate=${plate} (raw_len=${raw.length})`);
+          console.log(`[html5_v8] [VHCLS_VID_EXTRACT] no VEHICLE_ID in VHCLS for plate=${plate} (raw_len=${raw.length})`);
         }
       }
     } catch (e) {
-      console.log(`[html5_v8] [${MARK}] error: ${e && (e.message || e.toString())}`);
+      console.log(`[html5_v8] [VHCLS_VID_EXTRACT] error: ${e && (e.message || e.toString())}`);
     }
     // === END PATCH_VHCLS_VID_EXTRACT_V1 ===
 // === PATCH_U3_DEBUG_DISPLAY_V1 ===
+// PATCH_U3_DEBUG_RAW_LET_V1
     try {
-      const raw = (() => {
+      let raw = (() => {
         const f = (outR && outR.final) ? outR.final : outR;
         return String((f && (f.text || f.body || f.raw || f.xml || f.responseText)) || "");
       })();
@@ -2148,6 +3026,22 @@ const parsed = (outR && outR.final && outR.final.parsed) ? outR.final.parsed : (
                 try { payload.VEHICLE_ID = vid; payload.vehicle_id = vid; payload.vehicleId = vid; } catch(e) {}
                 try { if (typeof built !== 'undefined' && built) { built.VEHICLE_ID = vid; built.vehicle_id = vid; built.vehicleId = vid; } } catch(e) {}
                 console.log(`[html5_v8] [PATCH_U3] resolve_by_plate: rescued VEHICLE_ID=${vid} from VHCLS_TAP`);
+                // PATCH_MWS_MIN_V1
+                const vehicleId = vid;;
+/* PATCH_MWS_U3_PERSIST_VID_V1 */
+try{
+  if (payload && typeof payload === 'object') {
+    const __vid = (typeof vehicleId !== 'undefined') ? String(vehicleId) : '';
+    if (__vid) {
+      payload.vehicleId = __vid;
+      payload.vehicle_id = __vid;
+      payload.VEHICLE_ID = __vid;
+      console.log('[PATCH_MWS] persisted payload.vehicleId=' + __vid);
+    }
+  }
+}catch(e){ console.log('[PATCH_MWS] persist err ' + (e && (e.message||e.toString()))); }
+try{ if (typeof vId !== 'undefined' && !vId && typeof vehicleId !== 'undefined') vId = String(vehicleId); }catch(e){}
+
 
 /* __PATCH_U3_PERSIST_VEHICLE_ID_V2
  * Persistir vehicleId no payload exatamente após o log do "rescued".
@@ -2263,7 +3157,21 @@ try{
   console.log(`[html5_v8] [PATCH_U3] resolve_by_plate error: ${e && (e.message || e.toString())}`);
 }
 
+
 let steps = buildStepsForService(service, payload);
+try {
+  if (String(service).toUpperCase() === "MAINT_WITH_SWAP") {
+    const __vid = String(payload.vehicle_id || payload.vehicleId || payload.VEHICLE_ID || "");
+    const __sn  = String(payload.serial || payload.serial_new || payload.SERIAL_NEW || "");
+    const __acts = (steps || []).map(x => x && (x.action || (x.useBuilder ? "BUILDER" : ""))).filter(Boolean).join(",");
+    console.log(`[html5_v8] [PATCH_MWS_DIAG_V1] post_resolve vid=${__vid||"<empty>"} serial=${__sn||"<empty>"} steps_len=${(steps||[]).length} acts=${__acts}`);
+    if (!steps || steps.length === 0) throw new Error("mws_no_steps_generated");
+  }
+} catch(e) {
+  console.log(`[html5_v8] [PATCH_MWS_DIAG_V1] ERR ` + (e && (e.message || e.toString())));
+  throw e;
+}
+
       
 
 /* __PATCH_UNINSTALL_APPEND_DEACTIVATE_V1
@@ -2401,6 +3309,21 @@ try{
               console.log("[PATCH_D2] preload ASSET_BASIC_LOAD not ok; continuing");
             }
           }
+          // [VA3] preload activation baseline (keep existing fields) for MAINT_WITH_SWAP
+          if (service === "MAINT_WITH_SWAP" && vId && !payload.__activationBaselineAttrs) {
+            try {
+              const act = await __va_getActivationBaseline(vId);
+              if (act && act.attrs) {
+                payload.__activationBaselineAttrs = act.attrs;
+                console.log(`[html5_v8] [VA3] baseline captured keys=${Object.keys(act.attrs).length}`);
+              } else {
+                console.log(`[html5_v8] [VA3] baseline missing attrs (will fallback to builder)`);
+              }
+            } catch (e) {
+              console.log(`[html5_v8] [VA3] baseline err ${(e && (e.message||e.toString()))}`);
+            }
+          }
+
           steps = buildStepsForService(service, payload);
         }
 
@@ -2443,6 +3366,19 @@ try{
           cookie = (await loadCookieJar()).cookie || cookie;
 
           if (!stepOk(out)) {
+            // MAINT_WITH_SWAP: erro conhecido quando o novo serial já está vinculado a outro veículo
+            if (service === "MAINT_WITH_SWAP" && String(s.action||"") === "SAVE_VHCL_ACTIVATION_NEW") {
+              const sn = out && out.final ? String(out.final.snippet || "") : "";
+              const looksSerialInUse = /(already|duplicate|exist|assigned|attached|vincul|vinculado|link|linked)/i.test(sn);
+              const code = looksSerialInUse ? "serial_in_use" :
+                ((out && out.final && out.final.parsed && out.final.parsed.isLoginNeg) ? "auth_failed_after_retry" : "step_failed");
+              const msg2 = looksSerialInUse
+                ? "Serial já vinculado a outro veículo (HTML5 negou a troca). Faça a desinstalação no veículo atual antes e tente novamente."
+                : "Falha ao vincular novo serial no mesmo vehicle_id (swap_activate).";
+              await finish("error", { ok:false, service, error: code, message: msg2, failedStep: { label: s.label, action: s.action, snippet: sn } });
+              return;
+            }
+
             const msg = out && out.final && out.final.parsed && out.final.parsed.isLoginNeg
               ? "auth_failed_after_retry"
               : "step_failed";
@@ -2580,8 +3516,44 @@ main().catch(err => { console.error("[html5_v8] fatal:", err && (err.stack || er
 
             if (ck) {
               // FORÇA override sempre
-              h.set("cookie", ck);
-              console.log(`[VHCLS_FORCE_COOKIE] override host=${host} cookieLen=${ck.length} curLen=${cur.length} curFlags={${curFlags}} jarFlags={${jarFlags}}`);
+              const need = (!cur) || !hasCookie(cur, "TFL_SESSION") || !hasCookie(cur, "ASP.NET_SessionId") || (!hasCookie(cur, "EULA_APPROVED") && hasCookie(ck, "EULA_APPROVED")) || (!hasCookie(cur, "APPLICATION_ROOT_NODE") && hasCookie(ck, "APPLICATION_ROOT_NODE"));
+      // PATCH_VHCLS_COOKIE_MERGE_V2: preserva cookies atuais (ex.: AWSALB/AWSALBCORS) e só mescla jar cookies
+              if (need) {
+                try {
+                  const parseCookieHeader = (str) => {
+                    const out = Object.create(null);
+                    String(str || "").split(";").forEach((part) => {
+                      part = String(part || "").trim();
+                      if (!part) return;
+                      const eq = part.indexOf("=");
+                      if (eq <= 0) return;
+                      const k = part.slice(0, eq).trim();
+                      const v = part.slice(eq + 1).trim();
+                      if (k) out[k] = v;
+                    });
+                    return out;
+                  };
+
+                  const curMap = parseCookieHeader(cur);
+                  const jarMap = parseCookieHeader(ck);
+
+                  // garante estes se existirem no jar (sem perder os demais do cur)
+                  const must = { "TFL_SESSION":1, "ASP.NET_SessionId":1, "EULA_APPROVED":1, "APPLICATION_ROOT_NODE":1 };
+
+                  for (const k of Object.keys(jarMap)) {
+                    if (!(k in curMap) || must[k]) curMap[k] = jarMap[k];
+                  }
+
+                  const merged = Object.keys(curMap).map((k) => `${k}=${curMap[k]}`).join("; ");
+                  h.set("cookie", merged);
+                  console.log(`[VHCLS_FORCE_COOKIE] merged finalLen=${merged.length} delta=${merged.length - cur.length}`);
+                } catch (e) {
+                  // fallback conservador
+                  h.set("cookie", ck);
+                  console.log(`[VHCLS_FORCE_COOKIE] merged_fallback finalLen=${ck.length}`);
+                }
+              }
+              console.log(`[VHCLS_FORCE_COOKIE] override host=${host} need=${need?1:0} cookieLen=${ck.length} curLen=${cur.length} curFlags={${curFlags}} jarFlags={${jarFlags}}`);
               init = Object.assign({}, init || {}, { headers: h });
             } else {
               console.log(`[VHCLS_FORCE_COOKIE] WARN host=${host} cookieLen=0 curLen=${cur.length} curFlags={${curFlags}}`);

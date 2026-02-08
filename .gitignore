@@ -33,3 +33,6 @@ tools/*.bak.*
 tools/sb_run_vm_softallow_RUN.js*
 Não
 Observação:
+
+# ignore worker backups
+dist/worker/*.bak*
