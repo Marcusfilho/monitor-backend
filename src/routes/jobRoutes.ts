@@ -2,6 +2,7 @@
 import { Router, Request, Response } from "express";
 import { createJob, getNextJob, completeJob, getJob, listJobs } from "../jobs/jobStore";
 import { getSessionToken } from "../services/sessionTokenStore";
+import { ensureSessionTokenAuto } from "../services/sessionTokenAuto";
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.post("/", (req: Request, res: Response) => {
 });
 
 /** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
-router.get("/next", (req: Request, res: Response) => {
+router.get("/next", async (req: Request, res: Response) => {
   const type = (req.query.type as string) || "";
   const workerId = (req.query.worker as string) || "unknown-worker";
   if (!type) return res.status(400).json({ error: "Query param 'type' is required" });
@@ -24,6 +25,9 @@ router.get("/next", (req: Request, res: Response) => {
 
   if (!isHtml5) {
     // ✅ mantém comportamento atual: só libera job se houver token carregado
+    // AUTO (flag): tenta recarregar token do disco se estiver vazio
+    await ensureSessionTokenAuto().catch(() => null);
+
     const token = (getSessionToken() || "").trim();
     if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
 
