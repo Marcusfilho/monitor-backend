@@ -19,20 +19,31 @@ router.get("/next", (req: Request, res: Response) => {
   const workerId = (req.query.worker as string) || "unknown-worker";
   if (!type) return res.status(400).json({ error: "Query param 'type' is required" });
 
-  // ✅ só libera job se houver token carregado
-  const token = (getSessionToken() || "").trim();
-  if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
+  // ✅ HTML5 jobs não dependem de session token (são server-to-server via HTML5 cookie-jar)
+  const isHtml5 = String(type).toLowerCase().startsWith("html5_");
 
+  if (!isHtml5) {
+    // ✅ mantém comportamento atual: só libera job se houver token carregado
+    const token = (getSessionToken() || "").trim();
+    if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
+
+    const job = getNextJob(type, workerId);
+    if (!job) return res.status(204).send();
+
+    // ✅ injeta token apenas na resposta
+    const out: any = JSON.parse(JSON.stringify(job));
+    out.payload = out.payload || {};
+    out.payload.sessionToken = token;
+
+    return res.json({ job: out });
+  }
+
+  // ✅ HTML5: não injeta token
   const job = getNextJob(type, workerId);
   if (!job) return res.status(204).send();
-
-  // ✅ injeta token apenas na resposta
-  const out: any = JSON.parse(JSON.stringify(job));
-  out.payload = out.payload || {};
-  out.payload.sessionToken = token;
-
-  return res.json({ job: out });
+  return res.json({ job });
 });
+
 
 /** POST /api/jobs/:id/complete */
 // POST /api/jobs/:id/progress  body: { percent: 0..100, stage?: string, detail?: string }
