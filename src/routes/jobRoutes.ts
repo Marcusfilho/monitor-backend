@@ -2,8 +2,6 @@
 import { Router, Request, Response } from "express";
 import { createJob, getNextJob, completeJob, getJob, listJobs } from "../jobs/jobStore";
 import { getSessionToken } from "../services/sessionTokenStore";
-import { ensureSessionTokenAuto } from "../services/sessionTokenAuto";
-
 const router = Router();
 
 /** POST /api/jobs */
@@ -25,9 +23,6 @@ router.get("/next", async (req: Request, res: Response) => {
 
   if (!isHtml5) {
     // ✅ mantém comportamento atual: só libera job se houver token carregado
-    // AUTO (flag): tenta recarregar token do disco se estiver vazio
-    await ensureSessionTokenAuto().catch(() => null);
-
     const token = (getSessionToken() || "").trim();
     if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
 

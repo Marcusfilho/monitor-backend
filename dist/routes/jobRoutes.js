@@ -14,7 +14,7 @@ router.post("/", (req, res) => {
     return res.status(201).json({ job });
 });
 /** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
-router.get("/next", (req, res) => {
+router.get("/next", async (req, res) => {
     const type = req.query.type || "";
     const workerId = req.query.worker || "unknown-worker";
     if (!type)
