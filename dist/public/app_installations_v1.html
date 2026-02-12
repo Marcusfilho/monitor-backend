@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>APP V1 - Installations</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    input, select, button, textarea { padding: 8px; margin: 6px 0; width: 100%; max-width: 520px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 240px; }
+    pre { background: #111; color: #eee; padding: 12px; overflow: auto; max-height: 380px; }
+    .muted { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>APP V1 (provisório) — Installations</h2>
+  <div class="muted">Mesma origem do backend (sem CORS). Token fica salvo no localStorage.</div>
+
+  <div class="row">
+    <div class="col">
+      <label>Service</label>
+      <select id="service">
+        <option>INSTALL</option>
+        <option>UNINSTALL</option>
+        <option>MAINT_NO_SWAP</option>
+        <option>MAINT_WITH_SWAP</option>
+      </select>
+
+      <label>Target client_id</label>
+      <input id="target_client_id" placeholder="ex: 218572" value="218572" />
+
+      <label>Placa</label>
+      <input id="plate" placeholder="ABC1D23" />
+
+      <label>Serial (new)</label>
+      <input id="serial" placeholder="9123456789" />
+
+      <label>VehicleSettingId (opcional)</label>
+      <input id="vehicleSettingId" placeholder="ex: 5592" />
+
+      <label>Fabricante</label>
+      <input id="manufacturer" placeholder="IVECO" />
+
+      <label>Modelo</label>
+      <input id="model" placeholder="TECTOR 170E30" />
+
+      <label>Ano</label>
+      <input id="year" placeholder="2019" />
+
+      <label>Etiqueta (label_pos)</label>
+      <input id="label_pos" placeholder="LABEL_A" value="LABEL_A" />
+
+      <label>Chicote (harness_pos)</label>
+      <input id="harness_pos" placeholder="HARNESS_A" value="HARNESS_A" />
+
+      <button id="btnCreate">Criar instalação</button>
+    </div>
+
+    <div class="col">
+      <label>installation_id</label>
+      <input id="installation_id" />
+
+      <label>installation_token</label>
+      <input id="installation_token" />
+
+      <div class="row">
+        <button id="btnPoll" class="col">Poll status</button>
+        <button id="btnSnap" class="col">Request CAN snapshot</button>
+      </div>
+
+      <div class="row">
+        <button id="btnApprove" class="col">Approve CAN</button>
+        <button id="btnOverride" class="col">Approve override</button>
+      </div>
+
+      <label>override reason</label>
+      <input id="override_reason" value="vehicle_new_no_engineering" />
+
+      <pre id="out">{}</pre>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function saveLs() {
+  localStorage.setItem("inst_id", $("installation_id").value || "");
+  localStorage.setItem("inst_tok", $("installation_token").value || "");
+}
+function loadLs() {
+  $("installation_id").value = localStorage.getItem("inst_id") || "";
+  $("installation_token").value = localStorage.getItem("inst_tok") || "";
+}
+loadLs();
+
+async function api(path, opts={}) {
+  const headers = Object.assign({ "content-type": "application/json" }, opts.headers || {});
+  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  const t = await r.text();
+  let j = null;
+  try { j = JSON.parse(t); } catch (_) { j = { raw: t }; }
+  return { status: r.status, json: j };
+}
+
+function show(x) {
+  $("out").textContent = JSON.stringify(x, null, 2);
+}
+
+$("btnCreate").onclick = async () => {
+  const body = {
+    service: $("service").value,
+    target_client_id: Number($("target_client_id").value || 0) || null,
+    plate: $("plate").value.trim(),
+    serial: $("serial").value.trim(),
+    vehicleSettingId: Number($("vehicleSettingId").value || 0) || null,
+    vehicle: { manufacturer: $("manufacturer").value, model: $("model").value, year: Number($("year").value||0)||null },
+    gsensor: { label_pos: $("label_pos").value, harness_pos: $("harness_pos").value }
+  };
+
+  const r = await api("/api/installations", { method: "POST", body: JSON.stringify(body) });
+  show(r);
+  if (r.json && r.json.ok) {
+    $("installation_id").value = r.json.installation_id;
+    $("installation_token").value = r.json.installation_token;
+    saveLs();
+  }
+};
+
+$("btnPoll").onclick = async () => {
+  const id = $("installation_id").value.trim();
+  const r = await api("/api/installations/" + encodeURIComponent(id));
+  show(r);
+};
+
+$("btnSnap").onclick = async () => {
+  const id = $("installation_id").value.trim();
+  const tok = $("installation_token").value.trim();
+  const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/request-can-snapshot", {
+    method: "POST",
+    headers: { "x-installation-token": tok },
+    body: "{}"
+  });
+  show(r);
+};
+
+$("btnApprove").onclick = async () => {
+  const id = $("installation_id").value.trim();
+  const tok = $("installation_token").value.trim();
+  const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/approve-can", {
+    method: "POST",
+    headers: { "x-installation-token": tok },
+    body: JSON.stringify({ override: false })
+  });
+  show(r);
+};
+
+$("btnOverride").onclick = async () => {
+  const id = $("installation_id").value.trim();
+  const tok = $("installation_token").value.trim();
+  const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/approve-can", {
+    method: "POST",
+    headers: { "x-installation-token": tok },
+    body: JSON.stringify({ override: true, reason: $("override_reason").value })
+  });
+  show(r);
+};
+</script>
+</body>
+</html>

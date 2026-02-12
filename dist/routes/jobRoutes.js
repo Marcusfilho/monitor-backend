@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
+const installationsEngine = require("../services/installationsEngine");
 const router = (0, express_1.Router)();
 /** POST /api/jobs */
 router.post("/", (req, res) => {
@@ -70,7 +71,19 @@ router.post("/:id/complete", (req, res) => {
     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);
     if (!job)
         return res.status(404).json({ error: "Job not found" });
-    return res.json({ job });
+    
+    // APP V1 — chain installations on job complete
+    try {
+        void (async () => {
+            try {
+                await installationsEngine.onJobCompleted(job, req.body || {});
+            } catch (e) {
+                console.warn("[app_v1] onJobCompleted failed:", e && (e.message || String(e)));
+            }
+        })();
+    } catch (_) {}
+
+return res.json({ job });
 });
 router.get("/:id", (req, res) => {
     const { id } = req.params;

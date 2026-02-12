@@ -1,0 +1,533 @@
+{
+  "version": 1,
+  "updatedBy": "Marcus",
+  "clients": {
+    "217062": {
+      "clientName": "Eneva",
+      "defaultVehicleSettingId": 5536,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Eneva FW A79",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5536,
+          "settingName": "Default - Eneva FW A79",
+          "isDefault": true
+        }
+      }
+    },
+    "217172": {
+      "clientName": "Sul Americano",
+      "defaultVehicleSettingId": 5421,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5421,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "217226": {
+      "clientName": "Accert",
+      "defaultVehicleSettingId": 5433,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5433,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "217301": {
+      "clientName": "Virtu GNL",
+      "defaultVehicleSettingId": 5581,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Virtu - FWA79",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5581,
+          "settingName": "Default - Virtu - FWA79",
+          "isDefault": true
+        }
+      }
+    },
+    "217318": {
+      "clientName": "Tranziran",
+      "defaultVehicleSettingId": 5440,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Deafult - Free mode",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5440,
+          "settingName": "Deafult - Free mode",
+          "isDefault": true
+        }
+      }
+    },
+    "217391": {
+      "clientName": "JC Distribuição",
+      "defaultVehicleSettingId": 5452,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Defaul",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5452,
+          "settingName": "Defaul",
+          "isDefault": true
+        }
+      }
+    },
+    "217434": {
+      "clientName": "JT Transportes",
+      "defaultVehicleSettingId": 5459,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "JT - Default - FW A79",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5459,
+          "settingName": "JT - Default - FW A79",
+          "isDefault": true
+        }
+      }
+    },
+    "217573": {
+      "clientName": "Seda",
+      "defaultVehicleSettingId": 5555,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Seda - Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5555,
+          "settingName": "Seda - Default",
+          "isDefault": true
+        }
+      }
+    },
+    "217657": {
+      "clientName": "Souza Araujo",
+      "defaultVehicleSettingId": 5554,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default A79",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5554,
+          "settingName": "Default A79",
+          "isDefault": true
+        }
+      }
+    },
+    "217684": {
+      "clientName": "ETT Carapicuiba",
+      "defaultVehicleSettingId": 5577,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "ETT - Firmware A79",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5577,
+          "settingName": "ETT - Firmware A79",
+          "isDefault": true
+        }
+      }
+    },
+    "217693": {
+      "clientName": "Renova",
+      "defaultVehicleSettingId": 5487,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default Renova",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5487,
+          "settingName": "Default Renova",
+          "isDefault": true
+        }
+      }
+    },
+    "217694": {
+      "clientName": "Track7",
+      "defaultVehicleSettingId": 5488,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5488,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "217811": {
+      "clientName": "Ativa Logística",
+      "defaultVehicleSettingId": 5500,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5500,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "217832": {
+      "clientName": "Dream Factory",
+      "defaultVehicleSettingId": 5504,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5504,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "217857": {
+      "clientName": "JBS",
+      "defaultVehicleSettingId": 5507,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - JBS",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5507,
+          "settingName": "Default - JBS",
+          "isDefault": true
+        }
+      }
+    },
+    "217916": {
+      "clientName": "Raça Transportes",
+      "defaultVehicleSettingId": 5545,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Raça - FWA79",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5545,
+          "settingName": "Default - Raça - FWA79",
+          "isDefault": true
+        }
+      }
+    },
+    "218136": {
+      "clientName": "Ankai",
+      "defaultVehicleSettingId": 5525,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Ankai",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5525,
+          "settingName": "Default - Ankai",
+          "isDefault": true
+        }
+      }
+    },
+    "218204": {
+      "clientName": "EVMob",
+      "defaultVehicleSettingId": 5528,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Evmobility",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5528,
+          "settingName": "Default - Evmobility",
+          "isDefault": true
+        },
+        "dallas": {
+          "vehicleSettingId": 5606,
+          "settingName": "Default - Evmobility - Dallas",
+          "isDefault": false
+        }
+      }
+    },
+    "218304": {
+      "clientName": "Tassi",
+      "defaultVehicleSettingId": 5542,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Tassi - Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5542,
+          "settingName": "Tassi - Default",
+          "isDefault": true
+        }
+      }
+    },
+    "218572": {
+      "clientName": "TransLima",
+      "defaultVehicleSettingId": 5592,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Translima - Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5592,
+          "settingName": "Translima - Default",
+          "isDefault": true
+        }
+      }
+    },
+    "218598": {
+      "clientName": "Fadel",
+      "defaultVehicleSettingId": 5575,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Fadel",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5575,
+          "settingName": "Default - Fadel",
+          "isDefault": true
+        }
+      }
+    },
+    "218599": {
+      "clientName": "GeoCargo",
+      "defaultVehicleSettingId": 5576,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Geocargo",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5576,
+          "settingName": "Default - Geocargo",
+          "isDefault": true
+        }
+      }
+    },
+    "218726": {
+      "clientName": "SOL Cargas",
+      "defaultVehicleSettingId": 5582,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Sol",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5582,
+          "settingName": "Default - Sol",
+          "isDefault": true
+        }
+      }
+    },
+    "218808": {
+      "clientName": "Taguatur",
+      "defaultVehicleSettingId": 5585,
+      "defaultProfileKey": "dmas",
+      "defaultSettingName": "Default - Taguatur",
+      "profiles": {
+        "dmas": {
+          "vehicleSettingId": 5585,
+          "settingName": "Default - Taguatur",
+          "isDefault": true
+        },
+        "dallas": {
+          "vehicleSettingId": 5619,
+          "settingName": "Default - Taguatur - ibutton",
+          "isDefault": false
+        }
+      }
+    },
+    "218900": {
+      "clientName": "Energisa",
+      "defaultVehicleSettingId": 5615,
+      "defaultProfileKey": "leve",
+      "defaultSettingName": "Default Energisa - LEVES",
+      "profiles": {
+        "leve": {
+          "vehicleSettingId": 5615,
+          "settingName": "Default Energisa - LEVES",
+          "isDefault": true
+        },
+        "pesado": {
+          "vehicleSettingId": 5587,
+          "settingName": "Default Energisa",
+          "isDefault": false
+        }
+      }
+    },
+    "218905": {
+      "clientName": "Sonda",
+      "defaultVehicleSettingId": 5588,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default Sonda",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5588,
+          "settingName": "Default Sonda",
+          "isDefault": true
+        }
+      }
+    },
+    "218908": {
+      "clientName": "Reiter Log",
+      "defaultVehicleSettingId": 5589,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Reiter",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5589,
+          "settingName": "Default - Reiter",
+          "isDefault": true
+        }
+      }
+    },
+    "218933": {
+      "clientName": "Reunidas",
+      "defaultVehicleSettingId": 5590,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Reunidas",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5590,
+          "settingName": "Default - Reunidas",
+          "isDefault": true
+        }
+      }
+    },
+    "218969": {
+      "clientName": "Expresso Nordeste",
+      "defaultVehicleSettingId": 5595,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5595,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "219002": {
+      "clientName": "Viação Cidade do Aço",
+      "defaultVehicleSettingId": 5598,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Cidade do Aço",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5598,
+          "settingName": "Default - Cidade do Aço",
+          "isDefault": true
+        }
+      }
+    },
+    "219004": {
+      "clientName": "Viação Araçatuba",
+      "defaultVehicleSettingId": 5599,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default - Araçatuba",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5599,
+          "settingName": "Default - Araçatuba",
+          "isDefault": true
+        }
+      }
+    },
+    "219005": {
+      "clientName": "Viação Pendotiba",
+      "defaultVehicleSettingId": 5600,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5600,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "219007": {
+      "clientName": "Expresso Araguaia",
+      "defaultVehicleSettingId": 5602,
+      "defaultProfileKey": "dmas",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "dmas": {
+          "vehicleSettingId": 5602,
+          "settingName": "Default",
+          "isDefault": true
+        },
+        "dallas": {
+          "vehicleSettingId": 5611,
+          "settingName": "Default - Dallas",
+          "isDefault": false
+        }
+      }
+    },
+    "219008": {
+      "clientName": "Caribus",
+      "defaultVehicleSettingId": 5603,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Defaul",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5603,
+          "settingName": "Defaul",
+          "isDefault": true
+        }
+      }
+    },
+    "219121": {
+      "clientName": "Positivo",
+      "defaultVehicleSettingId": 5609,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Positivo - Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5609,
+          "settingName": "Positivo - Default",
+          "isDefault": true
+        }
+      }
+    },
+    "219145": {
+      "clientName": "TSL",
+      "defaultVehicleSettingId": 5610,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5610,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    },
+    "219322": {
+      "clientName": "Francisconi",
+      "defaultVehicleSettingId": 5618,
+      "defaultProfileKey": "default",
+      "defaultSettingName": "Default",
+      "profiles": {
+        "default": {
+          "vehicleSettingId": 5618,
+          "settingName": "Default",
+          "isDefault": true
+        }
+      }
+    }
+  },
+  "gsensorMap": {
+    "UP|BACK": { "command": "(o2w,44,C614FC00000000000000FC0000000000000004000000)", "label": "UP", "harness": "BACK" },
+    "UP|FRONT": { "command": "(o2w,44,C6140400000000000000040000000000000004000000)", "label": "UP", "harness": "FRONT" },
+    "UP|RIGHT": { "command": "(o2w,44,C6140000FC0000000400000000000000000004000000)", "label": "UP", "harness": "RIGHT" },
+    "UP|LEFT": { "command": "(o2w,44,C614000004000000FC00000000000000000004000000)", "label": "UP", "harness": "LEFT" },
+    "FRONT|RIGHT": { "command": "(o2w,44,C61400000000FC000400000000000000FC0000000000)", "label": "FRONT", "harness": "RIGHT" },
+    "FRONT|DOWN": { "command": "(o2w,44,C61400000000FC000000040000000400000000000000)", "label": "FRONT", "harness": "DOWN" },
+    "FRONT|LEFT": { "command": "(o2w,44,C61400000000FC00FC00000000000000040000000000)", "label": "FRONT", "harness": "LEFT" },
+    "FRONT|UP": { "command": "(o2w,44,C61400000000FC000000FC000000FC00000000000000)", "label": "FRONT", "harness": "UP" },
+    "LEFT|BACK": { "command": "(o2w,44,C614FC00000000000000000004000000040000000000)", "label": "LEFT", "harness": "BACK" },
+    "LEFT|FRONT": { "command": "(o2w,44,C61404000000000000000000FC000000040000000000)", "label": "LEFT", "harness": "FRONT" },
+    "LEFT|DOWN": { "command": "(o2w,44,C6140000040000000000000004000400000000000000)", "label": "LEFT", "harness": "DOWN" },
+    "LEFT|UP": { "command": "(o2w,44,C6140000FC000000000000000400FC00000000000000)", "label": "LEFT", "harness": "UP" },
+    "RIGHT|DOWN": { "command": "(o2w,44,C6140000FC00000000000000FC000400000000000000)", "label": "RIGHT", "harness": "DOWN" },
+    "RIGHT|FRONT": { "command": "(o2w,44,C61404000000000000000000FC000000040000000000)", "label": "RIGHT", "harness": "FRONT" },
+    "RIGHT|BACK": { "command": "(o2w,44,C614FC000000000000000000FC000000FC0000000000)", "label": "RIGHT", "harness": "BACK" },
+    "RIGHT|UP": { "command": "(o2w,44,C61400000400000000000000FC00FC00000000000000)", "label": "RIGHT", "harness": "UP" },
+    "BACK|DOWN": { "command": "(o2w,44,C6140000000004000000FC0000000400000000000000)", "label": "BACK", "harness": "DOWN" },
+    "BACK|UP": { "command": "(o2w,44,C614000000000400000004000000FC00000000000000)", "label": "BACK", "harness": "UP" },
+    "BACK|RIGHT": { "command": "(o2w,44,C6140000000004000400000000000000040000000000)", "label": "BACK", "harness": "RIGHT" },
+    "BACK|LEFT": { "command": "(o2w,44,C614000000000400FC00000000000000FC0000000000)", "label": "BACK", "harness": "LEFT" },
+    "DOWN|FRONT": { "command": "(o2w,44,C6140400000000000000FC00000000000000FC000000)", "label": "DOWN", "harness": "FRONT" },
+    "DOWN|BACK": { "command": "(o2w,44,C614FC000000000000000400000000000000FC000000)", "label": "DOWN", "harness": "BACK" },
+    "DOWN|LEFT": { "command": "(o2w,44,C6140000FC000000FC000000000000000000FC000000)", "label": "DOWN", "harness": "LEFT" },
+    "DOWN|RIGHT": { "command": "(o2w,44,C61400000400000004000000000000000000FC000000)", "label": "DOWN", "harness": "RIGHT" }
+  }
+}
