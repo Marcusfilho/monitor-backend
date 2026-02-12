@@ -73,7 +73,20 @@ router.post("/:id/complete", (req: Request, res: Response) => {
   const { status, result, workerId } = req.body || {};
   if (!status) return res.status(400).json({ error: "Field 'status' is required" });
 
-  const finalStatus = status === "ok" ? "completed" : "error";
+  const rawStatus = String(status || "").toLowerCase();
+
+// worker pode mandar status=success; também aceitamos done/completed/complete.
+// além disso, se result.ok === true, consideramos completed.
+const okFlag =
+  rawStatus === "ok" ||
+  rawStatus === "success" ||
+  rawStatus === "done" ||
+  rawStatus === "completed" ||
+  rawStatus === "complete" ||
+  ((req.body as any)?.ok === true) ||
+  ((result as any)?.ok === true);
+
+const finalStatus = okFlag ? "completed" : "error";
   const job = completeJob(id, finalStatus, result, workerId);
   if (!job) return res.status(404).json({ error: "Job not found" });
 
