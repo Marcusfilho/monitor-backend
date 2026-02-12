@@ -70,7 +70,7 @@ router.post("/", async (req, res) => {
         const instTok = inst?.installation_token || inst?.token || null;
         // 2) enqueue job inicial (via loopback /api/jobs)
         const svc = payload.service || inst?.service || null;
-        const jobType = jobTypeFromService(svc);
+        const jobType = "html5_install"; // compat: worker busca html5_install; service decide o fluxo
         const payloadForJob = {
             installation_id: instId,
             installation_token: instTok,
