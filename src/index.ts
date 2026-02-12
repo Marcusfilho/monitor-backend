@@ -13,7 +13,46 @@ import { migrateIfNeeded } from "./db/migrate";
 import cors from "cors";
 
 
+import fs from "fs";
+import path from "path";
 const app = express();
+
+
+// === APP_INSTALLATIONS_V1_UI (same-origin, sem CORS) ===
+(function mountAppV1Ui() {
+  try {
+    const candidates = [
+      path.join(process.cwd(), "public"),
+      path.join(process.cwd(), "dist", "public"),
+      // quando compilado, __dirname vira dist/
+      path.join(__dirname, "public"),
+      path.join(__dirname, "..", "public"),
+    ];
+
+    const pick = candidates.find(d =>
+      fs.existsSync(d) && fs.existsSync(path.join(d, "app_installations_v1.html"))
+    );
+
+    app.get("/app/__health", (req, res) => {
+      const data = {
+        ok: !!pick,
+        picked: pick || null,
+        candidates,
+        fileExists: pick ? fs.existsSync(path.join(pick, "app_installations_v1.html")) : false,
+      };
+      res.status(pick ? 200 : 404).json(data);
+    });
+
+    if (pick) {
+      app.use("/app", express.static(pick));
+      app.get("/app", (req, res) => res.redirect("/app/app_installations_v1.html"));
+    }
+  } catch (e) {
+    try {
+      app.get("/app/__health", (req, res) => res.status(500).json({ ok:false, error: String(e) }));
+    } catch(_) {}
+  }
+})();
 
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:5173")
   .split(",")

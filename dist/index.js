@@ -1,5 +1,4 @@
 "use strict";
-const fs = require("fs");
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -12,106 +11,63 @@ const workerRoutes_1 = require("./routes/workerRoutes");
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
-const installationsRoutes_1 = __importDefault(require("./routes/installationsRoutes"));
 const adminCatalogRoutes_1 = __importDefault(require("./routes/adminCatalogRoutes"));
 const sessionTokenStore_1 = require("./services/sessionTokenStore");
 const migrate_1 = require("./db/migrate");
 const cors_1 = __importDefault(require("cors"));
-const path = require("path");
-const installationsEngine = require("./services/installationsEngine");
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const app = (0, express_1.default)();
-// APP V1 — wire enqueue via loopback POST /api/jobs
-if (!globalThis.__APPV1_INSTALL_ENGINE_WIRED) {
-  globalThis.__APPV1_INSTALL_ENGINE_WIRED = true;
-  const __instBase = () => {
-    const port = process.env.PORT || process.env.RENDER_INTERNAL_PORT || 3000;
-    return `http://127.0.0.1:${port}`;
-  };
-  installationsEngine.setEnqueueJob(async ({ type, payload }) => {
-    const r = await fetch(__instBase() + "/api/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type, payload })
-    });
-    const t = await r.text();
-    let j = null;
-    try { j = JSON.parse(t); } catch (_) { j = { raw: t }; }
-    if (!r.ok) {
-      const e = new Error("enqueue_failed");
-      e.details = { status: r.status, body: j };
-      throw e;
+// === APP_INSTALLATIONS_V1_UI (same-origin, sem CORS) ===
+(function mountAppV1Ui() {
+    try {
+        const candidates = [
+            path_1.default.join(process.cwd(), "public"),
+            path_1.default.join(process.cwd(), "dist", "public"),
+            // quando compilado, __dirname vira dist/
+            path_1.default.join(__dirname, "public"),
+            path_1.default.join(__dirname, "..", "public"),
+        ];
+        const pick = candidates.find(d => fs_1.default.existsSync(d) && fs_1.default.existsSync(path_1.default.join(d, "app_installations_v1.html")));
+        app.get("/app/__health", (req, res) => {
+            const data = {
+                ok: !!pick,
+                picked: pick || null,
+                candidates,
+                fileExists: pick ? fs_1.default.existsSync(path_1.default.join(pick, "app_installations_v1.html")) : false,
+            };
+            res.status(pick ? 200 : 404).json(data);
+        });
+        if (pick) {
+            app.use("/app", express_1.default.static(pick));
+            app.get("/app", (req, res) => res.redirect("/app/app_installations_v1.html"));
+        }
     }
-    return j;
-  });
-}
+    catch (e) {
+        try {
+            app.get("/app/__health", (req, res) => res.status(500).json({ ok: false, error: String(e) }));
+        }
+        catch (_) { }
+    }
+})();
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:5173")
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
-
-// === APP_INSTALLATIONS_V1_UI (same-origin, sem CORS) ===
-(function mountAppV1Ui(){
-  try {
-    const __express = (typeof express !== "undefined" ? express : null) || (typeof express_1 !== "undefined" ? express_1.default : null);
-    const candidates = [
-      path.join(process.cwd(), "public"),
-      path.join(process.cwd(), "dist", "public"),
-      path.join(__dirname, "public"),
-      path.join(__dirname, "..", "public"),
-    ];
-    const pick = candidates.find(d =>
-      fs.existsSync(d) && fs.existsSync(path.join(d, "app_installations_v1.html"))
-    );
-
-    // health endpoint (diagnóstico no Render)
-    app.get("/app/__health", (req, res) => {
-      const data = {
-        ok: !!pick,
-        picked: pick || null,
-        candidates,
-        fileExists: pick ? fs.existsSync(path.join(pick, "app_installations_v1.html")) : false,
-        hasExpress: !!__express,
-      };
-      res.status(pick && __express ? 200 : 404).json(data);
-    });
-
-    if (pick && __express && __express.static) {
-      app.use("/app", __express.static(pick));
-      app.get("/app", (req, res) => res.redirect("/app/app_installations_v1.html"));
-    }
-  } catch (e) {
-    try {
-      app.get("/app/__health", (req, res) => res.status(500).json({ ok:false, error: String(e) }));
-    } catch(_) {}
-  }
-})();
-
 app.use((req, res, next) => {
     res.header("Vary", "Origin");
     next();
 });
 const corsMw = (0, cors_1.default)({
     origin: (origin, cb) => {
-  // APP V1 — allow local dev origins (CORS) v2
-  if (process.env.NODE_ENV !== "production") {
-    try {
-      if (!origin) return cb(null, true);
-      const o = String(origin);
-      if (o.indexOf("127.0.0.1") !== -1 || o.indexOf("localhost") !== -1) return cb(null, true);
-    } catch (_) {}
-  }
-
-
         if (!origin)
             return cb(null, true); // curl/postman
         if (allowedOrigins.includes(origin))
             return cb(null, true);
-        // allow local dev origins
-        if (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\\d+)?$/.test(origin)) return cb(null, true);
         return cb(new Error("CORS blocked origin=" + origin), false);
     },
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["content-type", "authorization", "x-admin-key", "x-worker-key", "x-installation-token"],
+    allowedHeaders: ["content-type", "authorization", "x-admin-key", "x-worker-key"],
     maxAge: 86400,
 });
 // --- CORS FIRST ---
@@ -135,8 +91,6 @@ app.use("/api/admin/catalogs", adminCatalogRoutes_1.default);
 app.use("/api/auth", authRoutes_1.default);
 app.use("/api/monitor", monitorRoutes_1.default);
 app.use("/api/jobs", jobRoutes_1.default);
-app.use("/api/installations", installationsRoutes_1.default);
-app.use("/app", express_1.default.static(path.join(__dirname, "public")));
 app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 app.use("/api/admin", adminRoutes_1.default);
 app.use("/api/worker", workerRoutes_1.workerRoutes);
