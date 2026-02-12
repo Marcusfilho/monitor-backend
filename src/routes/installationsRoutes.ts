@@ -1,116 +1,160 @@
-import express from "express";
+import { Router } from "express";
 
-declare const require: any;
+const router = Router();
 
-const router = express.Router();
+// require(any) pra não travar por typings enquanto estabiliza V1
+const installationsStore: any = require("../services/installationsStore");
+const installationsEngine: any = require("../services/installationsEngine");
 
-// Carrega módulos em runtime (evita TS quebrar por tipos/exports enquanto você estabiliza)
-function loadAny(modPath: string): any {
-  try { return require(modPath); } catch { return null; }
-}
-
-function unwrap(mod: any): any {
-  if (!mod) return null;
-  if (mod.default) return mod.default;
-  return mod;
-}
-
-function pickFn(obj: any, names: string[]): Function | null {
-  if (!obj) return null;
-  for (const n of names) {
-    if (typeof obj[n] === "function") return obj[n].bind(obj);
-  }
+function pickFn(obj: any, names: string[]) {
+  for (const n of names) if (obj && typeof obj[n] === "function") return obj[n].bind(obj);
   return null;
 }
 
-async function callMaybe(fn: any, ...args: any[]) {
-  const r = fn(...args);
-  return (r && typeof r.then === "function") ? await r : r;
+function loopbackBase() {
+  const port = Number(process.env.PORT || 3000);
+  return `http://127.0.0.1:${port}`;
 }
 
-// tenta engine e store (nomes mais prováveis)
-function getEngine() {
-  const m = unwrap(loadAny("../services/installationsEngine"));
-  return m?.installationsEngine || m;
+function pickAdminKey(): string | null {
+  return (
+    process.env.ADMIN_API_KEY ||
+    process.env.ADMIN_KEY ||
+    process.env.X_ADMIN_KEY ||
+    process.env.ADMIN_SECRET ||
+    null
+  );
 }
-function getStore() {
-  const m = unwrap(loadAny("../services/installationsStore"));
-  return m?.installationsStore || m;
+
+function jobTypeFromService(svc: string | null): string {
+  const s = String(svc || "").toUpperCase();
+  if (s === "MAINT_NO_SWAP") return "html5_maint_no_swap";
+  if (s === "MAINT_WITH_SWAP") return "html5_maint_with_swap";
+  if (s === "UNINSTALL") return "html5_uninstall";
+  if (s === "CHANGE_COMPANY") return "html5_change_company";
+  return "html5_install";
+}
+
+async function postJson(url: string, body: any, extraHeaders?: Record<string, string>) {
+  const f: any = (globalThis as any).fetch;
+  if (!f) throw new Error("globalThis.fetch not available");
+
+  const res = await f(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(extraHeaders || {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text().catch(() => "");
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+  return { status: res.status, json };
 }
 
 router.post("/", async (req, res) => {
   try {
-    const engine = getEngine();
-    const store = getStore();
+    const payload = req.body || {};
 
-    const fn =
-      pickFn(engine, ["createInstallation", "create", "createAndStart", "startInstallation"]) ||
-      pickFn(store,  ["createInstallation", "create"]);
+    // 1) cria installation (prefer engine; fallback store)
+    const create =
+      pickFn(installationsEngine, ["createInstallation", "create", "createAndStart", "startInstallation"]) ||
+      pickFn(installationsStore, ["createInstallation", "create"]);
 
-    if (!fn) {
-      return res.status(500).json({ error: "installations create handler not wired", hint: "export createInstallation/create in installationsEngine or installationsStore" });
+    if (!create) {
+      return res.status(500).json({ ok: false, error: "no createInstallation/create found in engine/store" });
     }
 
-    const out = await callMaybe(fn, req.body);
-    return res.status(201).json(out ?? { ok: true });
+    const inst = await create(payload);
+
+    const instId = inst?.installation_id || inst?.id || null;
+    const instTok = inst?.installation_token || inst?.token || null;
+
+    // 2) enqueue job inicial (via loopback /api/jobs)
+    const svc = payload.service || inst?.service || null;
+    const jobType = jobTypeFromService(svc);
+
+    const payloadForJob = {
+      installation_id: instId,
+      installation_token: instTok,
+      service: svc,
+      plate: payload.plate || payload.placa || null,
+      serial: payload.serial || payload.serie || payload.innerId || null,
+      raw: payload,
+    };
+
+    const adminKey = pickAdminKey();
+    const headers: Record<string, string> = {};
+    if (adminKey) headers["x-admin-key"] = adminKey;
+    headers["x-internal-call"] = "installationsRoutes";
+
+    let enqueueDebug: any = { ok: false, method: "loopback:/api/jobs", type: jobType };
+
+    try {
+      const r = await postJson(`${loopbackBase()}/api/jobs`, { type: jobType, payload: payloadForJob }, headers);
+      enqueueDebug.status = r.status;
+      enqueueDebug.response = r.json;
+      enqueueDebug.ok = r.status >= 200 && r.status < 300;
+    } catch (e: any) {
+      enqueueDebug.error = String(e?.stack || e?.message || e);
+    }
+
+    // 3) tenta anexar no objeto de retorno (debug)
+    try {
+      inst.enqueue = enqueueDebug;
+    } catch (_) {}
+
+    return res.status(201).json(inst);
+
   } catch (e: any) {
-    return res.status(500).json({ error: "failed to create installation", details: String(e?.stack || e?.message || e) });
+    console.error("[installationsRoutes] POST / error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok: false, error: "Internal Server Error" });
   }
 });
 
 router.get("/:id", async (req, res) => {
   try {
-    const engine = getEngine();
-    const store = getStore();
     const id = String(req.params.id || "");
+    const getOne =
+      pickFn(installationsEngine, ["getInstallation", "getById", "read"]) ||
+      pickFn(installationsStore, ["getInstallation", "getById", "read"]);
 
-    const fn =
-      pickFn(store,  ["getInstallation", "get", "read", "load"]) ||
-      pickFn(engine, ["getInstallation", "get", "read", "load"]);
+    if (!getOne) return res.status(500).json({ ok:false, error:"no getInstallation/getById/read found" });
 
-    if (!fn) {
-      return res.status(500).json({ error: "installations read handler not wired", hint: "export getInstallation/get in installationsStore or installationsEngine" });
-    }
-
-    const out = await callMaybe(fn, id);
-    if (!out) return res.status(404).json({ error: "installation not found", id });
-    return res.json(out);
-  } catch (e: any) {
-    return res.status(500).json({ error: "failed to read installation", details: String(e?.stack || e?.message || e) });
+    const inst = await getOne(id);
+    if (!inst) return res.status(404).json({ ok:false, error:"not found" });
+    return res.json(inst);
+  } catch (e:any) {
+    console.error("[installationsRoutes] GET /:id error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok:false, error:"Internal Server Error" });
   }
 });
 
 router.post("/:id/actions/request-can-snapshot", async (req, res) => {
   try {
-    const engine = getEngine();
     const id = String(req.params.id || "");
-
-    const fn = pickFn(engine, ["requestCanSnapshot", "requestCanSnapshotForInstallation", "enqueueCanSnapshot", "canSnapshotRequest"]);
-    if (!fn) {
-      return res.status(500).json({ error: "request-can-snapshot not wired", hint: "export requestCanSnapshot* in installationsEngine" });
-    }
-
-    const out = await callMaybe(fn, id, req.body);
-    return res.json(out ?? { ok: true });
-  } catch (e: any) {
-    return res.status(500).json({ error: "failed request-can-snapshot", details: String(e?.stack || e?.message || e) });
+    const fn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
+    if (!fn) return res.status(501).json({ ok:false, error:"not implemented (engine missing requestCanSnapshot)" });
+    const out = await fn(id, req.body || {});
+    return res.json(out);
+  } catch (e:any) {
+    console.error("[installationsRoutes] request-can-snapshot error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok:false, error:"Internal Server Error" });
   }
 });
 
 router.post("/:id/actions/approve-can", async (req, res) => {
   try {
-    const engine = getEngine();
     const id = String(req.params.id || "");
-
-    const fn = pickFn(engine, ["approveCan", "approveCanForInstallation", "canApprove", "approveCanSnapshot"]);
-    if (!fn) {
-      return res.status(500).json({ error: "approve-can not wired", hint: "export approveCan* in installationsEngine" });
-    }
-
-    const out = await callMaybe(fn, id, req.body);
-    return res.json(out ?? { ok: true });
-  } catch (e: any) {
-    return res.status(500).json({ error: "failed approve-can", details: String(e?.stack || e?.message || e) });
+    const fn = pickFn(installationsEngine, ["approveCan", "approve_can"]);
+    if (!fn) return res.status(501).json({ ok:false, error:"not implemented (engine missing approveCan)" });
+    const out = await fn(id, req.body || {});
+    return res.json(out);
+  } catch (e:any) {
+    console.error("[installationsRoutes] approve-can error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok:false, error:"Internal Server Error" });
   }
 });
 
