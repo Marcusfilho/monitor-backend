@@ -8,6 +8,7 @@ import monitorRoutes from "./routes/monitorRoutes";
 import jobRoutes from "./routes/jobRoutes";
 import adminCatalogRoutes from "./routes/adminCatalogRoutes";
 
+import installationsRoutes from "./routes/installationsRoutes";
 import { initSessionTokenStore } from "./services/sessionTokenStore";
 import { migrateIfNeeded } from "./db/migrate";
 import cors from "cors";
@@ -64,18 +65,29 @@ app.use((req, res, next) => {
   next();
 });
 
-const corsMw = cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/postman
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error("CORS blocked origin=" + origin), false);
-  },
-  methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
-  allowedHeaders: ["content-type","authorization","x-admin-key","x-worker-key"],
-  maxAge: 86400,
+const corsMw = cors((req, cb) => {
+  // cors types: req é CorsRequest (tem `headers`, não tem `.header()`)
+  const h: any = (req as any).headers || {};
+  const pick1 = (v: any) => Array.isArray(v) ? v[0] : v;
+
+  const origin = pick1(h["origin"]);
+  const host = pick1(h["host"]);
+  const xfp = pick1(h["x-forwarded-proto"]);
+  const proto = String(xfp || "https").split(",")[0].trim();
+
+  const sameOrigin = !!(origin && host && origin === `${proto}://${host}`);
+  const ok = (!origin) || sameOrigin || allowedOrigins.includes(String(origin));
+
+  const opts = {
+    origin: ok ? true : false,
+    methods: ["GET","HEAD","PUT","PATCH","POST","DELETE","OPTIONS"],
+    allowedHeaders: ["content-type","authorization","x-admin-key","x-worker-key"],
+    maxAge: 86400,
+  };
+
+  if (ok) return cb(null, opts);
+  return cb(new Error("CORS blocked origin=" + origin), opts);
 });
-
-
 // --- CORS FIRST ---
 app.options(/.*/, corsMw);
 app.use(corsMw);
@@ -99,6 +111,7 @@ app.use("/api/admin/catalogs", adminCatalogRoutes);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/monitor", monitorRoutes);
+app.use("/api/installations", installationsRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/scheme-builder", schemeBuilderRoutes);
 

@@ -12,6 +12,7 @@ const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
 const adminCatalogRoutes_1 = __importDefault(require("./routes/adminCatalogRoutes"));
+const installationsRoutes_1 = __importDefault(require("./routes/installationsRoutes"));
 const sessionTokenStore_1 = require("./services/sessionTokenStore");
 const migrate_1 = require("./db/migrate");
 const cors_1 = __importDefault(require("cors"));
@@ -58,17 +59,25 @@ app.use((req, res, next) => {
     res.header("Vary", "Origin");
     next();
 });
-const corsMw = (0, cors_1.default)({
-    origin: (origin, cb) => {
-        if (!origin)
-            return cb(null, true); // curl/postman
-        if (allowedOrigins.includes(origin))
-            return cb(null, true);
-        return cb(new Error("CORS blocked origin=" + origin), false);
-    },
-    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["content-type", "authorization", "x-admin-key", "x-worker-key"],
-    maxAge: 86400,
+const corsMw = (0, cors_1.default)((req, cb) => {
+    // cors types: req é CorsRequest (tem `headers`, não tem `.header()`)
+    const h = req.headers || {};
+    const pick1 = (v) => Array.isArray(v) ? v[0] : v;
+    const origin = pick1(h["origin"]);
+    const host = pick1(h["host"]);
+    const xfp = pick1(h["x-forwarded-proto"]);
+    const proto = String(xfp || "https").split(",")[0].trim();
+    const sameOrigin = !!(origin && host && origin === `${proto}://${host}`);
+    const ok = (!origin) || sameOrigin || allowedOrigins.includes(String(origin));
+    const opts = {
+        origin: ok ? true : false,
+        methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+        allowedHeaders: ["content-type", "authorization", "x-admin-key", "x-worker-key"],
+        maxAge: 86400,
+    };
+    if (ok)
+        return cb(null, opts);
+    return cb(new Error("CORS blocked origin=" + origin), opts);
 });
 // --- CORS FIRST ---
 app.options(/.*/, corsMw);
@@ -90,6 +99,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/admin/catalogs", adminCatalogRoutes_1.default);
 app.use("/api/auth", authRoutes_1.default);
 app.use("/api/monitor", monitorRoutes_1.default);
+app.use("/api/installations", installationsRoutes_1.default);
 app.use("/api/jobs", jobRoutes_1.default);
 app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 app.use("/api/admin", adminRoutes_1.default);
