@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "worker:schemebuilder": "node dist/worker/schemeBuilderWorker.js",
-    "postinstall": "npm run build"
+    "postinstall": "npm run build",
+    "postbuild": "node scripts/postbuild_copy_public.js"
   },
   "keywords": [],
   "author": "",
