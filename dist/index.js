@@ -1,4 +1,5 @@
 "use strict";
+const fs = require("fs");
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -47,6 +48,44 @@ const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:51
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
+
+// === APP_INSTALLATIONS_V1_UI (same-origin, sem CORS) ===
+(function mountAppV1Ui(){
+  try {
+    const __express = (typeof express !== "undefined" ? express : null) || (typeof express_1 !== "undefined" ? express_1.default : null);
+    const candidates = [
+      path.join(process.cwd(), "public"),
+      path.join(process.cwd(), "dist", "public"),
+      path.join(__dirname, "public"),
+      path.join(__dirname, "..", "public"),
+    ];
+    const pick = candidates.find(d =>
+      fs.existsSync(d) && fs.existsSync(path.join(d, "app_installations_v1.html"))
+    );
+
+    // health endpoint (diagnóstico no Render)
+    app.get("/app/__health", (req, res) => {
+      const data = {
+        ok: !!pick,
+        picked: pick || null,
+        candidates,
+        fileExists: pick ? fs.existsSync(path.join(pick, "app_installations_v1.html")) : false,
+        hasExpress: !!__express,
+      };
+      res.status(pick && __express ? 200 : 404).json(data);
+    });
+
+    if (pick && __express && __express.static) {
+      app.use("/app", __express.static(pick));
+      app.get("/app", (req, res) => res.redirect("/app/app_installations_v1.html"));
+    }
+  } catch (e) {
+    try {
+      app.get("/app/__health", (req, res) => res.status(500).json({ ok:false, error: String(e) }));
+    } catch(_) {}
+  }
+})();
+
 app.use((req, res, next) => {
     res.header("Vary", "Origin");
     next();
