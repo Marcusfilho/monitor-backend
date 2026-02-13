@@ -20,12 +20,17 @@ router.get("/next", (req: Request, res: Response) => {
   if (!type) return res.status(400).json({ error: "Query param 'type' is required" });
 
   // ✅ HTML5 jobs não dependem de session token (são server-to-server via HTML5 cookie-jar)
-  const isHtml5 = String(type).toLowerCase().startsWith("html5_");
+  const typeLc = String(type).toLowerCase();
+  const isHtml5 = typeLc.startsWith("html5_");
+  const isSchemeBuilder = typeLc === "scheme_builder";
 
   if (!isHtml5) {
-    // ✅ mantém comportamento atual: só libera job se houver token carregado
+    // ✅ scheme_builder não depende de token global no Render (worker faz user_login local)
+    // ✅ demais tipos mantêm o gating atual
     const token = (getSessionToken() || "").trim();
-    if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
+    if (!isSchemeBuilder) {
+      if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
+    }
 
     const job = getNextJob(type, workerId);
     if (!job) return res.status(204).send();
@@ -33,7 +38,7 @@ router.get("/next", (req: Request, res: Response) => {
     // ✅ injeta token apenas na resposta
     const out: any = JSON.parse(JSON.stringify(job));
     out.payload = out.payload || {};
-    out.payload.sessionToken = token;
+    if (token) out.payload.sessionToken = token;
 
     return res.json({ job: out });
   }
