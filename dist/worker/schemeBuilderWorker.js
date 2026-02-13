@@ -375,3 +375,98 @@ async function runVehicleMonitorSnapshotJob(job, http) {
         catch { }
     }
 }
+
+// === SB_POLL_V1 — poll /api/jobs/next?type=scheme_builder ===
+(function(){
+  try{
+    if (globalThis.__SB_POLL_STARTED) return;
+    globalThis.__SB_POLL_STARTED = true;
+
+    const base0 = (process.env.JOB_SERVER_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || "");
+    const base = (base0 ? base0.replace(/\/+$/,"") : "http://127.0.0.1:3000");
+    const workerKey = process.env.WORKER_KEY || "";
+    const workerId = process.env.WORKER_ID || process.env.WORKER_NAME || "vm-schemebuilder";
+
+    const log = (...a)=>console.log("[SB_POLL]", ...a);
+    const warn = (...a)=>console.warn("[SB_POLL]", ...a);
+
+    function getExec(){
+      // payload-first candidates
+      if (typeof runSchemeBuilder === "function") return {name:"runSchemeBuilder", mode:"payload", fn: runSchemeBuilder};
+      if (typeof executeSchemeBuilder === "function") return {name:"executeSchemeBuilder", mode:"payload", fn: executeSchemeBuilder};
+
+      // job candidates
+      if (typeof processJob === "function") return {name:"processJob", mode:"job", fn: processJob};
+      if (typeof runJob === "function") return {name:"runJob", mode:"job", fn: runJob};
+      if (typeof handleJob === "function") return {name:"handleJob", mode:"job", fn: handleJob};
+
+      return null;
+    }
+
+    let busy = false;
+
+    async function pollOnce(){
+      if (busy) return;
+      if (!workerKey) { warn("WORKER_KEY vazio; poll desabilitado"); return; }
+
+      const ex = getExec();
+      if (!ex) { warn("não achei função de execução (runJob/processJob/runSchemeBuilder). Poll desabilitado."); return; }
+
+      busy = true;
+      try{
+        const url = `${base}/api/jobs/next?type=scheme_builder&worker=${encodeURIComponent(workerId)}`;
+        const res = await fetch(url, { headers: { "x-worker-key": workerKey } });
+
+        if (res.status === 204) return;
+        if (!res.ok){
+          warn("jobs/next http", res.status);
+          return;
+        }
+
+        const data = await res.json().catch(()=>null);
+        const job = data && (data.job || data);
+        if (!job || !job.id){
+          warn("jobs/next retornou sem job.id");
+          return;
+        }
+
+        
+        // === SB_POLL_V2 — inject sessionToken from local env when missing ===
+        if (job) {
+          job.payload = job.payload || {};
+          const tok =
+            job.payload.sessionToken ||
+            job.payload.session_token ||
+            process.env.SESSION_TOKEN ||
+            process.env.SESSION_TOKEN_LOCAL ||
+            process.env.MONITOR_SESSION_TOKEN ||
+            process.env.TL_SESSION_TOKEN ||
+            process.env.APPENGINE_SESSION_TOKEN ||
+            "";
+          if (tok) {
+            if (!job.payload.sessionToken) job.payload.sessionToken = tok;
+            if (!job.sessionToken) job.sessionToken = tok;
+            log("sessionToken injected (len=" + String(tok).length + ")");
+          }
+        }
+log("claimed job", job.id, "worker", workerId, "exec", ex.name);
+
+        try{
+          if (ex.mode === "payload") await ex.fn(job.payload, job);
+          else await ex.fn(job);
+        } catch(e){
+          warn("exec error", (e && e.stack) ? e.stack : e);
+        }
+      } finally {
+        busy = false;
+      }
+    }
+
+    setTimeout(()=>{ pollOnce().catch(()=>{}); }, 1200);
+    setInterval(()=>{ pollOnce().catch(()=>{}); }, 2000);
+
+    log("poll enabled:", base, "workerId:", workerId);
+  } catch(e){
+    console.warn("[SB_POLL] init error", e && e.stack ? e.stack : e);
+  }
+})();
