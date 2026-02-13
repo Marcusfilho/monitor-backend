@@ -41,7 +41,31 @@ const axios_1 = __importDefault(require("axios"));
 const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const vehicleMonitorSnapshotService_1 = require("../services/vehicleMonitorSnapshotService");
+const heartbeatClient_1 = require("./heartbeatClient");
 // progressPercent (job) — updates não bloqueiam o fluxo
+// === HEARTBEAT (source) ===
+try {
+    const baseUrl = process.env.BASE_URL || "";
+    const workerId = (process.env.WORKER_ID || "tunel").toLowerCase();
+    const workerKey = process.env.WORKER_KEY || "";
+    const intervalMs = Number(process.env.HEARTBEAT_INTERVAL_MS || 30000);
+    (0, heartbeatClient_1.startHeartbeat)({
+        baseUrl,
+        workerId,
+        workerKey,
+        intervalMs,
+        getState: () => ({
+            status: "running",
+            checks: { backend_ok: true },
+            meta: { uptime_s: Math.round(process.uptime()) },
+        }),
+    });
+    console.log("[hb] enabled (src):", { workerId, intervalMs });
+}
+catch (e) {
+    console.error("[hb] init fail (src):", e?.message || e);
+}
+// === /HEARTBEAT ===
 async function reportProgress(jobId, percent, stage, detail) {
     try {
         // http deve existir no escopo quando a função for chamada
