@@ -1,26 +1,28 @@
-import express, { Request, Response, NextFunction } from "express";
-import fs from "fs";
-import path from "path";
+import { Router } from "express";
 
-const router = express.Router();
+import { getSessionTokenStatus, setSessionToken } from "../services/sessionTokenStore"
 
-function requireWorkerKey(req: Request, res: Response, next: NextFunction) {
-  const expected = (process.env.WORKER_KEY || "").trim();
-  if (!expected) return res.status(500).json({ ok: false, error: "WORKER_KEY_not_set" });
-
-  const got = (req.header("x-worker-key") || req.header("X-Worker-Key") || "").trim();
-  if (!got || got !== expected) return res.status(401).json({ ok: false, error: "unauthorized" });
-
+function requireWorkerKey(req: any, res: any, next: any) {
+  const got = String(req.header("x-worker-key") || "");
+  const want = String(process.env.WORKER_KEY || "");
+  if (!want || got !== want) return res.status(401).json({ error: "WORKER_KEY_INVALID" });
   next();
 }
 
-const TOKEN_PATH =
-  process.env.SESSION_TOKEN_PATH || path.join(process.cwd(), ".session_token");
+const router = Router();
 
-router.get("/session-token", requireWorkerKey, (_req: Request, res: Response) => {
-  let token = "";
-  try { token = fs.readFileSync(TOKEN_PATH, "utf8").trim(); } catch {}
-  res.json({ ok: true, hasToken: !!token, tokenLen: token.length, token, path: TOKEN_PATH });
+router.post("/session-token", requireWorkerKey, (req, res) => {
+  const session_token = String((req.body && (req.body.session_token ?? req.body.sessionToken)) || "").trim();
+  if (!session_token) return res.status(400).json({ error: "missing session_token" });
+
+  setSessionToken(session_token)
+  return res.json({ ok: true });
+});
+
+
+// --- heartbeat (worker health) ---
+router.get("/heartbeat", requireWorkerKey, (req, res) => {
+  res.json({ ok: true, ts: new Date().toISOString() });
 });
 
 export default router;
