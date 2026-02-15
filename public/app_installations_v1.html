@@ -11,6 +11,7 @@
     .col { flex: 1; min-width: 240px; }
     pre { background: #111; color: #eee; padding: 12px; overflow: auto; max-height: 380px; }
     .muted { color: #666; font-size: 12px; }
+    .warn { color: #b36b00; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -32,21 +33,31 @@
 
       <label>Placa</label>
       <input id="plate" placeholder="ABC1D23" />
+      <div class="warn" id="hintPlate" style="display:none">
+        Dica bancada: se o veículo de pré-teste está com license=serial, use a "placa" = serial para resolver o vehicle_id (smoke test).
+      </div>
 
-      <label>Serial (new)</label>
-      <input id="serial" placeholder="9123456789" />
+      <div id="rowSerial">
+        <label>Serial (new)</label>
+        <input id="serial" placeholder="9123456789" />
+      </div>
 
-      <label>VehicleSettingId (opcional)</label>
+      <label>VehicleSettingId (opcional — Monitor)</label>
       <input id="vehicleSettingId" placeholder="ex: 5592" />
 
-      <label>Fabricante</label>
-      <input id="manufacturer" placeholder="IVECO" />
+      <div id="rowCatalog">
+        <hr/>
+        <div class="muted">Modelo (HTML5) — seleciona o <b>assetType</b> (vira ASSET_TYPE no SAVE_VHCL_ACTIVATION_NEW)</div>
 
-      <label>Modelo</label>
-      <input id="model" placeholder="TECTOR 170E30" />
+        <label>Fabricante (catálogo)</label>
+        <select id="cat_manufacturer"></select>
 
-      <label>Ano</label>
-      <input id="year" placeholder="2019" />
+        <label>Modelo (catálogo)</label>
+        <select id="cat_model"></select>
+
+        <label>assetType (id do modelo)</label>
+        <input id="assetType" readonly />
+      </div>
 
       <label>Etiqueta (label_pos)</label>
       <input id="label_pos" placeholder="LABEL_A" value="LABEL_A" />
@@ -103,20 +114,98 @@ async function api(path, opts={}) {
   return { status: r.status, json: j };
 }
 
-function show(x) {
-  $("out").textContent = JSON.stringify(x, null, 2);
+function show(x) { $("out").textContent = JSON.stringify(x, null, 2); }
+
+// ===== Catálogo (front-end) =====
+let CATALOG = [];
+function uniqSorted(arr){ return [...new Set(arr)].sort((a,b)=>String(a).localeCompare(String(b))); }
+
+async function loadCatalog(){
+  try {
+    const r = await fetch("catalog_vehicle_type.json", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    CATALOG = await r.json();
+  } catch (e) {
+    show({ error: "Falha ao carregar catalog_vehicle_type.json (coloque ao lado do HTML).", details: String(e) });
+    CATALOG = [];
+  }
+  renderManufacturers();
 }
 
+function renderManufacturers(){
+  const sel = $("cat_manufacturer");
+  sel.innerHTML = "";
+  const mans = uniqSorted(CATALOG.map(x => x.manufacturer).filter(Boolean));
+  for (const m of mans){
+    const o = document.createElement("option");
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+  }
+  renderModels();
+}
+
+function renderModels(){
+  const man = $("cat_manufacturer").value;
+  const sel = $("cat_model");
+  sel.innerHTML = "";
+  const models = uniqSorted(CATALOG.filter(x => x.manufacturer === man).map(x => x.model).filter(Boolean));
+  for (const m of models){
+    const o = document.createElement("option");
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+  }
+  updateAssetType();
+}
+
+function updateAssetType(){
+  const man = $("cat_manufacturer").value;
+  const model = $("cat_model").value;
+  const it = CATALOG.find(x => x.manufacturer === man && x.model === model);
+  $("assetType").value = it ? String(it.asset_type) : "";
+}
+
+$("cat_manufacturer").addEventListener("change", renderModels);
+$("cat_model").addEventListener("change", updateAssetType);
+
+// ===== UI por serviço (mínimo) =====
+function applyServiceUI(){
+  const svc = $("service").value;
+  $("rowCatalog").style.display = (svc === "INSTALL") ? "" : "none";
+  $("hintPlate").style.display = (svc === "INSTALL") ? "" : "none";
+  $("rowSerial").style.display = (svc === "INSTALL" || svc === "MAINT_WITH_SWAP") ? "" : "none";
+}
+$("service").addEventListener("change", applyServiceUI);
+applyServiceUI();
+loadCatalog();
+
+// ===== Actions =====
 $("btnCreate").onclick = async () => {
+  const svc = $("service").value;
+
   const body = {
-    service: $("service").value,
+    service: svc,
     target_client_id: Number($("target_client_id").value || 0) || null,
     plate: $("plate").value.trim(),
     serial: $("serial").value.trim(),
     vehicleSettingId: Number($("vehicleSettingId").value || 0) || null,
-    vehicle: { manufacturer: $("manufacturer").value, model: $("model").value, year: Number($("year").value||0)||null },
     gsensor: { label_pos: $("label_pos").value, harness_pos: $("harness_pos").value }
   };
+
+  // INSTALL: manda assetType (HTML5 ASSET_TYPE)
+  if (svc === "INSTALL") {
+    const assetType = Number($("assetType").value || 0) || null;
+    body.assetType = assetType; // <- IMPORTANTÍSSIMO: o worker usa payload.assetType
+    body.vehicle = {
+      manufacturer: $("cat_manufacturer").value,
+      model: $("cat_model").value,
+      year: null
+    };
+  }
+
+  // Serviços onde serial não faz sentido: limpa
+  if (svc === "UNINSTALL" || svc === "MAINT_NO_SWAP") {
+    body.serial = "";
+  }
 
   const r = await api("/api/installations", { method: "POST", body: JSON.stringify(body) });
   show(r);

@@ -1,0 +1,1072 @@
+[
+  {
+    "manufacturer": "Volvo",
+    "model": "VM330-MWM7B-R-4x2",
+    "asset_type": 8064
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "ETT-VW-17.260-M-4x2",
+    "asset_type": 8873
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ETT-OF-1721-OM924LA-M-E5",
+    "asset_type": 4016
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ETT-OF1722-OM924LA-4x2-M-E3",
+    "asset_type": 8881
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R410-DC9GNL-R-UP-6x2-E6",
+    "asset_type": 23103
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-25.420-D26-R-6X2",
+    "asset_type": 8547
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Stralis-480-800S48TZ-M-6x4",
+    "asset_type": 7547
+  },
+  {
+    "manufacturer": "Foton",
+    "model": "Ewonder Chassi SZX",
+    "asset_type": 24285
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.280-M-6x2",
+    "asset_type": 23353
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.280-R-6x2",
+    "asset_type": 23354
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Delivery Express 2020 - Cummin",
+    "asset_type": 22540
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Delivery-11.160-MT-4x2",
+    "asset_type": 21697
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.280-AT-4x2",
+    "asset_type": 23158
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.250-M-4x2",
+    "asset_type": 8486
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Meteor-28.480-D2676-R-6x2",
+    "asset_type": 21253
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P360LB-DC13.06-M-EG-6X2P",
+    "asset_type": 4445
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R540LA-DC13.166-AT-6x2",
+    "asset_type": 23159
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 17.190-M-4X2",
+    "asset_type": 6344
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P340LB-DC13-M-4x2",
+    "asset_type": 6117
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.280-M-4x2",
+    "asset_type": 8962
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 30.330 R-6x2",
+    "asset_type": 23366
+  },
+  {
+    "manufacturer": "MAN",
+    "model": "TGX-28.440-D2676-R-PTO1-6X2",
+    "asset_type": 6323
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "8.160-DRC-M-4x2",
+    "asset_type": 20463
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Meteor-28.460-R-6x2",
+    "asset_type": 23564
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ACTROS-2651-OM460LA-R-6x4",
+    "asset_type": 8975
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Meteor-29.530-R-6x4-D2676",
+    "asset_type": 21336
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R420LA-DC13.10-R-EG-6x4TP",
+    "asset_type": 4035
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH-520-DC13C-6x4-M-UP",
+    "asset_type": 23383
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-19.320-M-4x2",
+    "asset_type": 8457
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "S-WAY-480-C11-6x2-R-UP",
+    "asset_type": 23385
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH 540-6X4-D13KE-R-UP-T",
+    "asset_type": 23167
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "S-WAY-540-C13-6x2-R-UP",
+    "asset_type": 23382
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "23.220-M-6x2",
+    "asset_type": 23386
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "VM-260-MWM7A-M-PTO2-4X2",
+    "asset_type": 8482
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "AXOR-2644-OM457-M-6X4",
+    "asset_type": 5753
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "VM330-R-D8K-8x2",
+    "asset_type": 23534
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH-440-D13A-M-6x4-E3",
+    "asset_type": 8914
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R440LA-DC13.112-R-6x4",
+    "asset_type": 6464
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "L1620-M-6X2-E3",
+    "asset_type": 8406
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P360LB-DC13.06-R-EG-6X2P",
+    "asset_type": 4059
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G420LA-DC13-M-EG-6x2",
+    "asset_type": 8403
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P340LB-DC13-M-EG-6x2",
+    "asset_type": 8386
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Stralis-490S41T-C13-M-UP-6x2",
+    "asset_type": 6463
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Delivery-8.150E-M-4X2",
+    "asset_type": 6225
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R410CB-DC13.115-R-PTO.EG-6X2",
+    "asset_type": 6510
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Worker-17.190-M-6x2",
+    "asset_type": 8608
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "XF105.460.FTS-MX13-R-6x4",
+    "asset_type": 8610
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R410B-DC13.141-R-EG-6X2",
+    "asset_type": 21231
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Express-Trend-DRC-M-4x2",
+    "asset_type": 23414
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 30.320 R 8x2",
+    "asset_type": 23670
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 25.480 R 6x2",
+    "asset_type": 23793
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Const-25.390-ISL.400-M-PTO1-6X",
+    "asset_type": 8546
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R420LA-DC13.10-M-EG-6x4TP",
+    "asset_type": 23561
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P360LA-DC13.114-R-6X2",
+    "asset_type": 8322
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Atego-2429-OM926-M-4X2-E6",
+    "asset_type": 8243
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ATEGO-2429-OM926LA-M-4X2-E5",
+    "asset_type": 8401
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ATEGO-2426-M-2018-6X2-E5",
+    "asset_type": 23422
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Actros-2546LS-OM460LA-R-6X4-E5",
+    "asset_type": 8791
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R450JB-DC13.164-R-6X2",
+    "asset_type": 21154
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Delivery 11.180 Prime-M-4x2",
+    "asset_type": 23479
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "XF-FTS-480-MX355-R-6X2",
+    "asset_type": 311
+  },
+  {
+    "manufacturer": "Renault",
+    "model": "Master-L2-M-VAN",
+    "asset_type": 4362
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 24.250-M-6x2",
+    "asset_type": 23481
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-26.260-Robust-M",
+    "asset_type": 19131
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R114GA4X2NZ",
+    "asset_type": 2941
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G420LA-DC12.06-M-EG-4x2",
+    "asset_type": 8391
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Worker-15.170-M-4X2 E3",
+    "asset_type": 8931
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Daily 35S14HDCS - M",
+    "asset_type": 4490
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G380LA-DC12.17-M-EG-4x2",
+    "asset_type": 8404
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "15.180-CNM-M-4x2",
+    "asset_type": 5851
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "9.150E-M-4X2",
+    "asset_type": 8782
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.260-M-6x2",
+    "asset_type": 23480
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G400LA-DC12.113-R-PTO.EG-6x2",
+    "asset_type": 8549
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ATEGO-2425-M-4x2",
+    "asset_type": 6475
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ATEGO-1719-M-OM924-4X2",
+    "asset_type": 19204
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "ETT-VW-17.230-D08-4x2-M-E5",
+    "asset_type": 8417
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ATEGO-2430-OM926-R-6X2",
+    "asset_type": 20469
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "CF-290-M-6x2",
+    "asset_type": 23565
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "CF-290-R-6x2",
+    "asset_type": 306
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Robust-17.230-D0834-M-4x2",
+    "asset_type": 20472
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P320DB-DC9.133-R-PTO.EG-6X2 E6",
+    "asset_type": 9071
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-24.330-M-6X2",
+    "asset_type": 20483
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "CF-FAS-310-M-6x2",
+    "asset_type": 23852
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G460-DC9GNL-R-UP-6x2-E6",
+    "asset_type": 23697
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G460-DC9GNV-R-UP-6X2-E6",
+    "asset_type": 23698
+  },
+  {
+    "manufacturer": "Questar",
+    "model": "Activation - J1939",
+    "asset_type": 23392
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Meteor 29.520 R 6x4",
+    "asset_type": 23726
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "XF450FT-MX13.355-R-UP-4x2T",
+    "asset_type": 23139
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "CF-FAS-R-300-6x2",
+    "asset_type": 2239
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 26.320 Prime - M",
+    "asset_type": 23658
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH-420-R-6x2T",
+    "asset_type": 23667
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-25.360-R-6x2",
+    "asset_type": 9048
+  },
+  {
+    "manufacturer": "Ford",
+    "model": "Cargo-815e-M-PTO2-6x2",
+    "asset_type": 5806
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-13.190-M-4x2",
+    "asset_type": 8627
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Worker-13.180-M-PTO-6x2",
+    "asset_type": 20459
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH 460-6x2-D13KE-R-UP-T",
+    "asset_type": 23695
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH 460-D13KE-R-6x2-EE",
+    "asset_type": 23794
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "VWBus-9.160-M-EOD(E5)",
+    "asset_type": 6452
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G460-R-6x2",
+    "asset_type": 23692
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R460-R-6x2",
+    "asset_type": 23682
+  },
+  {
+    "manufacturer": "ANKAI",
+    "model": "G9 OE10",
+    "asset_type": 23765
+  },
+  {
+    "manufacturer": "ANKAI",
+    "model": "G9 OE8",
+    "asset_type": 23778
+  },
+  {
+    "manufacturer": "ANKAI",
+    "model": "G9 OE12",
+    "asset_type": 23766
+  },
+  {
+    "manufacturer": "ANKAI",
+    "model": "G9 OE6",
+    "asset_type": 23764
+  },
+  {
+    "manufacturer": "JAC",
+    "model": "EJV12",
+    "asset_type": 23779
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "AXOR-1933-OM926LA-M-UP-4x2",
+    "asset_type": 23109
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "XF105.480.FTS-MX13-R 6x2",
+    "asset_type": 23683
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "VM-220-MWM7A-M-PTO2-4X2E5",
+    "asset_type": 8824
+  },
+  {
+    "manufacturer": "JAC",
+    "model": "EJ-9.5T",
+    "asset_type": 23841
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Stralis-570s41T-M-6x2",
+    "asset_type": 23807
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Titan-18.310-M-4x2",
+    "asset_type": 24300
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Accelo-815-OM924LA-M-4x2",
+    "asset_type": 8788
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "New Sprinter 2019 Activation",
+    "asset_type": 9053
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "VM270-M-6x2-E6",
+    "asset_type": 8072
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Saveiro",
+    "asset_type": 2829
+  },
+  {
+    "manufacturer": "Riddara",
+    "model": "Tangjun RD6 Luxury",
+    "asset_type": 23858
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "AXOR-2544LS-OM457-R-E5",
+    "asset_type": 8691
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Actros-2546-OM460-R-6x4-E6",
+    "asset_type": 23863
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G450LA-DC13.148-R-PTO.EG-6X2",
+    "asset_type": 19078
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G450JA-DC13.164-R-PTO.EG-6X2",
+    "asset_type": 21159
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-19.360-R-4x2-E5",
+    "asset_type": 23389
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ETT-OF-1519-OM924LA-M-E5",
+    "asset_type": 8504
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "ETT-VW-15.190-D0834-M-E3",
+    "asset_type": 8837
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ETT-OF-1418-904LA-M-4x2-E3",
+    "asset_type": 8418
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Volksbus-17.230-D08-M-4x2-E5",
+    "asset_type": 3998
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH 500-6X2-D13KE-R-UP-T",
+    "asset_type": 23177
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "VM-290-R-6x2",
+    "asset_type": 23842
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ACTROS-2548S-OM460LA-R-6x2-UP",
+    "asset_type": 23148
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FM-370-R-4x2T",
+    "asset_type": 23862
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FH12-380-M-6x2",
+    "asset_type": 7158
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "NL-12360-M",
+    "asset_type": 23859
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P370-R-6x2",
+    "asset_type": 748
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "NH 12380-M-4x2T",
+    "asset_type": 7164
+  },
+  {
+    "manufacturer": "Ford",
+    "model": "Cargo-2422E-M-6x2",
+    "asset_type": 8580
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R124GA-4x2NZ-M-420",
+    "asset_type": 7274
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R124LA-4x2NA-M-420",
+    "asset_type": 7266
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Stralis-460S-36T-M",
+    "asset_type": 23860
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Atron-1635-OM457LA-M-4X2",
+    "asset_type": 8690
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation 25.460 R 6x2",
+    "asset_type": 23861
+  },
+  {
+    "manufacturer": "Ford",
+    "model": "CARGO-2842-A-6X2",
+    "asset_type": 6461
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Stralis-740S-46TZ-R-6x2",
+    "asset_type": 24286
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "LS1938-M-4x2",
+    "asset_type": 6638
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "ATRON-1719-OM924LA-M-6X2",
+    "asset_type": 8402
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Axor-2540-OM926LA-M-6X4",
+    "asset_type": 8469
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Volksbus-9.160-ISF3.8-M-4x2-E5",
+    "asset_type": 8957
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "L1318-M-4X2",
+    "asset_type": 3323
+  },
+  {
+    "manufacturer": "Questar",
+    "model": "Activation - MBZ",
+    "asset_type": 23508
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-17.230-M-PTO2-E6",
+    "asset_type": 24287
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "DAF-XF530-R-FTT-6x4",
+    "asset_type": 21616
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G370A-DC13.116-R-4x2",
+    "asset_type": 23871
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "XF-FT-480-MX355-R-4x2",
+    "asset_type": 4332
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P280LA-DC07.280-R-6X2",
+    "asset_type": 20475
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Atego-1933SCE-OM926LA-M-4x2-E6",
+    "asset_type": 23877
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Delivery-9.170-4x2",
+    "asset_type": 20464
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Iveco Tector 170E30-M-4x2",
+    "asset_type": 24291
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Tector 24.280-M-6x2-E5",
+    "asset_type": 24290
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-19.380-CTC-4x2-R",
+    "asset_type": 23393
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-17.280-M-PTO2-6x",
+    "asset_type": 6011
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Tector 170E21-M-4x2-E5",
+    "asset_type": 24296
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-18.260-M-4x2-E6",
+    "asset_type": 24299
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Constellation-20.480-R-4x2-E6",
+    "asset_type": 24298
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Atego-1726-M-4x2-E6",
+    "asset_type": 1129
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "VM360-R-6x2-E6",
+    "asset_type": 24301
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R340",
+    "asset_type": 929
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Tag-OF-1722-OM926lA-M4x2-E3",
+    "asset_type": 24272
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Tag-OF-1721-OM924-M-4x2-E5",
+    "asset_type": 24273
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "P360LA-DC13.114-R-PTO.EG-4X2",
+    "asset_type": 8456
+  },
+  {
+    "manufacturer": "JAC",
+    "model": "JAC EJVCC 3.5",
+    "asset_type": 23879
+  },
+  {
+    "manufacturer": "Fiat",
+    "model": "Strada Worker HD",
+    "asset_type": 24326
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Amarok 4x4 CS",
+    "asset_type": 6178
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Polo Track M",
+    "asset_type": 4975
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Gol TL M",
+    "asset_type": 6182
+  },
+  {
+    "manufacturer": "Toyota",
+    "model": "Hilux CHLSTM M 4FD",
+    "asset_type": 24279
+  },
+  {
+    "manufacturer": "JAC",
+    "model": "IEV1200T",
+    "asset_type": 21610
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Saveiro-CS-ST-M",
+    "asset_type": 6444
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "OF-1721-OM924-M-4x2-B2E",
+    "asset_type": 23782
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "Daily-30VAN-M-4x2-E6",
+    "asset_type": 24289
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R410-DC9GNV-R-UP-6x2-E6",
+    "asset_type": 22537
+  },
+  {
+    "manufacturer": "Foton",
+    "model": "Iblue EV 6T",
+    "asset_type": 24284
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K360-DC13114-M-4x2-E6",
+    "asset_type": 19124
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K400-DC13-R-6x2-E6",
+    "asset_type": 24294
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K360B-M-4x2-E5",
+    "asset_type": 24304
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K370C-DC13-R-4x2-E6",
+    "asset_type": 24293
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K410-DC13.115-R-4x2-E6",
+    "asset_type": 22885
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "O500RSD-2441-M-6x2-E5",
+    "asset_type": 24292
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K-440-DC13.112-A-8x2-E5",
+    "asset_type": 8718
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "K440-DC13.112-R-6X2-E6",
+    "asset_type": 8688
+  },
+  {
+    "manufacturer": "JAC",
+    "model": "EJV 5.5",
+    "asset_type": 24295
+  },
+  {
+    "manufacturer": "Iveco",
+    "model": "BUS-170S28-M-4x2-E5",
+    "asset_type": 8807
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "O500R-OM926LA-M-4x2-E6",
+    "asset_type": 19125
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "OF-1619-M-4x2-E6",
+    "asset_type": 24303
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Volksbus-22.260-M-4x2-E6",
+    "asset_type": 24308
+  },
+  {
+    "manufacturer": "Eletra",
+    "model": "Scania-Induscar-Caio-Millenium",
+    "asset_type": 24306
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "O500UA-2836-R-6x2-E5",
+    "asset_type": 8712
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Volksbus-17.230-MWM-M-4x2-E3",
+    "asset_type": 8939
+  },
+  {
+    "manufacturer": "BYD",
+    "model": "EVBUS-D11A41.820-8x2",
+    "asset_type": 24307
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "B270F-MWM7B-M-4X2",
+    "asset_type": 6057
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "OF-1721-OM924-M-4x2-E5",
+    "asset_type": 8237
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "OF-1519-OM924LA-M-E5",
+    "asset_type": 3997
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Volksbus-11.180-M-4x2-E6",
+    "asset_type": 8687
+  },
+  {
+    "manufacturer": "Volkswagen",
+    "model": "Volksbus-15.190-D08-M-4x2",
+    "asset_type": 5848
+  },
+  {
+    "manufacturer": "BYD",
+    "model": "Mini Dolphin",
+    "asset_type": 24333
+  },
+  {
+    "manufacturer": "Mercedes",
+    "model": "Sprinter 320 VIPK AMB EV",
+    "asset_type": 24325
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "FTP-CF85.430-MX315-R-PTO2-6X2P",
+    "asset_type": 21256
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R560-R-6x4",
+    "asset_type": 23680
+  },
+  {
+    "manufacturer": "Farizon",
+    "model": "V6E",
+    "asset_type": 24324
+  },
+  {
+    "manufacturer": "DAF",
+    "model": "FAD-CF480-MX355-R-PTO2-8X4T",
+    "asset_type": 21257
+  },
+  {
+    "manufacturer": "Liebherr",
+    "model": "580",
+    "asset_type": 2462
+  },
+  {
+    "manufacturer": "Caterpillar",
+    "model": "950L",
+    "asset_type": 24329
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "G500-B8X4-XT-CS-R-E6",
+    "asset_type": 24328
+  },
+  {
+    "manufacturer": "Caterpillar",
+    "model": "320GC",
+    "asset_type": 1155
+  },
+  {
+    "manufacturer": "Caterpillar",
+    "model": "980",
+    "asset_type": 3363
+  },
+  {
+    "manufacturer": "Volvo",
+    "model": "FMX-8x4-D13K-R-E5",
+    "asset_type": 24327
+  },
+  {
+    "manufacturer": "Scania",
+    "model": "R450JA-DC13.164-R-EG-6X4",
+    "asset_type": 21153
+  }
+]
