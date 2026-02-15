@@ -3,20 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>APP V1 - Installations</title>
+  <title>APP V1 - Installations (v1.2)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 16px; }
-    input, select, button, textarea { padding: 8px; margin: 6px 0; width: 100%; max-width: 520px; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .col { flex: 1; min-width: 240px; }
-    pre { background: #111; color: #eee; padding: 12px; overflow: auto; max-height: 380px; }
+    input, select, button { padding: 8px; margin: 6px 0; width: 100%; max-width: 560px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+    .col { flex: 1; min-width: 280px; }
+    pre { background: #111; color: #eee; padding: 12px; overflow: auto; max-height: 420px; }
     .muted { color: #666; font-size: 12px; }
     .warn { color: #b36b00; font-size: 12px; }
+    .ok { color: #1a7f37; font-size: 12px; }
+    hr { margin: 12px 0; }
   </style>
 </head>
 <body>
-  <h2>APP V1 (provisório) — Installations</h2>
-  <div class="muted">Mesma origem do backend (sem CORS). Token fica salvo no localStorage.</div>
+  <h2>APP V1 (provisório) — Installations (v1.2)</h2>
+  <div class="muted">
+    Carrega catálogos no front-end e envia no payload: clientId/vehicleSettingId (Monitor), assetType (HTML5) e comando do G-sensor.
+  </div>
 
   <div class="row">
     <div class="col">
@@ -28,44 +32,71 @@
         <option>MAINT_WITH_SWAP</option>
       </select>
 
-      <label>Target client_id</label>
-      <input id="target_client_id" placeholder="ex: 218572" value="218572" />
+      <hr/>
+      <div class="muted">Cliente + Setting (Monitor / Scheme Builder)</div>
 
-      <label>Placa</label>
-      <input id="plate" placeholder="ABC1D23" />
-      <div class="warn" id="hintPlate" style="display:none">
-        Dica bancada: se o veículo de pré-teste está com license=serial, use a "placa" = serial para resolver o vehicle_id (smoke test).
+      <label>Cliente (nome)</label>
+      <select id="clientSelect"></select>
+      <div class="muted" id="clientMeta"></div>
+
+      <label>target_client_id</label>
+      <input id="target_client_id" placeholder="ex: 218572" />
+
+      <label>vehicleSettingId (Monitor)</label>
+      <input id="vehicleSettingId" placeholder="ex: 5592" />
+
+      <hr/>
+      <div class="muted">Identificação do veículo</div>
+
+      <label>Lookup (license atual / serial em placa)</label>
+      <input id="lookup_license" placeholder="ex: 913055459" />
+      <div class="warn" id="hintLookup" style="display:none">
+        Bancada: se o veículo de pré-teste está com license=serial, use o serial aqui para resolver o vehicle_id.
+        O payload envia <b>plate = lookup_license</b> quando este campo está preenchido.
       </div>
+
+      <label>Placa final (opcional)</label>
+      <input id="plate_real" placeholder="ex: BOI0A12" />
+      <div class="muted">No smoke test, pode deixar vazio. No futuro, o backend/worker deve aplicar essa placa no SAVE.</div>
 
       <div id="rowSerial">
         <label>Serial (new)</label>
-        <input id="serial" placeholder="9123456789" />
+        <input id="serial" placeholder="ex: 913055459" />
       </div>
 
-      <label>VehicleSettingId (opcional — Monitor)</label>
-      <input id="vehicleSettingId" placeholder="ex: 5592" />
-
-      <div id="rowCatalog">
-        <hr/>
+      <hr id="hrInstall"/>
+      <div id="blockInstall">
         <div class="muted">Modelo (HTML5) — seleciona o <b>assetType</b> (vira ASSET_TYPE no SAVE_VHCL_ACTIVATION_NEW)</div>
 
-        <label>Fabricante (catálogo)</label>
+        <label>Fabricante</label>
         <select id="cat_manufacturer"></select>
 
-        <label>Modelo (catálogo)</label>
+        <label>Modelo</label>
         <select id="cat_model"></select>
 
         <label>assetType (id do modelo)</label>
         <input id="assetType" readonly />
       </div>
 
-      <label>Etiqueta (label_pos)</label>
-      <input id="label_pos" placeholder="LABEL_A" value="LABEL_A" />
+      <hr/>
+      <div class="muted">G-Sensor — orientação/instalação</div>
 
-      <label>Chicote (harness_pos)</label>
-      <input id="harness_pos" placeholder="HARNESS_A" value="HARNESS_A" />
+      <label>Etiqueta (label)</label>
+      <select id="gs_label"></select>
 
+      <label>Chicote (harness)</label>
+      <select id="gs_harness"></select>
+
+      <label>Comando (auto)</label>
+      <input id="gs_command" readonly />
+
+      <div class="muted">O payload envia: gsensor = { label, harness, command }.</div>
+
+      <hr/>
       <button id="btnCreate">Criar instalação</button>
+
+      <div class="muted">Preview do payload (antes de enviar)</div>
+      <pre id="payloadPreview">{}</pre>
     </div>
 
     <div class="col">
@@ -88,6 +119,7 @@
       <label>override reason</label>
       <input id="override_reason" value="vehicle_new_no_engineering" />
 
+      <div class="muted">Saída do backend</div>
       <pre id="out">{}</pre>
     </div>
   </div>
@@ -114,28 +146,77 @@ async function api(path, opts={}) {
   return { status: r.status, json: j };
 }
 
-function show(x) { $("out").textContent = JSON.stringify(x, null, 2); }
+function showOut(x) { $("out").textContent = JSON.stringify(x, null, 2); }
+function showPayload(x) { $("payloadPreview").textContent = JSON.stringify(x, null, 2); }
 
-// ===== Catálogo (front-end) =====
-let CATALOG = [];
+// ===== Catálogos =====
+let CATALOG_TYPES = [];      // catalog_vehicle_type.json
+let CATALOG_SETTINGS = [];   // catalog_vehicle_settings.json
+let GS_COMMANDS = [];        // g-sensor_commands.json
+
 function uniqSorted(arr){ return [...new Set(arr)].sort((a,b)=>String(a).localeCompare(String(b))); }
 
-async function loadCatalog(){
-  try {
-    const r = await fetch("catalog_vehicle_type.json", { cache: "no-store" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    CATALOG = await r.json();
-  } catch (e) {
-    show({ error: "Falha ao carregar catalog_vehicle_type.json (coloque ao lado do HTML).", details: String(e) });
-    CATALOG = [];
-  }
-  renderManufacturers();
+async function loadJson(relPath){
+  const r = await fetch(relPath, { cache: "no-store" });
+  if (!r.ok) throw new Error(relPath + " HTTP " + r.status);
+  return r.json();
 }
 
+async function loadCatalogs(){
+  try {
+    CATALOG_TYPES = await loadJson("catalog_vehicle_type.json");
+    const s = await loadJson("catalog_vehicle_settings.json");
+    CATALOG_SETTINGS = (s && s.items) ? s.items : [];
+    const g = await loadJson("g-sensor_commands.json");
+    GS_COMMANDS = (g && g.commands) ? g.commands : [];
+  } catch (e) {
+    showOut({ error: "Falha ao carregar JSONs. Confirme que estão na mesma pasta do HTML.", details: String(e) });
+  }
+  renderClients();
+  renderManufacturers();
+  renderGsSelectors();
+  applyServiceUI();
+  refreshPreview();
+}
+
+// ===== Cliente -> target_client_id + vehicleSettingId =====
+function renderClients(){
+  const sel = $("clientSelect");
+  sel.innerHTML = "";
+  const items = CATALOG_SETTINGS.slice().sort((a,b)=>
+    String(a.clientName).localeCompare(String(b.clientName)) ||
+    String(a.profileKey).localeCompare(String(b.profileKey))
+  );
+
+  for (const it of items){
+    const o = document.createElement("option");
+    o.value = String(it.clientId) + "|" + String(it.profileKey) + "|" + String(it.vehicleSettingId);
+    o.textContent = `${it.clientName}  [${it.profileKey}]  → setting ${it.vehicleSettingId}` + (it.isDefault ? " (default)" : "");
+    sel.appendChild(o);
+  }
+
+  // tenta pré-selecionar Translima default se existir
+  const idx = items.findIndex(x => x.clientName === "TransLima" && x.profileKey === "default");
+  if (idx >= 0) sel.selectedIndex = idx;
+
+  applyClientSelection();
+}
+
+function applyClientSelection(){
+  const v = $("clientSelect").value || "";
+  const [clientId, profileKey, vehicleSettingId] = v.split("|");
+  $("target_client_id").value = clientId || "";
+  $("vehicleSettingId").value = vehicleSettingId || "";
+  $("clientMeta").textContent = `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`;
+  refreshPreview();
+}
+$("clientSelect").addEventListener("change", applyClientSelection);
+
+// ===== Modelo -> assetType (HTML5) =====
 function renderManufacturers(){
   const sel = $("cat_manufacturer");
   sel.innerHTML = "";
-  const mans = uniqSorted(CATALOG.map(x => x.manufacturer).filter(Boolean));
+  const mans = uniqSorted(CATALOG_TYPES.map(x => x.manufacturer).filter(Boolean));
   for (const m of mans){
     const o = document.createElement("option");
     o.value = m; o.textContent = m;
@@ -148,7 +229,7 @@ function renderModels(){
   const man = $("cat_manufacturer").value;
   const sel = $("cat_model");
   sel.innerHTML = "";
-  const models = uniqSorted(CATALOG.filter(x => x.manufacturer === man).map(x => x.model).filter(Boolean));
+  const models = uniqSorted(CATALOG_TYPES.filter(x => x.manufacturer === man).map(x => x.model).filter(Boolean));
   for (const m of models){
     const o = document.createElement("option");
     o.value = m; o.textContent = m;
@@ -160,55 +241,102 @@ function renderModels(){
 function updateAssetType(){
   const man = $("cat_manufacturer").value;
   const model = $("cat_model").value;
-  const it = CATALOG.find(x => x.manufacturer === man && x.model === model);
+  const it = CATALOG_TYPES.find(x => x.manufacturer === man && x.model === model);
   $("assetType").value = it ? String(it.asset_type) : "";
+  refreshPreview();
 }
-
-$("cat_manufacturer").addEventListener("change", renderModels);
+$("cat_manufacturer").addEventListener("change", () => { renderModels(); });
 $("cat_model").addEventListener("change", updateAssetType);
 
-// ===== UI por serviço (mínimo) =====
+// ===== G-Sensor: label+harness -> command =====
+function renderGsSelectors(){
+  const labels = uniqSorted(GS_COMMANDS.map(x => x.label).filter(Boolean));
+  const harness = uniqSorted(GS_COMMANDS.map(x => x.harness).filter(Boolean));
+
+  const selL = $("gs_label"); selL.innerHTML = "";
+  for (const l of labels){ const o=document.createElement("option"); o.value=l; o.textContent=l; selL.appendChild(o); }
+
+  const selH = $("gs_harness"); selH.innerHTML = "";
+  for (const h of harness){ const o=document.createElement("option"); o.value=h; o.textContent=h; selH.appendChild(o); }
+
+  updateGsCommand();
+}
+function updateGsCommand(){
+  const l = $("gs_label").value;
+  const h = $("gs_harness").value;
+  const it = GS_COMMANDS.find(x => x.label === l && x.harness === h);
+  $("gs_command").value = it ? String(it.command) : "";
+  refreshPreview();
+}
+$("gs_label").addEventListener("change", updateGsCommand);
+$("gs_harness").addEventListener("change", updateGsCommand);
+
+// ===== UI por serviço =====
 function applyServiceUI(){
   const svc = $("service").value;
-  $("rowCatalog").style.display = (svc === "INSTALL") ? "" : "none";
-  $("hintPlate").style.display = (svc === "INSTALL") ? "" : "none";
+  const isInstall = (svc === "INSTALL");
+  $("blockInstall").style.display = isInstall ? "" : "none";
+  $("hrInstall").style.display = isInstall ? "" : "none";
+  $("hintLookup").style.display = isInstall ? "" : "none";
   $("rowSerial").style.display = (svc === "INSTALL" || svc === "MAINT_WITH_SWAP") ? "" : "none";
+  refreshPreview();
 }
 $("service").addEventListener("change", applyServiceUI);
-applyServiceUI();
-loadCatalog();
 
-// ===== Actions =====
-$("btnCreate").onclick = async () => {
+// ===== Build payload =====
+function buildPayload(){
   const svc = $("service").value;
+
+  const lookup = $("lookup_license").value.trim();
+  const plateReal = $("plate_real").value.trim();
+
+  // compat: backend espera "plate" hoje. Para bancada, usamos lookup (serial em license).
+  const plate = lookup || plateReal || "";
 
   const body = {
     service: svc,
     target_client_id: Number($("target_client_id").value || 0) || null,
-    plate: $("plate").value.trim(),
-    serial: $("serial").value.trim(),
     vehicleSettingId: Number($("vehicleSettingId").value || 0) || null,
-    gsensor: { label_pos: $("label_pos").value, harness_pos: $("harness_pos").value }
+    plate,
+    plate_real: plateReal || null,         // futuro (não quebra hoje)
+    lookup_license: lookup || null,        // futuro/diagnóstico (não quebra hoje)
+    serial: $("serial").value.trim() || "",
+    // G-Sensor: já envia comando resolvido pelo front-end
+    gsensor: {
+      label: $("gs_label").value,
+      harness: $("gs_harness").value,
+      command: $("gs_command").value
+    }
   };
 
-  // INSTALL: manda assetType (HTML5 ASSET_TYPE)
   if (svc === "INSTALL") {
     const assetType = Number($("assetType").value || 0) || null;
-    body.assetType = assetType; // <- IMPORTANTÍSSIMO: o worker usa payload.assetType
+    body.assetType = assetType; // <- worker deve mapear isso para ASSET_TYPE no HTML5
     body.vehicle = {
       manufacturer: $("cat_manufacturer").value,
       model: $("cat_model").value,
       year: null
     };
+  } else {
+    // regra: não mandar assetType fora do INSTALL (evita sobrescrever modelo)
+    delete body.assetType;
   }
 
-  // Serviços onde serial não faz sentido: limpa
-  if (svc === "UNINSTALL" || svc === "MAINT_NO_SWAP") {
-    body.serial = "";
-  }
+  if (svc === "UNINSTALL" || svc === "MAINT_NO_SWAP") body.serial = "";
 
+  return body;
+}
+
+function refreshPreview(){ showPayload(buildPayload()); }
+["target_client_id","vehicleSettingId","lookup_license","plate_real","serial"].forEach(id => {
+  $(id).addEventListener("input", refreshPreview);
+});
+
+$("btnCreate").onclick = async () => {
+  const body = buildPayload();
+  showPayload(body);
   const r = await api("/api/installations", { method: "POST", body: JSON.stringify(body) });
-  show(r);
+  showOut(r);
   if (r.json && r.json.ok) {
     $("installation_id").value = r.json.installation_id;
     $("installation_token").value = r.json.installation_token;
@@ -219,7 +347,7 @@ $("btnCreate").onclick = async () => {
 $("btnPoll").onclick = async () => {
   const id = $("installation_id").value.trim();
   const r = await api("/api/installations/" + encodeURIComponent(id));
-  show(r);
+  showOut(r);
 };
 
 $("btnSnap").onclick = async () => {
@@ -230,7 +358,7 @@ $("btnSnap").onclick = async () => {
     headers: { "x-installation-token": tok },
     body: "{}"
   });
-  show(r);
+  showOut(r);
 };
 
 $("btnApprove").onclick = async () => {
@@ -241,7 +369,7 @@ $("btnApprove").onclick = async () => {
     headers: { "x-installation-token": tok },
     body: JSON.stringify({ override: false })
   });
-  show(r);
+  showOut(r);
 };
 
 $("btnOverride").onclick = async () => {
@@ -252,8 +380,10 @@ $("btnOverride").onclick = async () => {
     headers: { "x-installation-token": tok },
     body: JSON.stringify({ override: true, reason: $("override_reason").value })
   });
-  show(r);
+  showOut(r);
 };
+
+loadCatalogs();
 </script>
 </body>
 </html>
