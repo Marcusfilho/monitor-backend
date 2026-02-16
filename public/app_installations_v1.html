@@ -335,6 +335,22 @@ function refreshPreview(){ showPayload(buildPayload()); }
 $("btnCreate").onclick = async () => {
   const body = buildPayload();
   showPayload(body);
+  window.__appV1_normalizeInstallPayloadV2(body);
+
+  const __errs = window.__appV1_validateInstallPayloadV2(body);
+
+  window.__appV1_renderPayloadPreviewV2(body);
+
+  if (__errs.length) {
+
+    alert('Payload inválido:
+- ' + __errs.join('
+- '));
+
+    throw new Error('invalid payload: ' + __errs.join('; '));
+
+  }
+
   const r = await api("/api/installations", { method: "POST", body: JSON.stringify(body) });
   showOut(r);
   if (r.json && r.json.ok) {
@@ -384,6 +400,162 @@ $("btnOverride").onclick = async () => {
 };
 
 loadCatalogs();
+
+/* === APP_V1_PAYLOAD_V2 === */
+(function(){
+  function normStr(v){ return String(v == null ? "" : v).trim(); }
+  function up(v){ return normStr(v).toUpperCase(); }
+  function first(obj, keys){
+    for (const k of keys){
+      if (!obj) break;
+      const v = obj[k];
+      if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+    }
+    return null;
+  }
+  function toNumOrKeep(v){
+    const t = normStr(v);
+    if (!t) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : t;
+  }
+
+  // Normaliza o body antes do POST /api/installations
+  window.__appV1_normalizeInstallPayloadV2 = function(body){
+    body = body || {};
+    const svc = up(first(body, ["service","servico","action","type","serviceType"])) || "INSTALL";
+    body.service = svc;
+
+    // valores "reais"
+    const plateReal = normStr(first(body, ["plate_real","plateReal","LICENSE_REAL","license_real","licenseReal"])) ||
+                      normStr(first(body, ["plate_vehicle","plateVehicle","placa_real","placaReal"])) ||
+                      normStr(first(body, ["plate_input","plateInput"])) ||
+                      "";
+
+    const serial = normStr(first(body, ["serial","serie","innerId","inner_id","INNER_ID","DIAL_NUMBER"])) ||
+                   "";
+
+    // compat: alguns layouts antigos guardavam placa real em "plate" sem distinção
+    const plateMaybe = normStr(first(body, ["plate","placa","license","licensePlate","LICENSE_NMBR"])) || "";
+
+    const plate_real = plateReal or plateMaybe;
+    body.plate_real = plate_real || null;
+
+    // client/modelo/etc (mantém nomes canônicos + compat)
+    const tgtClient = first(body, ["target_client_id","targetClientId","client_id","clientId","CLIENT_ID"]);
+    if (tgtClient != null && String(tgtClient).trim() !== ""){
+      const v = toNumOrKeep(tgtClient);
+      body.target_client_id = v;
+      body.client_id = v;     // compat
+      body.CLIENT_ID = v;     // compat
+    }
+
+    const assetType = first(body, ["assetType","asset_type","vehicle_type","vehicleType","ASSET_TYPE"]);
+    if (assetType != null && String(assetType).trim() !== ""){
+      const v = toNumOrKeep(assetType);
+      body.assetType = v;
+      body.ASSET_TYPE = v;    // compat
+    }
+
+    // INSTALLED_BY / COMMENTS / DATE
+    const installedBy = first(body, ["installedBy","instalador","installer","INSTALLED_BY"]);
+    if (installedBy != null) body.installedBy = String(installedBy);
+
+    const comments = first(body, ["comments","comment","observacoes","observations","COMMENTS"]);
+    if (comments != null) body.comments = String(comments);
+
+    const installationDate = first(body, ["installationDate","installation_date","installDate","date","data","INSTALLATION_DATE"]);
+    if (installationDate != null) body.installationDate = String(installationDate);
+
+    // gsensor (se existir)
+    if (!body.gsensor){
+      const cmd = normStr(first(body, ["gsensor_command","gsensorCommand","GSENSOR_COMMAND"])) || "";
+      const label = normStr(first(body, ["label_pos","labelPos","LABEL_POS"])) || "";
+      const harness = normStr(first(body, ["harness_pos","harnessPos","HARNESS_POS"])) || "";
+      if (cmd || label || harness){
+        body.gsensor = {
+          command: cmd || null,
+          label_pos: label || null,
+          harness_pos: harness || null
+        };
+      }
+    }
+
+    // lookup_license: regra do plano
+    const lookup = (svc === "INSTALL") ? (serial) : (plate_real);
+    body.lookup_license = lookup || null;
+    body.plate_lookup = lookup || null; // compat
+
+    // *** compat com worker atual (VHCLS por payload.plate) ***
+    body.plate = lookup || null;
+    body.placa = lookup || null;
+
+    // *** ajudar o SAVE (mesmo antes do patch do worker) ***
+    if (plate_real){
+      body.LICENSE_NMBR = plate_real;
+      body.license_nmbr = plate_real;
+    }
+    if (serial){
+      body.serial = serial;         // garante que não some
+      body.INNER_ID = serial;
+      body.DIAL_NUMBER = serial;
+      body.inner_id = serial;
+    }
+
+    return body;
+  };
+
+  window.__appV1_validateInstallPayloadV2 = function(body){
+    const errs = [];
+    const svc = up(body && body.service) || "INSTALL";
+    const plateReal = normStr(body && body.plate_real);
+    const serial = normStr(body && body.serial);
+    const client = body && (body.target_client_id ?? body.client_id ?? body.CLIENT_ID);
+    const assetType = body && (body.assetType ?? body.ASSET_TYPE);
+
+    if (!plateReal) errs.push("Placa real (plate_real) é obrigatória");
+
+    if (svc === "INSTALL"){
+      if (!serial) errs.push("Serial é obrigatório para INSTALL");
+      if (client == null || String(client).trim()==="") errs.push("Cliente (target_client_id) é obrigatório para INSTALL");
+      if (assetType == null || String(assetType).trim()==="") errs.push("Modelo (assetType/ASSET_TYPE) é obrigatório para INSTALL");
+    }
+
+    if (svc === "MAINT_WITH_SWAP"){
+      if (!serial) errs.push("Serial novo é obrigatório para MAINT_WITH_SWAP");
+    }
+
+    return errs;
+  };
+
+  window.__appV1_renderPayloadPreviewV2 = function(body){
+    try{
+      let pre = document.getElementById("payloadPreviewV2");
+      if (!pre){
+        const box = document.createElement("details");
+        box.open = true;
+        box.style.margin = "12px 0";
+        box.style.padding = "10px";
+        box.style.border = "1px solid #ddd";
+        box.style.borderRadius = "8px";
+        const sum = document.createElement("summary");
+        sum.textContent = "Payload (preview) — o que será enviado";
+        sum.style.cursor = "pointer";
+        pre = document.createElement("pre");
+        pre.id = "payloadPreviewV2";
+        pre.style.whiteSpace = "pre-wrap";
+        pre.style.margin = "10px 0 0";
+        box.appendChild(sum);
+        box.appendChild(pre);
+        // tenta anexar perto do log/out; senão vai pro final
+        const anchor = document.getElementById("out") || document.getElementById("log") || document.body;
+        anchor.appendChild(box);
+      }
+      pre.textContent = JSON.stringify(body, null, 2);
+    }catch(e){}
+  };
+})();
+
 </script>
 </body>
 </html>
