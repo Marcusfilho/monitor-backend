@@ -375,7 +375,7 @@ router.post("/", async (req, res) => {
 
 
 
-      plate: plateReal,
+      plate: ((String(svc || "").trim().toUpperCase() === "INSTALL") ? (plateLookup || serial || plateReal) : plateReal),
 
 
 
