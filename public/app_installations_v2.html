@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>APP V1 — Instalações (v2 — CAN view)</title>
+  <style>
+    :root{
+      --bg:#0b0f12; --panel:#0f1620; --muted:#93a4b8; --text:#e8eef2; --line:#1f2a38;
+      --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+    header{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;justify-content:space-between}
+    header h1{margin:0;font-size:16px;font-weight:700;letter-spacing:.2px}
+    header .nav{display:flex;gap:10px;align-items:center;font-size:12px}
+    header a{color:#cfe6ff;text-decoration:none;border:1px solid var(--line);padding:6px 10px;border-radius:10px;background:#0b1118}
+    header a:hover{border-color:#2c3c52}
+    .wrap{padding:16px 18px}
+    .grid{display:grid;grid-template-columns: 420px 1fr; gap:14px; align-items:start}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+    .card h2{margin:0 0 10px 0;font-size:13px;color:#cfe6ff}
+    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
+    input, select, textarea{
+      width:100%;padding:10px 12px;border-radius:12px;border:1px solid #273245;background:#0b1118;color:var(--text);outline:none;
+      font-family:var(--sans);font-size:13px
+    }
+    textarea{min-height:78px;resize:vertical}
+    .row{display:flex;gap:10px}
+    .row > *{flex:1}
+    button{
+      cursor:pointer;border:1px solid #2a3a52;background:#122033;color:#e8eef2;border-radius:12px;padding:10px 12px;font-weight:650;
+    }
+    button:hover{border-color:#3b5478}
+    button.secondary{background:#0b1118}
+    .btnrow{display:flex;gap:10px;flex-wrap:wrap}
+    .hint{font-size:12px;color:var(--muted);line-height:1.4}
+    .status{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px}
+    .outWrap{display:grid;grid-template-rows:auto auto; gap:14px}
+    pre{
+      margin:0; padding:12px; border-radius:14px; border:1px solid #273245;
+      background:#000; color:#e8eef2; font-family:var(--mono); font-size:12px; line-height:1.35;
+      overflow:auto; max-height: 56vh;
+    }
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a3a52;background:#0b1118;color:#cfe6ff;font-size:11px}
+    .kv{display:flex;gap:10px;flex-wrap:wrap}
+    .kv .pill{opacity:.95}
+    .good{border-color:rgba(34,197,94,.6);color:#baf7cd}
+    .warn{border-color:rgba(245,158,11,.6);color:#ffe3b0}
+    .bad{border-color:rgba(239,68,68,.6);color:#ffc2c2}
+  </style>
+</head>
+<body>
+<header>
+  <h1>APP V1 — Instalações <span class="pill">v2</span> <span class="pill">CAN view</span></h1>
+  <div class="nav">
+    <a href="/app/app_installations_v1.html">Abrir v1</a>
+    <a href="/app/app_can_probe_v1.html">CAN Probe</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+    <div class="card">
+      <h2>1) Criar instalação (igual v1)</h2>
+
+      <label>Serviço</label>
+      <select id="service">
+        <option value="INSTALL">INSTALL</option>
+        <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
+        <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
+        <option value="UNINSTALL">UNINSTALL</option>
+      </select>
+
+      <div class="row">
+        <div>
+          <label>target_client_id</label>
+          <input id="target_client_id" placeholder="ex.: 218572" />
+        </div>
+        <div>
+          <label>vehicleSettingId</label>
+          <input id="vehicleSettingId" placeholder="ex.: 5592" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Placa real (plate_real)</label>
+          <input id="plate_real" placeholder="ex.: ABC1D23" />
+        </div>
+        <div>
+          <label>Serial (inner_id)</label>
+          <input id="serial" placeholder="ex.: 913055459" />
+        </div>
+      </div>
+
+      <label>Observações / comments</label>
+      <textarea id="comments" placeholder="ex.: APP INSTALL teste..."></textarea>
+
+      <div class="btnrow" style="margin-top:12px">
+        <button id="btnCreate">Criar instalação</button>
+        <button class="secondary" id="btnClear">Limpar</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
+
+      <h2>2) Operar uma instalação existente</h2>
+
+      <label>installation_id</label>
+      <input id="installation_id" placeholder="inst_..." />
+
+      <div class="btnrow" style="margin-top:12px">
+        <button class="secondary" id="btnLoad">Carregar</button>
+        <button class="secondary" id="btnReqCan">Request CAN snapshot</button>
+        <button class="secondary" id="btnApprove">Aprovar CAN</button>
+      </div>
+
+      <div class="hint" style="margin-top:10px">
+        <div>• O painel “CAN snapshot” abaixo tenta achar o snapshot em vários caminhos (compatível com formatos diferentes).</div>
+        <div>• Se você estiver com equipamento de bancada (sem CAN), normalmente verá <b>parameters_with_value = 0</b>.</div>
+      </div>
+
+      <div class="status" id="status">status: pronto</div>
+    </div>
+
+    <div class="outWrap">
+      <div class="card">
+        <h2>Saída (Installation / API)</h2>
+        <div class="kv" id="kv"></div>
+        <pre id="out">{}</pre>
+      </div>
+
+      <div class="card">
+        <h2>CAN snapshot (tela preta)</h2>
+        <div class="kv" id="canKv"></div>
+        <pre id="canOut">{}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const qs = (id) => document.getElementById(id);
+  const statusEl = qs("status");
+  const outEl = qs("out");
+  const canEl = qs("canOut");
+  const kvEl = qs("kv");
+  const canKvEl = qs("canKv");
+
+  function setStatus(msg){ statusEl.textContent = "status: " + msg; }
+  function pretty(obj){
+    try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); }
+  }
+
+  async function api(path, { method="GET", json=null } = {}){
+    const res = await fetch(path, {
+      method,
+      headers: json ? { "content-type":"application/json" } : {},
+      body: json ? JSON.stringify(json) : undefined
+    });
+    const text = await res.text().catch(()=>"");
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    return { status: res.status, data };
+  }
+
+  function instIdOf(inst){
+    return inst?.installation_id || inst?.id || inst?.installationId || null;
+  }
+
+  function setPills(kvTarget, pills){
+    kvTarget.innerHTML = "";
+    for (const p of pills){
+      const s = document.createElement("span");
+      s.className = "pill " + (p.kind || "");
+      s.textContent = p.text;
+      kvTarget.appendChild(s);
+    }
+  }
+
+  function pick(obj, paths){
+    for (const p of paths){
+      let cur = obj;
+      let ok = true;
+      for (const k of p){
+        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
+        else { ok = false; break; }
+      }
+      if (ok && cur !== undefined && cur !== null) return cur;
+    }
+    return null;
+  }
+
+  function unwrapSnapshot(s){
+    // alguns formatos podem vir como {snapshot:{...}} ou {data:{...}}
+    let cur = s;
+    for (let i=0;i<4;i++){
+      if (!cur || typeof cur !== "object") break;
+      if (cur.snapshot) cur = cur.snapshot;
+      else if (cur.data) cur = cur.data;
+      else if (cur.payload) cur = cur.payload;
+      else break;
+    }
+    return cur;
+  }
+
+  function lastOf(v){
+    if (Array.isArray(v) && v.length) return v[v.length-1];
+    return v;
+  }
+
+  function extractCanSnapshot(inst){
+    // tenta achar snapshot em vários lugares prováveis
+    const candidates = [
+      pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
+      pick(inst, [["can_snapshot"],["canSnapshot"]]),
+      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
+      lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
+      pick(inst, [["monitor","can_snapshot"],["monitor","canSnapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
+      pick(inst, [["can"],["monitor_snapshot"],["monitorSnapshot"]])
+    ].filter(Boolean);
+
+    if (!candidates.length) return null;
+    return unwrapSnapshot(candidates[0]);
+  }
+
+  function summarizeSnapshot(snap){
+    if (!snap) return { snapshot_found:false };
+
+    const header = pick(snap, [["header"],["vehicle_monitor","header"],["vehicleMonitor","header"],["meta","header"]]) || null;
+
+    const moduleState =
+      pick(snap, [["module_state"],["moduleState"],["module_state_tab","rows"],["moduleStateTab","rows"],["tabs","module_state","rows"]]) || null;
+
+    const params =
+      pick(snap, [["parameters"],["params"],["parameters_tab","rows"],["parametersTab","rows"],["tabs","parameters","rows"]]) || null;
+
+    const rows = Array.isArray(params) ? params : (params && Array.isArray(params.rows) ? params.rows : []);
+    const withValue = rows.filter(r => {
+      const v = (r && (r.value ?? r.val ?? r.current_value ?? r.currentValue ?? r.raw_value ?? r.rawValue));
+      return v !== null && v !== undefined && String(v).trim() !== "";
+    }).length;
+
+    // Module State summary (IDs relevantes já mapeados no projeto: 8 CAN0, 9 CAN1, 15 J1708, 19 Dallas, 20 Ramzor)
+    const msRows = Array.isArray(moduleState) ? moduleState : (moduleState && Array.isArray(moduleState.rows) ? moduleState.rows : []);
+    const byId = {};
+    for (const r of msRows){
+      const id = r?.id ?? r?.module_id ?? r?.moduleId;
+      if (id !== undefined && id !== null) byId[String(id)] = r;
+    }
+
+    function pickOk(r){
+      if (!r) return null;
+      const ok = (r.ok ?? r.is_ok ?? r.isOk ?? r.active_ok ?? r.activeOk);
+      const was = (r.was_ok ?? r.wasOk);
+      const msg = (r.message ?? r.msg ?? r.status_message);
+      return { ok: ok ?? null, was_ok: was ?? null, message: msg ?? null };
+    }
+
+    const msSummary = {
+      CAN0: pickOk(byId["8"]),
+      CAN1: pickOk(byId["9"]),
+      J1708: pickOk(byId["15"]),
+      DALLAS: pickOk(byId["19"]),
+      RAMZOR: pickOk(byId["20"]),
+    };
+
+    const summary = {
+      snapshot_found:true,
+      header: header ? {
+        configuration_status: header.configuration_status ?? header.configurationStatus ?? null,
+        configuration_progress: header.configuration_progress ?? header.configurationProgress ?? null,
+        manufacturer: header.manufacturer ?? null,
+        model: header.model ?? header.vehicle_model ?? null,
+        ignition: header.ignition ?? null,
+        gprs_last: header.gprs_last ?? header.gprsLast ?? null,
+        inner_id: header.inner_id ?? header.innerId ?? header.serial ?? null,
+        vehicle_id: header.vehicle_id ?? header.vehicleId ?? null
+      } : null,
+      module_state: msSummary,
+      parameters_total: rows.length,
+      parameters_with_value: withValue
+    };
+
+    return summary;
+  }
+
+  function pillsFromSummary(sum){
+    if (!sum || !sum.snapshot_found) return [{text:"snapshot: (não encontrado)", kind:"bad"}];
+
+    const p = [];
+    const hv = sum.parameters_with_value ?? 0;
+    const ht = sum.parameters_total ?? 0;
+
+    if (hv > 0) p.push({text:`params: ${hv}/${ht} com valor`, kind:"good"});
+    else p.push({text:`params: ${hv}/${ht} com valor`, kind:"warn"});
+
+    const h = sum.header || {};
+    if (h.configuration_progress !== null && h.configuration_progress !== undefined) {
+      p.push({text:`SB progress: ${h.configuration_progress}`, kind:""});
+    }
+    if (h.configuration_status) p.push({text:`SB status: ${h.configuration_status}`, kind:""});
+
+    const ms = sum.module_state || {};
+    const can0ok = ms.CAN0?.ok;
+    const can1ok = ms.CAN1?.ok;
+    const j1708ok = ms.J1708?.ok;
+
+    const anyBusOk = [can0ok, can1ok, j1708ok].some(v => v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true");
+    p.push({text:`barramentos: ${anyBusOk ? "OK" : "sem OK"}`, kind: anyBusOk ? "good":"warn"});
+
+    return p;
+  }
+
+  async function loadInstallation(id){
+    setStatus("carregando instalação...");
+    const r = await api(`/api/installations/${encodeURIComponent(id)}`);
+    outEl.textContent = pretty(r);
+    if (r.status === 200 && r.data){
+      const inst = r.data;
+      const snap = extractCanSnapshot(inst);
+      const sum = summarizeSnapshot(snap);
+      canEl.textContent = pretty({ summary: sum, snapshot: snap });
+      setPills(kvEl, [
+        {text:`HTTP ${r.status}`, kind: r.status===200 ? "good":"warn"},
+        {text:`installation_id: ${instIdOf(inst) || id}`, kind:""},
+        {text:`service: ${inst.service || inst.payload?.service || "?"}`, kind:""}
+      ]);
+      setPills(canKvEl, pillsFromSummary(sum));
+      localStorage.setItem("last_installation_id", instIdOf(inst) || id);
+      setStatus("ok");
+    } else {
+      setPills(kvEl, [{text:`HTTP ${r.status}`, kind:"bad"}]);
+      setPills(canKvEl, [{text:"snapshot: (sem dados)", kind:"bad"}]);
+      setStatus("falhou ao carregar");
+    }
+    return r;
+  }
+
+  async function createInstallation(){
+    setStatus("criando instalação...");
+    const payload = {
+      service: qs("service").value,
+      target_client_id: qs("target_client_id").value || null,
+      vehicleSettingId: qs("vehicleSettingId").value || null,
+      plate_real: qs("plate_real").value || null,
+      serial: qs("serial").value || null,
+      comments: qs("comments").value || null,
+      installationDate: new Date().toISOString()
+    };
+    const r = await api("/api/installations", { method:"POST", json: payload });
+    outEl.textContent = pretty(r);
+
+    if (r.status === 201 && r.data){
+      const id = instIdOf(r.data);
+      qs("installation_id").value = id || "";
+      setStatus("criada — carregando...");
+      if (id) await loadInstallation(id);
+      else setStatus("criada (mas sem id no retorno)");
+    } else {
+      setStatus("erro ao criar");
+    }
+  }
+
+  async function requestCan(){
+    const id = qs("installation_id").value.trim();
+    if (!id) return setStatus("informe installation_id");
+    setStatus("request CAN snapshot...");
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, { method:"POST", json:{} });
+    outEl.textContent = pretty(r);
+    await loadInstallation(id);
+  }
+
+  async function approveCan(){
+    const id = qs("installation_id").value.trim();
+    if (!id) return setStatus("informe installation_id");
+    setStatus("aprovando CAN...");
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/approve-can`, { method:"POST", json:{} });
+    outEl.textContent = pretty(r);
+    await loadInstallation(id);
+  }
+
+  qs("btnCreate").addEventListener("click", createInstallation);
+  qs("btnLoad").addEventListener("click", () => loadInstallation(qs("installation_id").value.trim()));
+  qs("btnReqCan").addEventListener("click", requestCan);
+  qs("btnApprove").addEventListener("click", approveCan);
+
+  qs("btnClear").addEventListener("click", () => {
+    ["target_client_id","vehicleSettingId","plate_real","serial","comments","installation_id"].forEach(id => qs(id).value = "");
+    outEl.textContent = "{}";
+    canEl.textContent = "{}";
+    kvEl.innerHTML = "";
+    canKvEl.innerHTML = "";
+    setStatus("limpo");
+  });
+
+  // auto-carregar última instalação
+  const last = localStorage.getItem("last_installation_id");
+  if (last) {
+    qs("installation_id").value = last;
+    loadInstallation(last).catch(()=>{});
+  }
+</script>
+</body>
+</html>

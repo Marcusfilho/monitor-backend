@@ -47,6 +47,8 @@ const app = express();
     if (pick) {
       app.use("/app", express.static(pick));
       app.get("/app", (req, res) => res.redirect("/app/app_installations_v1.html"));
+      app.get("/app", (req, res) => res.redirect("/app/app_installations_v2.html"));
+      app.get("/app", (req, res) => res.redirect("/app/app_can_probe_v1.html"));
     }
   } catch (e) {
     try {
