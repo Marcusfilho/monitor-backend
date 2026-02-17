@@ -471,15 +471,24 @@ router.get("/:id", async (req, res) => {
 router.post("/:id/actions/request-can-snapshot", async (req, res) => {
   try {
     const id = String(req.params.id || "");
+
     const fn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
-    if (!fn) return res.status(501).json({ ok:false, error:"not implemented (engine missing requestCanSnapshot)" });
-    const body = req.body || {};
+    if (!fn) {
+      try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
+      return res.status(501).json({ ok:false, error:"not implemented (engine missing requestCanSnapshot)" });
+    }
+
+    const bodyIn = (req.body && typeof req.body === "object") ? req.body : {};
+    const body = { ...bodyIn } as any;
+
+    // resolve vehicle_id (probe envia, mas temos fallback)
     let vehicleId = body.vehicle_id || body.vehicleId || body.VEHICLE_ID || null;
 
-    // fallback opcional: tenta achar vehicle_id na própria instalação
     if (!vehicleId) {
-      const getOne = pickFn(installationsEngine, ["getInstallation","getById","read"]) ||
+      const getOne =
+        pickFn(installationsEngine, ["getInstallation","getById","read"]) ||
         pickFn(installationsStore, ["getInstallation","getById","read"]);
+
       if (getOne) {
         const inst = await getOne(String(id));
         vehicleId =
@@ -490,8 +499,10 @@ router.post("/:id/actions/request-can-snapshot", async (req, res) => {
       }
     }
 
+    // headers de prova (pra confirmar via curl que o Render pegou)
+    try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
+
     if (!vehicleId) {
-      try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
       return res.status(400).json({
         ok: false,
         error: "missing vehicle_id for CAN snapshot",
@@ -501,29 +512,34 @@ router.post("/:id/actions/request-can-snapshot", async (req, res) => {
 
     body.vehicle_id = vehicleId;
 
-    // headers de prova (pra confirmar via curl que o Render pegou)
-    try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
+    // baseUrl pro engine conseguir enfileirar job (loopback /api/jobs)
+    const baseUrl = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`)
+      .replace(/\/+$/, "");
+
+    if (!body.base_url && !body.baseUrl) {
+      body.base_url = baseUrl;
+      body.baseUrl = baseUrl;
+    }
+
+    try { res.set("x-base-url-used", String(body.base_url || body.baseUrl || "")); } catch (_) {}
     try { res.set("x-vehicle-id-used", String(vehicleId)); } catch (_) {}
 
-    try {
-      const out = await fn(id, body);
-      return res.json(out);
-    } catch (e: any) {
-      const raw = String(((e as any)?.stack || (e as any)?.message) || e);
-      const detail = raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 900);
-      console.error("[installationsRoutes] request-can-snapshot engine error:", raw);
-      return res.status(500).json({
-        ok: false,
-        error: "Internal Server Error",
-        where: "request-can-snapshot",
-        detail
-      });
-    }
-} catch (e:any) {
-    console.error("[installationsRoutes] request-can-snapshot error:", e && (e.stack || e.message || String(e)));
-    return res.status(500).json({ ok:false, error:"Internal Server Error" });
+    const out = await fn(id, body);
+    return res.json(out);
+
+  } catch (e: any) {
+    const raw = String(((e as any)?.stack || (e as any)?.message) || e);
+    const detail = raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 900);
+    console.error("[installationsRoutes] request-can-snapshot error:", raw);
+    return res.status(500).json({
+      ok: false,
+      error: "Internal Server Error",
+      where: "request-can-snapshot",
+      detail
+    });
   }
 });
+
 
 router.post("/:id/actions/approve-can", async (req, res) => {
   try {
