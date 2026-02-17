@@ -255,9 +255,53 @@ router.post("/:id/actions/approve-can", async (req, res) => {
         const fn = pickFn(installationsEngine, ["approveCan", "approve_can"]);
         if (!fn)
             return res.status(501).json({ ok: false, error: "not implemented (engine missing approveCan)" });
-        const out = await fn(id, req.body || {});
-        return res.json(out);
-    }
+        const body = req.body || {};
+        let vehicleId = body.vehicle_id || body.vehicleId || body.VEHICLE_ID || null;
+
+        // fallback opcional: tenta achar vehicle_id na própria instalação
+        if (!vehicleId) {
+          const getOne = pickFn(installationsEngine, ["getInstallation","getById","read"]) ||
+            pickFn(installationsStore, ["getInstallation","getById","read"]);
+          if (getOne) {
+            const inst = await getOne(String(id));
+            vehicleId =
+              (inst && inst.resolved && (inst.resolved.vehicle_id || inst.resolved.vehicleId)) ||
+              (inst && inst.payload && (inst.payload.vehicle_id || inst.payload.vehicleId)) ||
+              (inst && (inst.vehicle_id || inst.vehicleId)) ||
+              null;
+          }
+        }
+
+        if (!vehicleId) {
+          try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
+          return res.status(400).json({
+            ok: false,
+            error: "missing vehicle_id for CAN snapshot",
+            hint: "Send { vehicle_id } in request body (recommended for CAN_PROBE)."
+          });
+        }
+
+        body.vehicle_id = vehicleId;
+
+        // headers de prova (pra confirmar via curl que o Render pegou)
+        try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
+        try { res.set("x-vehicle-id-used", String(vehicleId)); } catch (_) {}
+
+        try {
+          const out = await fn(id, body);
+          return res.json(out);
+        } catch (e) {
+          const raw = String((e && (e.stack || e.message)) || e);
+          const detail = raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 900);
+          console.error("[installationsRoutes] request-can-snapshot engine error:", raw);
+          return res.status(500).json({
+            ok: false,
+            error: "Internal Server Error",
+            where: "request-can-snapshot",
+            detail
+          });
+        }
+}
     catch (e) {
         console.error("[installationsRoutes] approve-can error:", e && (e.stack || e.message || String(e)));
         return res.status(500).json({ ok: false, error: "Internal Server Error" });
