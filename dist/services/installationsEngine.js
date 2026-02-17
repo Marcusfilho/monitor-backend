@@ -9,12 +9,48 @@ let enqueueJob = null;
 
 function setEnqueueJob(fn) { enqueueJob = fn; }
 
-function mustEnqueue() {
-  if (typeof enqueueJob !== "function") {
-    const e = new Error("enqueueJob_not_wired");
-    e.code = "enqueueJob_not_wired";
-    throw e;
-  }
+function mustEnqueue(baseUrl){
+  if (enqueueJob) return enqueueJob;
+
+  const envBase = (process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_BASE_URL || process.env.JOB_SERVER_BASE_URL || "");
+  const base = String(baseUrl || envBase).replace(/\/+$/, "");
+  if (!base) throw new Error("enqueueJob_not_wired");
+
+  const doFetch = globalThis.fetch;
+  if (!doFetch) throw new Error("fetch_not_available");
+
+  return async function(a, b){
+    let type = null;
+    let payload = null;
+
+    if (typeof a === "string") { type = a; payload = b || {}; }
+    else if (a && typeof a === "object") {
+      type = a.type || a.jobType || a.kind || null;
+      payload = a.payload || a.data || {};
+    }
+    if (!type) throw new Error("enqueueJob_invalid_args");
+
+    const headers = { "content-type": "application/json", "x-internal-call": "installationsEngine" };
+    const adminKey = process.env.SESSION_TOKEN_ADMIN_KEY || process.env.ADMIN_KEY || process.env.INTERNAL_ADMIN_KEY || "";
+    const workerKey = process.env.WORKER_KEY || "";
+    if (adminKey) headers["x-admin-key"] = adminKey;
+    if (workerKey) headers["x-worker-key"] = workerKey;
+
+    const r = await doFetch(base + "/api/jobs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ type, payload }),
+    });
+
+    const txt = await r.text().catch(() => "");
+    let js = null;
+    try { js = txt ? JSON.parse(txt) : null; } catch { js = txt; }
+
+    if (r.status >= 400) {
+      throw new Error("enqueueJob_http_" + r.status + " " + String(txt).slice(0, 500));
+    }
+    return (js && (js.job || js)) || js;
+  };
 }
 
 function _clientName(clientId) {
@@ -162,7 +198,7 @@ async function onJobCompleted(job, result) {
 }
 
 async function requestCanSnapshot(installationId) {
-  mustEnqueue();
+  mustEnqueue((payload && (payload.baseUrl || payload.base_url)) || null);
   const inst = store.getInstallation(installationId);
   if (!inst) throw Object.assign(new Error("not_found"), { code: "not_found" });
 
