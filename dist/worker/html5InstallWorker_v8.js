@@ -270,7 +270,12 @@ function __httpsPostFormUrlencoded(urlStr, headers, bodyStr){
             if (Array.isArray(v)) sc = v;
             else if (typeof v === "string" && v) sc = [v];
           } catch(e){}
-          resolve({ status: (res && res.statusCode) ? res.statusCode : 0, headers: (res && res.headers) ? res.headers : {}, setCookie: sc, text: txt });
+          resolve({
+            status: (res && res.statusCode) ? res.statusCode : 0,
+            headers: (res && res.headers) ? res.headers : {},
+            setCookie: sc,
+            text: txt
+          });
         });
       });
       req.on("error", reject);
@@ -551,16 +556,16 @@ function _readCookieHeaderFromJarFile(ctx) {
     process.env.HTML5_COOKIE_CACHE ||
     "/tmp/html5_cookiejar.json";
 
-  if (!fs.existsSync(jarPath)) return { cookie: "", jarPath, exists: false };
+  if (!fs.existsSync(jarPath)) return { cookie: "" };
 
   const raw = String(fs.readFileSync(jarPath, "utf8") || "").trim();
-  if (!raw) return { cookie: "", jarPath, exists: true };
+  if (!raw) return { cookie: "" };
 
   try {
     const j = JSON.parse(raw);
 
-    if (j && typeof j.cookie === "string") return { cookie: j.cookie.trim(), jarPath, exists: true };
-    if (j && typeof j.cookies === "string") return { cookie: j.cookies.trim(), jarPath, exists: true };
+    if (j && typeof j.cookie === "string") return { cookie: String(j.cookie).trim() };
+    if (j && typeof j.cookies === "string") return { cookie: String(j.cookies).trim() };
 
     if (j && Array.isArray(j.cookies)) {
       const parts = [];
@@ -569,7 +574,7 @@ function _readCookieHeaderFromJarFile(ctx) {
         if (typeof c.cookie === "string") parts.push(c.cookie.trim());
         else if ((c.key || c.name) && (c.value !== undefined)) parts.push(String(c.key || c.name) + "=" + String(c.value));
       }
-      return { cookie: parts.join("; "), jarPath, exists: true };
+      return { cookie: parts.join("; ") };
     }
 
     if (j && typeof j === "object") {
@@ -581,16 +586,16 @@ function _readCookieHeaderFromJarFile(ctx) {
           parts.push(String(k) + "=" + String(v));
         }
       }
-      return { cookie: parts.join("; "), jarPath, exists: true };
+      return { cookie: parts.join("; ") };
     }
   } catch (_) {}
 
   const ck = String(raw || "")
-    .replace(/^\\s*cookie\\s*:\\s*/i, "")
-    .replace(/[\\r\\n]+/g, " ")
+    .replace(/^\s*cookie\s*:\s*/i, "")
+    .replace(/[\r\n]+/g, " ")
     .trim();
 
-  return { cookie: ck, jarPath, exists: true };
+  return { cookie: ck };
 }
 
 function _extractAttr(tag, name) {
@@ -712,25 +717,53 @@ async function ensureVehicleIdByVhcls_(ctx, payload) {
 
   const service = String(payload.service || payload.servico || payload.serviceType || "").trim().toUpperCase();
 
-  const plateRaw  = payload.plate || payload.placa || payload.license || payload.licensePlate || "";
-  const serialRaw = payload.serial || payload.serie || payload.innerId || payload.INNER_ID || "";
+  const plateRaw  = payload.plate || payload.placa || payload.license || payload.licensePlate || payload.plate_real || payload.plateReal || "";
+  const plateReal = payload.plate_real || payload.plateReal || payload.license_real || payload.licenseReal || "";
+  const serialRaw = payload.serial || payload.serie || payload.innerId || payload.inner_id || payload.INNER_ID || payload.SERIAL || "";
+  const lookupRaw = payload.lookup_license || payload.lookupLicense || payload.lookupLicenseNmbr || "";
 
-  const licenseKey = (service === "INSTALL" && String(serialRaw||"").trim()) ? _normLicenseKey(serialRaw) : _normLicenseKey(plateRaw);
-  if (!licenseKey) return null;
+  // INSTALL:
+  //  - 1º tenta achar "veículo de bancada" (license=serial) usando lookup_license/serial
+  //  - se não achar (situação 1), cai para plate_real (placa real) e por fim plate
+  const tries = [];
+  const pushTry = (v) => { const k = _normLicenseKey(v); if (k) tries.push(k); };
 
-  const vid = await _vhclsResolveVehicleIdDirect(ctx, licenseKey);
-  if (vid) {
-    payload.vehicle_id = vid;
-    payload.VEHICLE_ID = vid;
-    payload.vehicleId = vid;
-    _vhclsLog(ctx, `[vhcls] resolved: license=${licenseKey} -> VEHICLE_ID=${vid}`);
-    return vid;
+  if (service === "INSTALL") {
+    pushTry(lookupRaw);
+    pushTry(serialRaw);
+    pushTry(plateReal);
+    pushTry(plateRaw);
+  } else {
+    // Manutenções / Uninstall: padrão é por placa (real)
+    pushTry(plateReal);
+    pushTry(plateRaw);
+    // fallback (caso venha só serial por engano)
+    pushTry(serialRaw);
   }
 
-  _vhclsLog(ctx, `[vhcls] not found: license=${licenseKey}`);
+  // dedupe mantendo ordem
+  const seen = new Set();
+  const uniq = [];
+  for (const t of tries) { if (!seen.has(t)) { seen.add(t); uniq.push(t); } }
+
+  if (!uniq.length) return null;
+
+  for (const licenseKey of uniq) {
+    const vid = await _vhclsResolveVehicleIdDirect(ctx, licenseKey);
+    if (vid) {
+      payload.vehicle_id = vid;
+      payload.VEHICLE_ID = vid;
+      payload.vehicleId = vid;
+      _vhclsLog(ctx, `[vhcls] resolved: license=${licenseKey} -> VEHICLE_ID=${vid}`);
+      return vid;
+    }
+  }
+
+  _vhclsLog(ctx, `[vhcls] not found: tried=${uniq.join(",")}`);
   return null;
 }
 // === END PATCH_VHCLS_DIRECT_VEHICLE_ID v1 ===
+
 const patchC8 = (() => {
   try { return require('./patchC8_allowedGroups'); }
   catch (e) {
@@ -1154,7 +1187,7 @@ function __va_parseJarToMap(raw){
     try {
       const j = JSON.parse(txt);
       if (j && typeof j === "object" && !Array.isArray(j)) {
-        // formato canônico: { cookie:"A=B; C=D", keys:[...], updatedAt:"...", meta:{...} }
+        // formato canônico: { cookie:***REDACTED***
         if (typeof j.cookie === "string" && j.cookie.indexOf("=") > 0) {
   const out = parseCookieHeader(j.cookie);
   // PATCH_VA1_COOKIEJAR_MERGE_EXTRAS_V3 (merge cookies fora do campo "cookie")
@@ -1358,7 +1391,7 @@ async function __va_ensureHtml5Session(){
   const ck1 = __va_cookieHeaderFromMap(m1s);
   const flags = __va_flags(ck1);
   console.log(`[html5_v8] [VA1] ensureHtml5Session flags=${flags} jarBytes=${raw1.length} cookieHeaderLen=${ck1.length}`);
-  return { map:m1, cookie:ck1, flags };
+  return { map: m1s, cookie: ck1 };
 }
 async function __va_appenginePost(action, fields, tag){
   const sess = await __va_ensureHtml5Session();
@@ -1853,12 +1886,17 @@ function ensureCookieDefaults(cookieHeader){
 async function loadCookieJar(){
   try {
     const raw = await fsp.readFile(COOKIEJAR_PATH, "utf-8");
+
+    // Se o arquivo for um "cookie header" puro (não-JSON), aceitar também.
     let j = null;
-    try { j = JSON.parse(raw); } catch (_) { return { cookie: "", updatedAt: null }; }
+    try { j = JSON.parse(raw); }
+    catch (_) {
+      return { cookie: ensureCookieDefaults(String(raw || "").trim()) };
+    }
 
     // formato canônico: {cookie, keys, updatedAt, meta}
     if (j && typeof j === "object" && typeof j.cookie === "string") {
-      return { cookie: String(j.cookie || ""), updatedAt: j.updatedAt || null };
+      return { cookie: ensureCookieDefaults(j.cookie) };
     }
 
     // formato: {cookies:[{name,value},...]}
@@ -1867,7 +1905,7 @@ async function loadCookieJar(){
       for (const c of j.cookies) {
         if (c && c.name && (c.value !== undefined)) parts.push(String(c.name) + "=" + String(c.value));
       }
-      return { cookie: parts.join("; "), updatedAt: null };
+      return { cookie: ensureCookieDefaults(parts.join("; ")) };
     }
 
     // formato: [{name,value},...]
@@ -1876,7 +1914,7 @@ async function loadCookieJar(){
       for (const c of j) {
         if (c && c.name && (c.value !== undefined)) parts.push(String(c.name) + "=" + String(c.value));
       }
-      return { cookie: parts.join("; "), updatedAt: null };
+      return { cookie: ensureCookieDefaults(parts.join("; ")) };
     }
 
     // formato "map": {TFL_SESSION:"..", ASP.NET_SessionId:"..", ...}
@@ -1889,14 +1927,15 @@ async function loadCookieJar(){
         if (v === undefined || v === null) continue;
         if (typeof v === "string" || typeof v === "number") parts.push(String(k) + "=" + String(v));
       }
-      return { cookie: parts.join("; "), updatedAt: null };
+      return { cookie: ensureCookieDefaults(parts.join("; ")) };
     }
 
-    return { cookie: "", updatedAt: null };
+    return { cookie: ensureCookieDefaults("") };
   } catch (e) {
-    return { cookie: "", updatedAt: null };
+    return { cookie: ensureCookieDefaults("") };
   }
 }
+
 async function saveCookieJar(cookieHeader, meta){
   const cookie = ensureCookieDefaults(cookieHeader || "");
   const keys = cookieKeysFromCookieHeader(cookie);
@@ -2057,7 +2096,7 @@ async function html5LoginAndStoreCookies(existingCookie){
     username: HTML5_LOGIN_NAME,
     password: HTML5_PASSWORD,
     language: HTML5_LANGUAGE,
-    BOL_SAVE_COOKIE: "0",
+    BOL_SAVE_COOKIE: "1",
     action: "APPLICATION_LOGIN",
     VERSION_ID: "2",
   }).toString();
@@ -2077,84 +2116,146 @@ async function html5LoginAndStoreCookies(existingCookie){
 
   const keys = await saveCookieJar(r.cookie, { source:"login", httpStatus:r.status });
   const hasTfl = keys.includes("TFL_SESSION");
-  return { status:r.status, cookie:r.cookie, cookieKeys:keys, snippet:safeSnippet(r.text), hasTfl };
+  return { status:r.status, cookie:r.cookie, cookieKeys: keys, hasTfl };
 }
 
 function parseHtml5Message(text, actionName){
-  // === PATCH_LOGOFF_REDIRECT_V8 ===
-  // Alguns retornos vêm como <REDIRECT ...><ACTION>LOGOFF</ACTION></REDIRECT>
-  // (sem <MESSAGE>). Tratar isso como login negado para forçar relogin + retry.
-  const __t0 = String(text || "");
-  const __redir = /<REDIRECT\b[^>]*>/i.exec(__t0);
-  if (__redir) {
-    const __tag = __redir[0] || "";
-    const __isLogoff = /<ACTION>\s*LOGOFF\s*<\/ACTION>/i.test(__t0) || /\blogin\s*=\s*["']?-1["']?/i.test(__tag) || /index\.aspx\?node=-1/i.test(__t0);
-    if (__isLogoff) {
-      return { hasMessage:false, login:-1, isLoginNeg:true, status:"logoff", isErrorStatus:false, isRedirectLogoff:true };
-    }
-  }
-  // === /PATCH_LOGOFF_REDIRECT_V8 ===
-
   const t = String(text || "");
+
+  // logout/session expired pode vir como HTML
+  if (/<!DOCTYPE\s+html/i.test(t) || /<html\b/i.test(t)) {
+    return { hasMessage:false, login:"-1", isLoginNeg:true, status:null, isErrorStatus:true };
+  }
+
   const m = /<MESSAGE\b[^>]*>/i.exec(t);
-  if (!m) return { hasMessage:false };
+  if (!m) {
+    const looksLikeErrorText = /\berror\b/i.test(t) && /\baction\b/i.test(t);
+    const hasErrorTag = /<ERROR\b/i.test(t);
+    return { hasMessage:false, login:null, isLoginNeg:false, status:null, isErrorStatus: (looksLikeErrorText || hasErrorTag) };
+  }
 
   const tag = m[0];
 
-  const loginM = /\blogin\s*=\s*["']?(-?\d+)["']?/i.exec(tag);
-  const login = loginM ? Number(loginM[1]) : null;
-  const isLoginNeg = (login !== null && login < 0) || /login\s*=\s*["']?-1["']?/i.test(tag);
+  const loginM = /\bLOGIN="(-?\d+)"/i.exec(tag);
+  const login = loginM ? loginM[1] : null;
+  const isLoginNeg = (login === "-1");
 
-  const statusM = /\bstatus\s*=\s*["']?([a-z0-9_-]+)["']?/i.exec(tag);
-  const status = statusM ? String(statusM[1]).toLowerCase() : null;
-  const isErrorStatus = status ? ["error","fail","failed","false","ko"].includes(status) : false;
+  const statusM = /\bSTATUS="([^"]+)"/i.exec(tag);
+  const status = statusM ? statusM[1] : null;
+  const isErrorStatus = status ? /^(?:err|error|-?1)$/i.test(String(status).trim()) : false;
 
-  // fallback leve (não usar pra “inventar” — só pra sinalizar erro óbvio)
-  const looksLikeErrorText = /\berror\b/i.test(t) && /\baction\b/i.test(t);
+  // Inferir erro quando <MESSAGE> não traz STATUS mas o texto indica falha
+  let msgText = "";
+  let msgDetails = "";
+  try { msgText = (t.match(/<TEXT>([\s\S]*?)<\/TEXT>/i) || [])[1] || ""; } catch (e) {}
+  try { msgDetails = (t.match(/<DETAILS>([\s\S]*?)<\/DETAILS>/i) || [])[1] || ""; } catch (e) {}
 
-  return { hasMessage:true, login, isLoginNeg, status, isErrorStatus: (isErrorStatus || looksLikeErrorText) };
+  const msgBlob = (String(msgText) + " " + String(msgDetails)).toLowerCase();
+
+  const inferredError = (
+    /\bfailed\b/.test(msgBlob) ||
+    /\berror\b/.test(msgBlob) ||
+    /must\s+enter/.test(msgBlob) ||
+    /invalid/.test(msgBlob) ||
+    /denied/.test(msgBlob) ||
+    /permission/.test(msgBlob) ||
+    /not\s+allowed/.test(msgBlob) ||
+    /already\b/.test(msgBlob) ||
+    /exists\b/.test(msgBlob) ||
+    /in\s+use\b/.test(msgBlob) ||
+    /vinculad/.test(msgBlob) ||
+    /associad/.test(msgBlob) ||
+    /ocupad/.test(msgBlob)
+  );
+
+  const looksLikeActionErrorText = /\berror\b/i.test(t) && /\baction\b/i.test(t);
+  const hasErrorTag = /<ERROR\b/i.test(t);
+
+  return {
+    hasMessage:true,
+    login,
+    isLoginNeg,
+    status,
+    text: msgText,
+    details: msgDetails,
+    isErrorStatus: (isErrorStatus || looksLikeActionErrorText || hasErrorTag || inferredError)
+  };
 }
 
 
-// === PATCH_CF1_V8 ===
-function ensureCustomField1(fields){
-  try{
-    if (!fields || typeof fields !== "object") return;
 
-    const idsStr = String(fields.FIELD_IDS ?? "").trim();
-    const valStr = String(fields.FIELD_VALUE ?? "").trim();
+// === PATCH_CF1_V8 ===
+// Alguns clientes possuem custom fields obrigatórios.
+// O HTML5 espera:
+//   FIELD_IDS   = "2,6" (ex.)
+//   FIELD_VALUE = ",2:xxx,6:yyy" (com vírgula inicial)
+// Nesta versão evitamos "inventar" IDs; apenas garante que, se o ID 1 já existir,
+// ele terá valor (copiando de 2/6 quando aplicável) e normaliza FIELD_VALUE.
+function ensureCustomField1(fields){
+  try {
+    if (!fields || typeof fields !== 'object') return;
+
+    const idsStr = String(fields.FIELD_IDS ?? '').trim();
     if (!idsStr) return;
 
-    const ids = idsStr.split(",").map(x=>x.trim()).filter(Boolean);
-    if (ids.includes("1")) return;
+    const ids = idsStr.split(',').map(s => String(s).trim()).filter(Boolean);
+    if (!ids.includes('1')) return; // não adiciona IDs novos
 
-    // só aplica se for o caso clássico (tem 2 e/ou 6)
-    if (!ids.includes("2") && !ids.includes("6")) return;
+    const valStr0 = String(fields.FIELD_VALUE ?? '').trim();
+    const tokens = valStr0.replace(/^,/, '').split(',').map(s => String(s).trim()).filter(Boolean);
 
-    const leadingComma = valStr.startsWith(",");
-    const tokens = valStr.split(",").filter(Boolean);
-
-    const map = {};
-    for (const t of tokens){
-      const i = t.indexOf(":");
-      if (i <= 0) continue;
-      const k = t.slice(0,i).trim();
-      const v = t.slice(i+1);
-      if (!k) continue;
-      map[k] = v;
+    const map = Object.create(null);
+    for (const tok of tokens) {
+      const ix = tok.indexOf(':');
+      if (ix <= 0) continue;
+      const k = tok.slice(0, ix).trim();
+      const v = tok.slice(ix + 1);
+      if (k) map[k] = v;
     }
 
-    const baseVal = (map["2"] !== undefined) ? map["2"] : ((map["6"] !== undefined) ? map["6"] : "");
-    map["1"] = baseVal;
+    if (!map['1'] || String(map['1']).trim() === '') {
+      const baseVal = (map['2'] !== undefined && String(map['2']).trim() !== '') ? map['2'] : (map['6'] !== undefined ? map['6'] : '');
+      if (baseVal !== undefined) map['1'] = baseVal;
+    }
 
-    const newIds = ["1", ...ids];
-    const outTokens = newIds.map(k => `${k}:${map[k] !== undefined ? map[k] : ""}`);
+    const outTokens = ids.map(k => `${k}:${map[k] !== undefined ? map[k] : ''}`);
+    if (outTokens.length) fields.FIELD_VALUE = ',' + outTokens.join(',');
+  } catch (e) { /* noop */ }
+}
 
-    fields.FIELD_IDS = newIds.join(",");
-    fields.FIELD_VALUE = (leadingComma ? "," : "") + outTokens.join(",");
-  } catch (e) {
-    console.log("[html5_v8] warn ensureCustomField1:", e && (e.message || e.toString()));
-  }
+function ensureCustomField1_(fields, payload){
+  try {
+    if (!fields || typeof fields !== 'object') return;
+    const idsStr = String(fields.FIELD_IDS || '').trim();
+    if (!idsStr) return;
+    const ids = idsStr.split(',').map(s => String(s).trim()).filter(Boolean);
+    if (!ids.includes('1')) return; // não adiciona IDs
+
+    let v1 = '';
+    if (payload) {
+      v1 = String(
+        payload.customField1Value || payload.custom_field_1_value || payload.custom_field_1 ||
+        payload.CUSTOM_FIELD_1_VALUE || payload.CUSTOM_FIELD_1 || ''
+      ).trim();
+    }
+    if (!v1) return;
+
+    const valStr0 = String(fields.FIELD_VALUE ?? '').trim();
+    const tokens = valStr0.replace(/^,/, '').split(',').map(s => String(s).trim()).filter(Boolean);
+
+    const map = Object.create(null);
+    for (const tok of tokens) {
+      const ix = tok.indexOf(':');
+      if (ix <= 0) continue;
+      const k = tok.slice(0, ix).trim();
+      const v = tok.slice(ix + 1);
+      if (k) map[k] = v;
+    }
+
+    map['1'] = v1;
+    const outTokens = ids.map(k => `${k}:${map[k] !== undefined ? map[k] : ''}`);
+    if (outTokens.length) fields.FIELD_VALUE = ',' + outTokens.join(',');
+  } catch (e) { /* noop */ }
 }
 // === /PATCH_CF1_V8 ===
 
@@ -2207,10 +2308,57 @@ function ensureCustomField1_(fields, payload){
 }
 
 function buildSaveActivationFields(payload){
-  const serial = String(payload.serial || payload.serial_new || payload.SERIAL_NEW || payload.DIAL_NUMBER || payload.INNER_ID || "").trim();
-  const plate  = String(payload.plate || payload.LICENSE_NMBR || "").trim();
-  const installationDate = String(payload.installationDate || payload.INSTALLATION_DATE || "").trim();
-  const assetType = payload.assetType != null ? String(payload.assetType) : "";
+  const service = String(payload.service || payload.servico || '').trim().toUpperCase();
+  const isInstall = (service === 'INSTALL');
+
+  const serial = String(
+    payload.serial ||
+    payload.serial_new || payload.SERIAL_NEW || payload.serialNew || payload.SERIAL ||
+    payload.DIAL_NUMBER || payload.INNER_ID || payload.inner_id || ''
+  ).trim();
+
+  const plate = String(
+    payload.plate_real || payload.plateReal ||
+    payload.license_real || payload.licenseReal ||
+    payload.plate || payload.LICENSE_NMBR || ''
+  ).trim();
+
+  const installationDate =
+    String(payload.installationDate || payload.INSTALLATION_DATE || '').trim() ||
+    new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric' }).format(new Date());
+
+  const installedBy = String(
+    payload.installedBy || payload.installed_by ||
+    payload.technicianName || payload.technician || payload.tech_name ||
+    payload.INSTALLED_BY || ''
+  ).trim();
+
+  const comments = String(
+    payload.comments || payload.comment || payload.observations || payload.notes ||
+    payload.LOGISTIC_COMMENTS || payload.ACCOSSORIES_COMMENTS || ''
+  ).trim();
+
+  const assetType =
+    (payload.assetType != null) ? String(payload.assetType) :
+    (payload.asset_type != null) ? String(payload.asset_type) :
+    (payload.ASSET_TYPE != null) ? String(payload.ASSET_TYPE) :
+    (payload.vehicle_type != null) ? String(payload.vehicle_type) :
+    (payload.vehicleType != null) ? String(payload.vehicleType) :
+    '';
+
+  const vehicleId =
+    (payload.vehicleId != null) ? payload.vehicleId :
+    (payload.vehicle_id != null) ? payload.vehicle_id :
+    (payload.VEHICLE_ID != null) ? payload.VEHICLE_ID :
+    '';
+
+  const clientId =
+    (payload.target_client_id != null) ? payload.target_client_id :
+    (payload.targetClientId != null) ? payload.targetClientId :
+    (payload.client_id != null) ? payload.client_id :
+    (payload.clientId != null) ? payload.clientId :
+    (payload.CLIENT_ID != null) ? payload.CLIENT_ID :
+    '';
 
   const fields = {
     ASSIGNED_VEHICLE_SETTING_ID: String(payload.ASSIGNED_VEHICLE_SETTING_ID ?? -1),
@@ -2218,18 +2366,18 @@ function buildSaveActivationFields(payload){
     UPDATE_DRIVER_CODE: String(payload.UPDATE_DRIVER_CODE ?? 0),
     LOG_UNIT_DATA_UNTIL_DATE: String(payload.LOG_UNIT_DATA_UNTIL_DATE || installationDate),
 
-    VEHICLE_ID: payload.vehicleId != null ? String(payload.vehicleId) : "",
-    FIELD_IDS: String(payload.fieldIds || payload.FIELD_IDS || ""),
-    FIELD_VALUE: String(payload.fieldValue || payload.FIELD_VALUE || ""),
+    VEHICLE_ID: String(vehicleId || ''),
+    FIELD_IDS: String(payload.fieldIds || payload.FIELD_IDS || ''),
+    FIELD_VALUE: String(payload.fieldValue || payload.FIELD_VALUE || ''),
 
     LICENSE_NMBR: plate,
-    INNER_ID: String(payload.INNER_ID || serial),
+    INNER_ID: String(payload.INNER_ID || payload.inner_id || serial),
 
     SAFETY_GROUP_ID: String(payload.SAFETY_GROUP_ID ?? -1),
-    NICK_NAME: String(payload.NICK_NAME ?? ""),
+    NICK_NAME: String(payload.NICK_NAME ?? ''),
 
-    DIAL_NUMBER: serial,
-    SIM_NUMBER: String(payload.SIM_NUMBER ?? ""),
+    DIAL_NUMBER: String(serial || payload.DIAL_NUMBER || ''),
+    SIM_NUMBER: String(payload.SIM_NUMBER ?? ''),
 
     UNIT_TYPE_ID: String(payload.UNIT_TYPE_ID ?? 1),
     MILAGE_SOURCE_ID: String(payload.MILAGE_SOURCE_ID ?? 5067),
@@ -2243,51 +2391,66 @@ function buildSaveActivationFields(payload){
     ID_MODEM: String(payload.ID_MODEM ?? -1),
     ID_TACHOGRAPH: String(payload.ID_TACHOGRAPH ?? -1),
 
-    ACCOSSORIES_COMMENTS: String(payload.ACCOSSORIES_COMMENTS ?? ""),
+    ACCOSSORIES_COMMENTS: String(comments || payload.ACCOSSORIES_COMMENTS || ''),
 
     INSTALLATION_DATE: installationDate,
-    INSTALLED_BY: String(payload.installedBy || payload.INSTALLED_BY || ""),
-    INSTALLATION_PLACE: String(payload.installationPlace || payload.INSTALLATION_PLACE || ""),
+    INSTALLED_BY: String(installedBy || payload.INSTALLED_BY || ''),
+    INSTALLATION_PLACE: String(payload.installationPlace || payload.INSTALLATION_PLACE || ''),
 
     WARRANTY_START_DATE: String(payload.WARRANTY_START_DATE || payload.warrantyStartDate || installationDate),
     WARRANTY_PERIOD_ID: String(payload.WARRANTY_PERIOD_ID ?? 1),
 
-    ASSET_TYPE: assetType,
-    LOGISTIC_COMMENTS: String(payload.LOGISTIC_COMMENTS ?? ""),
+    // REGRA: em INSTALL usa o modelo do app. Em outros serviços, não força.
+    ASSET_TYPE: String(isInstall ? (assetType || '') : (payload.ASSET_TYPE != null ? String(payload.ASSET_TYPE) : (assetType || ''))),
+    LOGISTIC_COMMENTS: String(comments || payload.LOGISTIC_COMMENTS || ''),
 
     FIRMWARE_TYPE_ID: String(payload.FIRMWARE_TYPE_ID ?? 2),
-    iDRIVE_UNIT_SN: String(payload.iDRIVE_UNIT_SN ?? ""),
+    iDRIVE_UNIT_SN: String(payload.iDRIVE_UNIT_SN ?? ''),
 
     DUPLICATE: String(payload.DUPLICATE ?? 0),
     DUPLICATE_VEHICLE: String(payload.DUPLICATE_VEHICLE ?? -1),
 
     SVR_ID: String(payload.SVR_ID ?? -1),
-    BUILD_ID: String(payload.BUILD_ID ?? ""),
+    BUILD_ID: String(payload.BUILD_ID ?? ''),
 
     DUPLICATE_CLIENT: String(payload.DUPLICATE_CLIENT ?? -1),
 
     ORIG_ZOOM_ID: String(payload.ORIG_ZOOM_ID ?? HTML5_ORIG_ZOOM_ID),
-    DUPLICATE_ZOOM_ID: String(payload.DUPLICATE_ZOOM_ID ?? ""),
+    DUPLICATE_ZOOM_ID: String(payload.DUPLICATE_ZOOM_ID ?? ''),
 
-    ORIG_ZOOM_NUMBER: String(payload.ORIG_ZOOM_NUMBER ?? ""),
-    ORIG_ZOOM_DESCR: String(payload.ORIG_ZOOM_DESCR ?? ""),
+    ORIG_ZOOM_NUMBER: String(payload.ORIG_ZOOM_NUMBER ?? ''),
+    ORIG_ZOOM_DESCR: String(payload.ORIG_ZOOM_DESCR ?? ''),
 
-    DUPLICATE_ZOOM_NUMBER: String(payload.DUPLICATE_ZOOM_NUMBER ?? ""),
-    DUPLICATE_ZOOM_DESCR: String(payload.DUPLICATE_ZOOM_DESCR ?? ""),
+    DUPLICATE_ZOOM_NUMBER: String(payload.DUPLICATE_ZOOM_NUMBER ?? ''),
+    DUPLICATE_ZOOM_DESCR: String(payload.DUPLICATE_ZOOM_DESCR ?? ''),
 
-    CLIENT_ID: payload.clientId != null ? String(payload.clientId) : "",
+    CLIENT_ID: String(clientId || ''),
 
-    action: "SAVE_VHCL_ACTIVATION_NEW",
-    VERSION_ID: "2"
+    action: 'SAVE_VHCL_ACTIVATION_NEW',
+    VERSION_ID: '2'
   };
 
   const extra = payload.html5ExtraFields || payload.extraFields || null;
-  if (extra && typeof extra === "object") {
+  if (extra && typeof extra === 'object') {
     for (const [k, v] of Object.entries(extra)) {
       if (v === undefined) continue;
-      fields[String(k)] = String(v ?? "");
+      fields[String(k)] = String(v ?? '');
     }
   }
+
+  try {
+    console.log('[html5_v8] SAVE_FIELDS' +
+      ' VEHICLE_ID=' + (fields.VEHICLE_ID||'') +
+      ' CLIENT_ID=' + (fields.CLIENT_ID||'') +
+      ' LICENSE_NMBR=' + (fields.LICENSE_NMBR||'') +
+      ' INNER_ID=' + (fields.INNER_ID||'') +
+      ' DIAL_NUMBER=' + (fields.DIAL_NUMBER||'') +
+      ' ASSET_TYPE=' + (fields.ASSET_TYPE||'') +
+      ' INSTALLATION_DATE=' + (fields.INSTALLATION_DATE||'') +
+      ' INSTALLED_BY=' + (fields.INSTALLED_BY||'')
+    );
+  } catch(e) {}
+
   ensureCustomField1(fields);
   ensureCustomField1_(fields, payload);
   return fields;
@@ -2413,7 +2576,38 @@ const body = encodeForm(f);
     body
   }, cookieFixed);
 
-  const parsed = parseHtml5Message(r.text);
+  const parsed = parseHtml5Message(r.text, actionName);
+  // === PATCH_INSTALL_SAVE_CAPTURE_V3 ===
+  // Captura respostas críticas + detecção de erro SEM <ERROR> (ex.: <MESSAGE> Failed...)
+  if (String(actionName||"") === "SAVE_VHCL_ACTIVATION_NEW" || String(actionName||"") === "ASSET_BASIC_LOAD") {
+    const fs = require("fs");
+    let jid = "unknown";
+    try { jid = String((globalThis && globalThis.__HTML5_JOB_ID) ? globalThis.__HTML5_JOB_ID : "unknown"); } catch (e) {}
+    const raw = String(r.text||"");
+    const head = raw.slice(0, 420).replace(/\s+/g," ");
+    const pfx = (String(actionName||"") === "ASSET_BASIC_LOAD") ? "install_asset_load" : "install_save_resp";
+    const p = `/tmp/${pfx}_${jid}_${Date.now()}.txt`;
+    try { fs.writeFileSync(p, raw, "utf8"); } catch (e) {}
+    console.log(`[html5_v8] ${pfx.toUpperCase()} job=${jid} saved=${p} bytes=${raw.length} head=${head}`);
+
+    if (String(actionName||"") === "SAVE_VHCL_ACTIVATION_NEW") {
+      const text = (raw.match(/<TEXT>([^<]*)<\/TEXT>/i)||[])[1] || "";
+      const details = (raw.match(/<DETAILS>([^<]*)<\/DETAILS>/i)||[])[1] || "";
+      const isMsg = /<MESSAGE\b/i.test(raw);
+
+      const isErr =
+        /<ERROR\b/i.test(raw) ||
+        /Action:\s*SAVE_VHCL_ACTIVATION_NEW\s*error\./i.test(raw) ||
+        (isMsg && (/\bfailed\b/i.test(text) || /\berror\b/i.test(text) || /must enter/i.test(details) || /\bcustom fields?\b/i.test(details)));
+
+      if (isErr) {
+        const summary = [text.trim(), details.trim()].filter(Boolean).join(" | ").slice(0, 240);
+        throw new Error(`html5_save_error: ${summary || "SAVE_VHCL_ACTIVATION_NEW failed"} (see ${p})`);
+      }
+    }
+  }
+  // === /PATCH_INSTALL_SAVE_CAPTURE_V3 ===
+
   await saveCookieJar(r.cookie, { source:`action:${actionName}`, httpStatus:r.status });
 
   return { httpStatus:r.status, snippet:safeSnippet(r.text), parsed };
@@ -3938,9 +4132,19 @@ try{
         // load cookie
         let cookie = (await loadCookieJar()).cookie || "";
 
-        // preflight (needed for MAINT_WITH_SWAP + CHANGE_COMPANY)
-        if (service === "MAINT_WITH_SWAP" || service === "CHANGE_COMPANY") {
-          const vId = payload.vehicle_id || payload.vehicleId || payload.VEHICLE_ID || payload.vehicleID || payload.VehicleId;
+        // preflight (MAINT_WITH_SWAP + CHANGE_COMPANY + INSTALL client-check)
+        if (service === "MAINT_WITH_SWAP" || service === "CHANGE_COMPANY" || service === "INSTALL") {
+          let vId = payload.vehicle_id || payload.vehicleId || payload.VEHICLE_ID || payload.vehicleID || payload.VehicleId;
+if (service === "INSTALL" && !vId) {
+  try {
+    const __ctx = { log: (m)=>console.log(String(m)), jobId: id };
+    const __vv = await ensureVehicleIdByVhcls_(__ctx, payload);
+    if (__vv) vId = __vv;
+  } catch(e) {
+    console.log("[html5_v8] INSTALL preflight VHCLS resolve failed: " + (e && (e.message || e.toString())));
+  }
+}
+
           if (vId) {
             const preload = normalizeStep({
               label: "preload_asset",
@@ -3971,20 +4175,66 @@ try{
               console.log("[PATCH_D2] preload ASSET_BASIC_LOAD not ok; continuing");
             }
           }
-          // [VA3] preload activation baseline (keep existing fields) for MAINT_WITH_SWAP
-          if (service === "MAINT_WITH_SWAP" && vId && !payload.__activationBaselineAttrs) {
+          // INSTALL: se o vehicle_id existente estiver em outro cliente, faz CHANGE_COMPANY antes do SAVE.
+if (service === "INSTALL") {
+  try {
+    const targetClientId = String(
+      payload.target_client_id || payload.targetClientId || payload.client_id || payload.CLIENT_ID || payload.clientId || ""
+    ).trim();
+    const curClientId = String((payload.__assetLoadAttrs && payload.__assetLoadAttrs.CLIENT_ID) || "").trim();
+
+    if (targetClientId && curClientId && targetClientId !== curClientId) {
+      payload.client_id_target = payload.client_id_target || targetClientId;
+      payload.CLIENT_ID_TARGET = payload.CLIENT_ID_TARGET || targetClientId;
+      payload.clientIdTarget   = payload.clientIdTarget   || targetClientId;
+
+      const ccSteps = buildStepsForService("CHANGE_COMPANY", payload);
+      if (ccSteps && ccSteps.length) {
+        steps = [].concat(ccSteps, (steps || []));
+        console.log(`[html5_v8] INSTALL client mismatch: current=${curClientId} target=${targetClientId} -> queued CHANGE_COMPANY steps=${ccSteps.length}`);
+      } else {
+        console.log(`[html5_v8] INSTALL client mismatch but no CHANGE_COMPANY steps generated (need __assetLoadAttrs + client_id_target)`);
+      }
+    }
+  } catch(e) {
+    console.log("[html5_v8] INSTALL client-check failed: " + (e && (e.message || e.toString())));
+  }
+}
+
+// [VA3] preload activation baseline (keep existing fields) for MAINT_WITH_SWAP + INSTALL (custom fields obrigatórios)
+          if ((service === "MAINT_WITH_SWAP" || service === "INSTALL") && vId && !payload.__activationBaselineAttrs) {
             try {
               const act = await __va_getActivationBaseline(vId);
               if (act && act.attrs) {
                 payload.__activationBaselineAttrs = act.attrs;
-                console.log(`[html5_v8] [VA3] baseline captured keys=${Object.keys(act.attrs).length}`);
+                console.log(`[html5_v8] [VA3] baseline captured keys=${Object.keys(act.attrs).length} svc=${service}`);
+
+                // INSTALL: se o app/backend não enviou custom_fields, reaproveita os valores do baseline
+                if (service === "INSTALL") {
+                  const idsNow = String(payload.FIELD_IDS || payload.fieldIds || "").trim();
+                  const valNow = String(payload.FIELD_VALUE || payload.fieldValue || "").trim();
+                  if (!idsNow && act.attrs.FIELD_IDS) {
+                    payload.FIELD_IDS = act.attrs.FIELD_IDS;
+                    payload.fieldIds = act.attrs.FIELD_IDS;
+                  }
+                  if (!valNow && act.attrs.FIELD_VALUE) {
+                    payload.FIELD_VALUE = act.attrs.FIELD_VALUE;
+                    payload.fieldValue = act.attrs.FIELD_VALUE;
+                  }
+
+                  const idsLog = String(payload.FIELD_IDS || "").trim();
+                  const valLog = String(payload.FIELD_VALUE || "").trim();
+                  const valHead = valLog.slice(0, 80);
+                  console.log(`[html5_v8] INSTALL custom_fields from baseline: FIELD_IDS='${idsLog}' FIELD_VALUE_head='${valHead}'`);
+                }
               } else {
-                console.log(`[html5_v8] [VA3] baseline missing attrs (will fallback to builder)`);
+                console.log(`[html5_v8] [VA3] baseline missing attrs (will fallback to builder) svc=${service}`);
               }
             } catch (e) {
-              console.log(`[html5_v8] [VA3] baseline err ${(e && (e.message||e.toString()))}`);
+              console.log(`[html5_v8] [VA3] baseline err ${(e && (e.message||e.toString()))} svc=${service}`);
             }
           }
+
 
           steps = buildStepsForService(service, payload);
         }
@@ -4111,13 +4361,31 @@ const __vh = (__ctx && __ctx.__vhcls_last) ? __ctx.__vhcls_last : null;
 
         const cookieKeys = cookieKeysFromCookieHeader((await loadCookieJar()).cookie || "");
 
-        await finish("ok", {
-          ok:true,
-          service,
-          cookieKeys,
-          steps: results
-        });
-      };
+// === PIPELINE_META_V1 (expor IDs p/ encadear Monitor no backend) ===
+let __meta = null;
+try {
+  const __vid = Number(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || 0) || null;
+  const __tc  = Number(payload.target_client_id || payload.targetClientId || payload.client_id || payload.clientId || payload.CLIENT_ID || 0) || null;
+  const __vs  = Number(payload.vehicleSettingId || payload.vehicle_setting_id || payload.vehicleSettingID || 0) || null;
+  __meta = {
+    service,
+    vehicle_id: __vid,
+    target_client_id: __tc,
+    vehicleSettingId: __vs,
+    plate_real: payload.plate_real || payload.plateReal || payload.LICENSE_NMBR || payload.plate || payload.placa || null,
+    serial: payload.serial || payload.serie || payload.INNER_ID || payload.innerId || payload.SERIAL || null
+  };
+} catch (e) { __meta = null; }
+// === /PIPELINE_META_V1 ===
+
+await finish("ok", {
+  ok:true,
+  service,
+  meta: __meta,
+  cookieKeys,
+  steps: results
+});
+};
 
       try{
         await withTimeout(jobRunner(), JOB_MAX_MS, `job:${id}`);
