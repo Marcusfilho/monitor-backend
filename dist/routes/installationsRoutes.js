@@ -70,14 +70,89 @@ router.post("/", async (req, res) => {
         const instTok = inst?.installation_token || inst?.token || null;
         // 2) enqueue job inicial (via loopback /api/jobs)
         const svc = payload.service || inst?.service || null;
+        const svcUpper = String(svc || "").trim().toUpperCase();
+        // CAN_PROBE: cria instalação para puxar CAN de um vehicle_id real (sem enfileirar HTML5/SB)
+        if (svcUpper === "CAN_PROBE") {
+            try {
+                inst.enqueue = { ok: true, skipped: true, reason: "CAN_PROBE (no initial job enqueued)" };
+            } catch (_) {}
+            return res.status(201).json(inst);
+        }
+
         const jobType = "html5_install"; // compat: worker busca html5_install; service decide o fluxo
+        // normalize/allowlist: manter job pequeno, mas completo para INSTALL
+        const plateReal = payload.plate_real ||
+            payload.plateReal ||
+            payload.plate ||
+            payload.placa ||
+            null;
+        const plateLookup = payload.plate_lookup ||
+            payload.plateLookup ||
+            payload.plate ||
+            payload.placa ||
+            null;
+        const serial = payload.serial ||
+            payload.serie ||
+            payload.innerId ||
+            payload.inner_id ||
+            null;
+        const targetClientId = payload.target_client_id ||
+            payload.targetClientId ||
+            payload.client_id ||
+            payload.clientId ||
+            payload.CLIENT_ID ||
+            null;
+        const assetType = payload.assetType ||
+            payload.asset_type ||
+            payload.vehicle_type ||
+            payload.vehicleType ||
+            payload.ASSET_TYPE ||
+            null;
+        const installedBy = payload.installedBy ||
+            payload.instalador ||
+            payload.installer ||
+            payload.INSTALLED_BY ||
+            null;
+        const comments = payload.comments ||
+            payload.comment ||
+            payload.observacoes ||
+            payload.observations ||
+            payload.COMMENTS ||
+            null;
+        const installationDate = payload.installationDate ||
+            payload.installation_date ||
+            payload.installDate ||
+            payload.date ||
+            payload.data ||
+            payload.INSTALLATION_DATE ||
+            null;
+        const gsensor = payload.gsensor ||
+            (payload.gsensor_command || payload.gsensorCommand || payload.GSENSOR_COMMAND
+                ? {
+                    label_pos: payload.label_pos || payload.labelPos || payload.LABEL_POS || null,
+                    harness_pos: payload.harness_pos || payload.harnessPos || payload.HARNESS_POS || null,
+                    command: payload.gsensor_command ||
+                        payload.gsensorCommand ||
+                        payload.GSENSOR_COMMAND ||
+                        null,
+                }
+                : null);
         const payloadForJob = {
             installation_id: instId,
             installation_token: instTok,
             service: svc,
-            plate: payload.plate || payload.placa || null,
-            serial: payload.serial || payload.serie || payload.innerId || null,
-            raw: payload,
+            // compat: worker já entende plate/serial
+            plate: ((String(svc || "").trim().toUpperCase() === "INSTALL") ? (plateLookup || serial || plateReal) : plateReal),
+            serial,
+            // campos explícitos pro INSTALL
+            plate_real: plateReal,
+            plate_lookup: plateLookup,
+            target_client_id: targetClientId,
+            assetType,
+            installedBy,
+            comments,
+            installationDate,
+            gsensor,
         };
         const adminKey = pickAdminKey();
         const headers = {};

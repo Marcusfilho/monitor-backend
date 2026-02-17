@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CAN Probe — Vehicle Monitor snapshot</title>
+  <style>
+    :root{
+      --bg:#0b0f12; --panel:#0f1620; --muted:#93a4b8; --text:#e8eef2; --line:#1f2a38;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+    header{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;justify-content:space-between}
+    header h1{margin:0;font-size:16px;font-weight:700}
+    header .nav{display:flex;gap:10px;align-items:center;font-size:12px}
+    header a{color:#cfe6ff;text-decoration:none;border:1px solid var(--line);padding:6px 10px;border-radius:10px;background:#0b1118}
+    .wrap{padding:16px 18px}
+    .grid{display:grid;grid-template-columns: 420px 1fr; gap:14px; align-items:start}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+    .card h2{margin:0 0 10px 0;font-size:13px;color:#cfe6ff}
+    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
+    input, textarea{
+      width:100%;padding:10px 12px;border-radius:12px;border:1px solid #273245;background:#0b1118;color:var(--text);outline:none;
+      font-family:var(--sans);font-size:13px
+    }
+    textarea{min-height:70px;resize:vertical}
+    button{
+      cursor:pointer;border:1px solid #2a3a52;background:#122033;color:#e8eef2;border-radius:12px;padding:10px 12px;font-weight:650;
+    }
+    button:hover{border-color:#3b5478}
+    button.secondary{background:#0b1118}
+    .btnrow{display:flex;gap:10px;flex-wrap:wrap}
+    .hint{font-size:12px;color:var(--muted);line-height:1.4;margin-top:10px}
+    .status{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px}
+    pre{
+      margin:0; padding:12px; border-radius:14px; border:1px solid #273245;
+      background:#000; color:#e8eef2; font-family:var(--mono); font-size:12px; line-height:1.35;
+      overflow:auto; max-height: 74vh;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>CAN Probe <span style="opacity:.8;font-size:12px">— cria instalação CAN_PROBE e puxa snapshot</span></h1>
+  <div class="nav">
+    <a href="/app/app_installations_v2.html">Voltar (v2)</a>
+    <a href="/app/app_installations_v1.html">v1</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+    <div class="card">
+      <h2>1) Criar “instalação probe” (sem HTML5/SB)</h2>
+
+      <label>vehicle_id (real, online)</label>
+      <input id="vehicle_id" placeholder="ex.: 1940478" />
+
+      <label>target_client_id (opcional)</label>
+      <input id="target_client_id" placeholder="ex.: 218572" />
+
+      <label>vehicleSettingId (opcional)</label>
+      <input id="vehicleSettingId" placeholder="ex.: 5592" />
+
+      <label>comments (opcional)</label>
+      <textarea id="comments" placeholder="ex.: CAN PROBE..."></textarea>
+
+      <div class="btnrow" style="margin-top:12px">
+        <button id="btnCreate">Criar CAN_PROBE</button>
+        <button class="secondary" id="btnReq">Request snapshot</button>
+        <button class="secondary" id="btnLoad">Carregar</button>
+        <button class="secondary" id="btnApprove">Aprovar CAN</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
+
+      <h2>2) Ou inspecionar um installation_id existente</h2>
+      <label>installation_id</label>
+      <input id="installation_id" placeholder="inst_..." />
+
+      <div class="hint">
+        <div>• Esse probe depende do backend aceitar <b>service=CAN_PROBE</b> sem enfileirar job HTML5.</div>
+        <div>• Depois você usa <b>Request snapshot</b> e vai recarregando até aparecer CAN.</div>
+      </div>
+
+      <div class="status" id="status">status: pronto</div>
+    </div>
+
+    <div class="card">
+      <h2>Saída (inst + snapshot)</h2>
+      <pre id="out">{}</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  const qs = (id) => document.getElementById(id);
+  const outEl = qs("out");
+  const statusEl = qs("status");
+
+  function setStatus(msg){ statusEl.textContent = "status: " + msg; }
+  function pretty(obj){ try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); } }
+
+  async function api(path, { method="GET", json=null } = {}){
+    const res = await fetch(path, {
+      method,
+      headers: json ? { "content-type":"application/json" } : {},
+      body: json ? JSON.stringify(json) : undefined
+    });
+    const text = await res.text().catch(()=>"");
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    return { status: res.status, data };
+  }
+
+  function instIdOf(inst){
+    return inst?.installation_id || inst?.id || inst?.installationId || null;
+  }
+
+  function pick(obj, paths){
+    for (const p of paths){
+      let cur = obj; let ok = true;
+      for (const k of p){
+        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
+        else { ok = false; break; }
+      }
+      if (ok && cur !== undefined && cur !== null) return cur;
+    }
+    return null;
+  }
+
+  function unwrapSnapshot(s){
+    let cur = s;
+    for (let i=0;i<4;i++){
+      if (!cur || typeof cur !== "object") break;
+      if (cur.snapshot) cur = cur.snapshot;
+      else if (cur.data) cur = cur.data;
+      else if (cur.payload) cur = cur.payload;
+      else break;
+    }
+    return cur;
+  }
+
+  function lastOf(v){
+    if (Array.isArray(v) && v.length) return v[v.length-1];
+    return v;
+  }
+
+  function extractCanSnapshot(inst){
+    const candidates = [
+      pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
+      pick(inst, [["can_snapshot"],["canSnapshot"]]),
+      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
+      lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
+      pick(inst, [["monitor","can_snapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
+      pick(inst, [["can"],["monitor_snapshot"]])
+    ].filter(Boolean);
+    if (!candidates.length) return null;
+    return unwrapSnapshot(candidates[0]);
+  }
+
+  async function loadInstallation(id){
+    setStatus("carregando...");
+    const r = await api(`/api/installations/${encodeURIComponent(id)}`);
+    if (r.status === 200 && r.data){
+      const inst = r.data;
+      const snap = extractCanSnapshot(inst);
+      outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
+      qs("installation_id").value = instIdOf(inst) || id;
+      localStorage.setItem("can_probe_last_installation_id", instIdOf(inst) || id);
+      setStatus("ok");
+    } else {
+      outEl.textContent = pretty(r);
+      setStatus("erro ao carregar");
+    }
+    return r;
+  }
+
+  async function createProbe(){
+    const vehicleId = qs("vehicle_id").value.trim();
+    if (!vehicleId) return setStatus("informe vehicle_id");
+    setStatus("criando CAN_PROBE...");
+    const payload = {
+      service: "CAN_PROBE",
+      vehicle_id: vehicleId,
+      vehicleId: vehicleId,
+      target_client_id: qs("target_client_id").value.trim() || null,
+      vehicleSettingId: qs("vehicleSettingId").value.trim() || null,
+      comments: qs("comments").value || null,
+      installationDate: new Date().toISOString()
+    };
+    const r = await api("/api/installations", { method:"POST", json: payload });
+    outEl.textContent = pretty(r);
+    if (r.status === 201 && r.data){
+      const id = instIdOf(r.data);
+      if (id){
+        qs("installation_id").value = id;
+        setStatus("criado — carregando...");
+        await loadInstallation(id);
+      } else {
+        setStatus("criado (sem id no retorno)");
+      }
+    } else {
+      setStatus("erro ao criar");
+    }
+  }
+
+  async function requestSnapshot(){
+    const id = qs("installation_id").value.trim();
+    if (!id) return setStatus("informe installation_id");
+    setStatus("request snapshot...");
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, { method:"POST", json:{} });
+    outEl.textContent = pretty(r);
+    await loadInstallation(id);
+  }
+
+  async function approveCan(){
+    const id = qs("installation_id").value.trim();
+    if (!id) return setStatus("informe installation_id");
+    setStatus("aprovando CAN...");
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/approve-can`, { method:"POST", json:{} });
+    outEl.textContent = pretty(r);
+    await loadInstallation(id);
+  }
+
+  qs("btnCreate").addEventListener("click", createProbe);
+  qs("btnReq").addEventListener("click", requestSnapshot);
+  qs("btnLoad").addEventListener("click", () => loadInstallation(qs("installation_id").value.trim()));
+  qs("btnApprove").addEventListener("click", approveCan);
+
+  const last = localStorage.getItem("can_probe_last_installation_id");
+  if (last){
+    qs("installation_id").value = last;
+    loadInstallation(last).catch(()=>{});
+  }
+</script>
+</body>
+</html>
