@@ -76,6 +76,13 @@ router.post("/", async (req, res) => {
             try {
                 inst.enqueue = { ok: true, skipped: true, reason: "CAN_PROBE (no initial job enqueued)" };
             } catch (_) {}
+            // fix: CAN_PROBE resolved.vehicle_id
+            try {
+              const probeVehicleId = Number(((payload && (payload.vehicle_id || payload.vehicleId)) || 0));
+              inst.resolved = inst.resolved || {};
+              inst.resolved.vehicle_id = (Number.isFinite(probeVehicleId) && probeVehicleId > 0) ? probeVehicleId : null;
+            } catch (_) {}
+
             return res.status(201).json(inst);
         }
 
