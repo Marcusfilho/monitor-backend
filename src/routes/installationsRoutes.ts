@@ -508,8 +508,8 @@ router.post("/:id/actions/request-can-snapshot", async (req, res) => {
     try {
       const out = await fn(id, body);
       return res.json(out);
-    } catch (e) {
-      const raw = String((e && (e.stack || e.message)) || e);
+    } catch (e: any) {
+      const raw = String(((e as any)?.stack || (e as any)?.message) || e);
       const detail = raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 900);
       console.error("[installationsRoutes] request-can-snapshot engine error:", raw);
       return res.status(500).json({
