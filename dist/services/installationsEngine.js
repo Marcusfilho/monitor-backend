@@ -1,5 +1,10 @@
 "use strict";
 
+
+// reqcan: fallback enqueue via in-process jobStore (avoids HTTP + missing injection)
+let __createJob = null;
+try { __createJob = require("../jobs/jobStore").createJob; } catch (_) {}
+
 const catalogs = require("./catalogs");
 const store = require("./installationsStore");
 
@@ -198,6 +203,7 @@ async function onJobCompleted(job, result) {
 }
 
 async function requestCanSnapshot(installationId) {
+  var payload = (typeof body !== "undefined" ? body : undefined) || payload || {};
   mustEnqueue((payload && (payload.baseUrl || payload.base_url)) || null);
   const inst = store.getInstallation(installationId);
   if (!inst) throw Object.assign(new Error("not_found"), { code: "not_found" });
