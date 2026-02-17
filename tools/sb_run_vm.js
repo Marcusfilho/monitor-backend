@@ -734,7 +734,7 @@ try {
     action_source: "0"
   }, sessionToken);
 
-  const reviewRow = await waitRowByMtkn(ws, mtknReview, 15000);
+  const reviewRow = await waitRowByMtkn(ws, mtknReview, Number(process.env.WS_WAIT_TIMEOUT_MS || 15000));
   let processId = String(reviewRow && reviewRow.process_id ? reviewRow.process_id : "");
   if (!processId) {
   // get_vcls_action_review_opr costuma trazer o process_id dentro de response.properties.data[]
