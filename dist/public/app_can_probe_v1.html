@@ -211,7 +211,7 @@
     const id = qs("installation_id").value.trim();
     if (!id) return setStatus("informe installation_id");
     setStatus("request snapshot...");
-    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, { method:"POST", json:{} });
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, { method:"POST", json:{ vehicle_id: (qs("vehicle_id").value || "").trim() } });
     outEl.textContent = pretty(r);
     await loadInstallation(id);
   }

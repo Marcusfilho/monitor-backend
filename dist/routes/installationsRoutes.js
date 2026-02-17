@@ -204,7 +204,37 @@ router.post("/:id/actions/request-can-snapshot", async (req, res) => {
         const fn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
         if (!fn)
             return res.status(501).json({ ok: false, error: "not implemented (engine missing requestCanSnapshot)" });
-        const out = await fn(id, req.body || {});
+        const body = req.body || {};
+        // probe-friendly (atalho): aceitar vehicle_id no body
+        let vehicleId = body.vehicle_id || body.vehicleId || body.VEHICLE_ID || null;
+
+        // fallback: tentar obter vehicle_id da instalação
+        if (!vehicleId) {
+            const getOne = pickFn(installationsEngine, ["getInstallation", "getById", "read"]) ||
+                pickFn(installationsStore, ["getInstallation", "getById", "read"]);
+            if (getOne) {
+                const inst = await getOne(id);
+                vehicleId =
+                    inst?.resolved?.vehicle_id ||
+                    inst?.resolved?.vehicleId ||
+                    inst?.payload?.vehicle_id ||
+                    inst?.payload?.vehicleId ||
+                    inst?.vehicle_id ||
+                    inst?.vehicleId ||
+                    null;
+            }
+        }
+
+        if (!vehicleId) {
+            return res.status(400).json({
+                ok: false,
+                error: "missing vehicle_id for CAN snapshot",
+                hint: "Send { vehicle_id } in request body (recommended for CAN_PROBE).",
+            });
+        }
+
+        body.vehicle_id = vehicleId;
+        const out = await fn(id, body);
         return res.json(out);
     }
     catch (e) {
