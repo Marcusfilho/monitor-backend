@@ -99,6 +99,7 @@
   const qs = (id) => document.getElementById(id);
   const outEl = qs("out");
   const statusEl = qs("status");
+  let LAST_INST = null;
 
   function setStatus(msg){ statusEl.textContent = "status: " + msg; }
   function pretty(obj){ try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); } }
@@ -166,14 +167,23 @@
     const r = await api(`/api/installations/${encodeURIComponent(id)}`);
     if (r.status === 200 && r.data){
       const inst = r.data;
+      LAST_INST = inst;
       const snap = extractCanSnapshot(inst);
       outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
       qs("installation_id").value = instIdOf(inst) || id;
       localStorage.setItem("can_probe_last_installation_id", instIdOf(inst) || id);
-      setStatus("ok");
+
+      const st = (inst && inst.status) ? String(inst.status) : "ok";
+      setStatus(st);
     } else {
       outEl.textContent = pretty(r);
-      setStatus("erro ao carregar");
+      if (r.status === 404){
+        // id antigo no localStorage costuma causar confusão
+        try { localStorage.removeItem("can_probe_last_installation_id"); } catch(_){}
+        setStatus("installation_id não encontrado (limpei o cache local)");
+      } else {
+        setStatus("erro ao carregar");
+      }
     }
     return r;
   }
@@ -210,13 +220,72 @@
   async function requestSnapshot(){
     const id = qs("installation_id").value.trim();
     if (!id) return setStatus("informe installation_id");
+
+    // resolve vehicle_id: input -> last loaded installation -> payload
+    let vehicle_id = Number(qs("vehicle_id").value.trim());
+    if (!Number.isFinite(vehicle_id) || vehicle_id <= 0){
+      const v = pick(LAST_INST, [
+        ["resolved","vehicle_id"],
+        ["payload","vehicle_id"],
+        ["payload","vehicleId"],
+        ["vehicle_id"],
+        ["vehicleId"]
+      ]);
+      vehicle_id = (v != null) ? Number(v) : NaN;
+    }
+    if (!Number.isFinite(vehicle_id) || vehicle_id <= 0){
+      return setStatus("informe vehicle_id (input ou payload/resolved)");
+    }
+
     setStatus("request snapshot...");
-    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, { method:"POST", json:{ vehicle_id: (qs("vehicle_id").value || "").trim() } });
-    outEl.textContent = pretty(r);
-    await loadInstallation(id);
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, {
+      method:"POST",
+      json:{ vehicle_id }
+    });
+
+    // mostra resposta do POST (útil p/ headers/erros)
+    outEl.textContent = pretty({ request: r });
+
+    if (r.status >= 400){
+      setStatus("erro no request snapshot");
+      return;
+    }
+
+    // polling: esperar backend preencher can.summary/snapshots
+    await pollCan(id);
   }
 
-  async function approveCan(){
+  async function pollCan(id, { tries=30, sleepMs=3000 } = {}){
+    for (let i=0; i<tries; i++){
+      const r = await api(`/api/installations/${encodeURIComponent(id)}`);
+      if (r.status === 200 && r.data){
+        const inst = r.data;
+        LAST_INST = inst;
+        const snap = extractCanSnapshot(inst);
+        outEl.textContent = pretty({
+          poll: { attempt: i+1, tries, inst_status: inst.status || null },
+          installation: inst,
+          can_snapshot: snap
+        });
+
+        const hasSummary = !!(snap && snap.summary);
+        const hasList = !!(snap && Array.isArray(snap.snapshots) && snap.snapshots.length);
+        if (hasSummary || hasList){
+          setStatus("CAN pronto ✅");
+          return r;
+        }
+      } else {
+        outEl.textContent = pretty({ poll: { attempt: i+1, tries }, error: r });
+      }
+
+      setStatus(`aguardando CAN... (${i+1}/${tries})`);
+      await new Promise(res => setTimeout(res, sleepMs));
+    }
+    setStatus("timeout aguardando CAN — use Carregar");
+    return null;
+  }
+
+async function approveCan(){
     const id = qs("installation_id").value.trim();
     if (!id) return setStatus("informe installation_id");
     setStatus("aprovando CAN...");
