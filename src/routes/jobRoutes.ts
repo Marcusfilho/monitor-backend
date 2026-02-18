@@ -122,40 +122,35 @@ router.post("/", (req: Request, res: Response) => {
 });
 
 /** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
-router.get("/next", (req: Request, res: Response) => {
-  const type = (req.query.type as string) || "";
-  const workerId = (req.query.worker as string) || "unknown-worker";
+/** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
+/** GET /api/jobs/next?type=...&worker=... */
+router.get("/next", (req, res) => {
+  const type = String(((req.query || {}) as any).type || "");
+  const workerId = String(((req.query || {}) as any).worker || "unknown-worker");
   if (!type) return res.status(400).json({ error: "Query param 'type' is required" });
 
-  // ✅ HTML5 jobs não dependem de session token (são server-to-server via HTML5 cookie-jar)
-  const typeLc = String(type).toLowerCase();
+  const typeLc = type.toLowerCase();
   const isHtml5 = typeLc.startsWith("html5_");
-  const isSchemeBuilder = typeLc === "scheme_builder";
+  const token = String((getSessionToken() || "")).trim();
 
-  if (!isHtml5) {
-    // ✅ scheme_builder não depende de token global no Render (worker faz user_login local)
-    // ✅ demais tipos mantêm o gating atual
-    const token = (getSessionToken() || "").trim();
-    if (!isSchemeBuilder) {
-      if (!token) return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
-    }
+  // Gate disabled: jobs/next não deve depender de session token global
+  res.setHeader("x-jobsnext-gate", token ? "present" : "missing_allowed_v4");
 
-    const job = getNextJob(type, workerId);
-    if (!job) return res.status(204).send();
+  const job = getNextJob(type, workerId);
+  if (!job) return res.status(204).send();
 
-    // ✅ injeta token apenas na resposta
-    const out: any = JSON.parse(JSON.stringify(job));
+  // Injeta token só em jobs não-HTML5 (HTML5 usa cookie-jar / fluxo próprio)
+  if (!isHtml5 && token) {
+    const out = JSON.parse(JSON.stringify(job));
     out.payload = out.payload || {};
-    if (token) out.payload.sessionToken = token;
-
+    if (!out.payload.sessionToken) out.payload.sessionToken = token;
     return res.json({ job: out });
   }
 
-  // ✅ HTML5: não injeta token
-  const job = getNextJob(type, workerId);
-  if (!job) return res.status(204).send();
   return res.json({ job });
 });
+
+
 
 
 /** POST /api/jobs/:id/complete */
