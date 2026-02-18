@@ -470,75 +470,45 @@ router.get("/:id", async (req, res) => {
 
 router.post("/:id/actions/request-can-snapshot", async (req, res) => {
   try {
-    const id = String(req.params.id || "");
+    const id = req.params.id;
 
-    const fn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
-    if (!fn) {
-      try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
-      return res.status(501).json({ ok:false, error:"not implemented (engine missing requestCanSnapshot)" });
-    }
+    const body = (req.body && typeof req.body === "object") ? req.body : {};
+    const vehicleIdRaw =
+      (body.vehicle_id != null ? body.vehicle_id :
+      (body.vehicleId != null ? body.vehicleId :
+      (body.VEHICLE_ID != null ? body.VEHICLE_ID : null)));
 
-    const bodyIn = (req.body && typeof req.body === "object") ? req.body : {};
-    const body = { ...bodyIn } as any;
-
-    // resolve vehicle_id (probe envia, mas temos fallback)
-    let vehicleId = body.vehicle_id || body.vehicleId || body.VEHICLE_ID || null;
-
-    if (!vehicleId) {
-      const getOne =
-        pickFn(installationsEngine, ["getInstallation","getById","read"]) ||
-        pickFn(installationsStore, ["getInstallation","getById","read"]);
-
-      if (getOne) {
-        const inst = await getOne(String(id));
-        vehicleId =
-          (inst && inst.resolved && (inst.resolved.vehicle_id || inst.resolved.vehicleId)) ||
-          (inst && inst.payload && (inst.payload.vehicle_id || inst.payload.vehicleId)) ||
-          (inst && (inst.vehicle_id || inst.vehicleId)) ||
-          null;
-      }
-    }
-
-    // headers de prova (pra confirmar via curl que o Render pegou)
-    try { res.set("x-reqcan-route", "reqcan_v3"); } catch (_) {}
-
-    if (!vehicleId) {
+    const vehicle_id = vehicleIdRaw != null ? Number(vehicleIdRaw) : NaN;
+    if (!Number.isFinite(vehicle_id) || vehicle_id <= 0) {
       return res.status(400).json({
-        ok: false,
-        error: "missing vehicle_id for CAN snapshot",
-        hint: "Send { vehicle_id } in request body (recommended for CAN_PROBE)."
+        error: "missing_vehicle_id",
+        detail: "body.vehicle_id (number) é obrigatório"
       });
     }
 
-    body.vehicle_id = vehicleId;
+    const baseUrl =
+      body.baseUrl ||
+      body.base_url ||
+      process.env.PUBLIC_BASE_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      `${req.protocol}://${req.get("host")}`;
 
-    // baseUrl pro engine conseguir enfileirar job (loopback /api/jobs)
-    const baseUrl = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`)
-      .replace(/\/+$/, "");
+    // headers de evidência
+    res.setHeader("x-reqcan-route", "reqcan_v4");
+    res.setHeader("x-vehicle-id-used", String(vehicle_id));
+    res.setHeader("x-base-url-used", String(baseUrl));
 
-    if (!body.base_url && !body.baseUrl) {
-      body.base_url = baseUrl;
-      body.baseUrl = baseUrl;
-    }
+    // chama o engine (a correção do engine está no passo 2 abaixo)
+    const engineFn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
+    const out = await engineFn(String(id), { vehicle_id, baseUrl });
 
-    try { res.set("x-base-url-used", String(body.base_url || body.baseUrl || "")); } catch (_) {}
-    try { res.set("x-vehicle-id-used", String(vehicleId)); } catch (_) {}
-
-    const out = await fn(id, body);
-    return res.json(out);
-
-  } catch (e: any) {
-    const raw = String(((e as any)?.stack || (e as any)?.message) || e);
-    const detail = raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 900);
-    console.error("[installationsRoutes] request-can-snapshot error:", raw);
-    return res.status(500).json({
-      ok: false,
-      error: "Internal Server Error",
-      where: "request-can-snapshot",
-      detail
-    });
+    return res.json(out || { ok: true, installation_id: String(id), vehicle_id, status: "QUEUED" });
+  } catch (err) {
+    const msg = (err && (err as any).message) ? String((err as any).message) : String(err);
+    return res.status(500).json({ error: "reqcan_failed", detail: msg });
   }
 });
+
 
 
 router.post("/:id/actions/approve-can", async (req, res) => {
