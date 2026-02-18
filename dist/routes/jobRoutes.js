@@ -252,6 +252,18 @@ router.post("/:id/complete", (req, res) => {
         (result?.ok === true);
     const finalStatus = okFlag ? "completed" : "error";
     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);
+    // hook: atualiza installationsStore via installationsEngine (CAN snapshots / status pipeline)
+    if (finalStatus === "completed") {
+        try {
+            const installationsEngine = require("../services/installationsEngine");
+            const fn = installationsEngine && (installationsEngine.onJobCompleted || installationsEngine.on_job_completed);
+            if (typeof fn === "function") {
+                Promise.resolve(fn(job, result)).catch((e) => {
+                    console.log("[jobs] onJobCompleted hook failed:", e && (e.message || String(e)));
+                });
+            }
+        } catch (_) { }
+    }
     if (!job)
         return res.status(404).json({ error: "Job not found" });
     // dispara encadeamento para Monitor (SB) após HTML5
