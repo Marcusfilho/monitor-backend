@@ -19,11 +19,26 @@ function generateId() {
   return crypto.randomBytes(8).toString("hex");
 }
 
-export function createJob<TPayload = any>(
-  type: string,
-  payload: TPayload
-): BaseJob<TPayload> {
+export function createJob<TPayload = any>(type: string, payload: TPayload): BaseJob<TPayload>;
+export function createJob<TPayload = any>(job: { type: string; payload: TPayload }): BaseJob<TPayload>;
+export function createJob<TPayload = any>(typeOrJob: any, maybePayload?: TPayload): BaseJob<TPayload> {
   const now = new Date().toISOString();
+
+  let type: string;
+  let payload: any;
+
+  if (typeOrJob && typeof typeOrJob === "object") {
+    type = String(typeOrJob.type || "").trim();
+    payload = typeOrJob.payload;
+  } else {
+    type = String(typeOrJob || "").trim();
+    payload = maybePayload;
+  }
+
+  if (!type) {
+    throw new Error("missing_type");
+  }
+
   const job: BaseJob<TPayload> = {
     id: generateId(),
     type,

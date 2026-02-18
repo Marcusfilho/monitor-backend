@@ -191,67 +191,45 @@ router.get("/:id", async (req, res) => {
 });
 router.post("/:id/actions/request-can-snapshot", async (req, res) => {
     try {
-        const id = String(req.params.id || "");
-        const fn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
-        if (!fn)
-            return res.status(501).json({ ok: false, error: "not implemented (engine missing requestCanSnapshot)" });
-        const body = req.body || {};
-        let vehicleId = body.vehicle_id || body.vehicleId || body.VEHICLE_ID || null;
-        // fallback opcional: tenta achar vehicle_id na própria instalação
-        if (!vehicleId) {
-            const getOne = pickFn(installationsEngine, ["getInstallation", "getById", "read"]) ||
-                pickFn(installationsStore, ["getInstallation", "getById", "read"]);
-            if (getOne) {
-                const inst = await getOne(String(id));
-                vehicleId =
-                    (inst && inst.resolved && (inst.resolved.vehicle_id || inst.resolved.vehicleId)) ||
-                        (inst && inst.payload && (inst.payload.vehicle_id || inst.payload.vehicleId)) ||
-                        (inst && (inst.vehicle_id || inst.vehicleId)) ||
-                        null;
-            }
-        }
-        if (!vehicleId) {
+        const id = req.params.id;
+        const body = (req.body && typeof req.body === "object") ? req.body : {};
+        const vehicleIdRaw = (body.vehicle_id != null ? body.vehicle_id :
+            (body.vehicleId != null ? body.vehicleId :
+                (body.VEHICLE_ID != null ? body.VEHICLE_ID : null)));
+        let vehicle_id = vehicleIdRaw != null ? Number(vehicleIdRaw) : NaN;
+        // Para o app oficial: vehicle_id pode vir omitido, desde que a instalação já tenha resolved.vehicle_id.
+        if (!Number.isFinite(vehicle_id) || vehicle_id <= 0) {
             try {
-                res.set("x-reqcan-route", "reqcan_v3b");
+                const inst = installationsStore.getInstallation(String(id));
+                const resolved = Number(inst?.resolved?.vehicle_id || 0);
+                if (Number.isFinite(resolved) && resolved > 0)
+                    vehicle_id = resolved;
             }
-            catch (_) { }
+            catch { }
+        }
+        if (!Number.isFinite(vehicle_id) || vehicle_id <= 0) {
             return res.status(400).json({
-                ok: false,
-                error: "missing vehicle_id for CAN snapshot",
-                hint: "Send { vehicle_id } in request body (recommended for CAN_PROBE)."
+                error: "missing_vehicle_id",
+                detail: "body.vehicle_id (number) é obrigatório (ou resolved.vehicle_id precisa existir)"
             });
         }
-        body.vehicle_id = vehicleId;
-        const baseUrl = `${req.protocol}://${req.get("host")}`;
-        body.baseUrl = baseUrl;
-        // headers de prova (pra confirmar via curl que o Render pegou)
-        try {
-            res.set("x-reqcan-route", "reqcan_v3b");
-        }
-        catch (_) { }
-        try {
-            res.set("x-vehicle-id-used", String(vehicleId));
-        }
-        catch (_) { }
-        try {
-            const out = await fn(id, body);
-            return res.json(out);
-        }
-        catch (e) {
-            const raw = String((e?.stack || e?.message) || e);
-            const detail = raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 900);
-            console.error("[installationsRoutes] request-can-snapshot engine error:", raw);
-            return res.status(500).json({
-                ok: false,
-                error: "Internal Server Error",
-                where: "request-can-snapshot",
-                detail
-            });
-        }
+        const baseUrl = body.baseUrl ||
+            body.base_url ||
+            process.env.PUBLIC_BASE_URL ||
+            process.env.RENDER_EXTERNAL_URL ||
+            `${req.protocol}://${req.get("host")}`;
+        // headers de evidência
+        res.setHeader("x-reqcan-route", "reqcan_v4");
+        res.setHeader("x-vehicle-id-used", String(vehicle_id));
+        res.setHeader("x-base-url-used", String(baseUrl));
+        // chama o engine (a correção do engine está no passo 2 abaixo)
+        const engineFn = pickFn(installationsEngine, ["requestCanSnapshot", "request_can_snapshot"]);
+        const out = await engineFn(String(id), { vehicle_id, baseUrl });
+        return res.json(out || { ok: true, installation_id: String(id), vehicle_id, status: "QUEUED" });
     }
-    catch (e) {
-        console.error("[installationsRoutes] request-can-snapshot error:", e && (e.stack || e.message || String(e)));
-        return res.status(500).json({ ok: false, error: "Internal Server Error" });
+    catch (err) {
+        const msg = (err && err.message) ? String(err.message) : String(err);
+        return res.status(500).json({ error: "reqcan_failed", detail: msg });
     }
 });
 router.post("/:id/actions/approve-can", async (req, res) => {

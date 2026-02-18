@@ -1,0 +1,53 @@
+{
+  "updatedBy": "Marcus",
+  "items": [
+    {"clientId":217062,"clientName":"Eneva","profileKey":"default","settingName":"Default - Eneva FW A79","vehicleSettingId":5536,"isDefault":true},
+    {"clientId":217172,"clientName":"Sul Americano","profileKey":"default","settingName":"Default","vehicleSettingId":5421,"isDefault":true},
+    {"clientId":217226,"clientName":"Accert","profileKey":"default","settingName":"Default","vehicleSettingId":5433,"isDefault":true},
+    {"clientId":217301,"clientName":"Virtu GNL","profileKey":"default","settingName":"Default - Virtu - FWA79","vehicleSettingId":5581,"isDefault":true},
+    {"clientId":217318,"clientName":"Tranziran","profileKey":"default","settingName":"Deafult - Free mode","vehicleSettingId":5440,"isDefault":true},
+    {"clientId":217391,"clientName":"JC Distribuição","profileKey":"default","settingName":"Defaul","vehicleSettingId":5452,"isDefault":true},
+    {"clientId":217434,"clientName":"JT Transportes","profileKey":"default","settingName":"JT - Default - FW A79","vehicleSettingId":5459,"isDefault":true},
+    {"clientId":217573,"clientName":"Seda","profileKey":"default","settingName":"Seda - Default","vehicleSettingId":5555,"isDefault":true},
+    {"clientId":217657,"clientName":"Souza Araujo","profileKey":"default","settingName":"Default A79","vehicleSettingId":5554,"isDefault":true},
+    {"clientId":217684,"clientName":"ETT Carapicuiba","profileKey":"default","settingName":"ETT - Firmware A79","vehicleSettingId":5577,"isDefault":true},
+    {"clientId":217693,"clientName":"Renova","profileKey":"default","settingName":"Default Renova","vehicleSettingId":5487,"isDefault":true},
+    {"clientId":217694,"clientName":"Track7","profileKey":"default","settingName":"Default","vehicleSettingId":5488,"isDefault":true},
+    {"clientId":217811,"clientName":"Ativa Logística","profileKey":"default","settingName":"Default","vehicleSettingId":5500,"isDefault":true},
+    {"clientId":217832,"clientName":"Dream Factory","profileKey":"default","settingName":"Default","vehicleSettingId":5504,"isDefault":true},
+    {"clientId":217857,"clientName":"JBS","profileKey":"default","settingName":"Default - JBS","vehicleSettingId":5507,"isDefault":true},
+    {"clientId":217916,"clientName":"Raça Transportes","profileKey":"default","settingName":"Default - Raça - FWA79","vehicleSettingId":5545,"isDefault":true},
+    {"clientId":218136,"clientName":"Ankai","profileKey":"default","settingName":"Default - Ankai","vehicleSettingId":5525,"isDefault":true},
+
+    {"clientId":218204,"clientName":"EVMob","profileKey":"default","settingName":"Default - Evmobility","vehicleSettingId":5528,"isDefault":true},
+    {"clientId":218204,"clientName":"EVMob","profileKey":"dallas","settingName":"Default - Evmobility - Dallas","vehicleSettingId":5606,"isDefault":false},
+
+    {"clientId":218304,"clientName":"Tassi","profileKey":"default","settingName":"Tassi - Default","vehicleSettingId":5542,"isDefault":true},
+    {"clientId":218572,"clientName":"TransLima","profileKey":"default","settingName":"Translima - Default","vehicleSettingId":5592,"isDefault":true},
+    {"clientId":218598,"clientName":"Fadel","profileKey":"default","settingName":"Default - Fadel","vehicleSettingId":5575,"isDefault":true},
+    {"clientId":218599,"clientName":"GeoCargo","profileKey":"default","settingName":"Default - Geocargo","vehicleSettingId":5576,"isDefault":true},
+    {"clientId":218726,"clientName":"SOL Cargas","profileKey":"default","settingName":"Default - Sol","vehicleSettingId":5582,"isDefault":true},
+
+    {"clientId":218808,"clientName":"Taguatur","profileKey":"dmas","settingName":"Default - Taguatur","vehicleSettingId":5585,"isDefault":true},
+    {"clientId":218808,"clientName":"Taguatur","profileKey":"dallas","settingName":"Default - Taguatur - ibutton","vehicleSettingId":5619,"isDefault":false},
+
+    {"clientId":218900,"clientName":"Energisa","profileKey":"leve","settingName":"Default Energisa - LEVES","vehicleSettingId":5615,"isDefault":true},
+    {"clientId":218900,"clientName":"Energisa","profileKey":"pesado","settingName":"Default Energisa","vehicleSettingId":5587,"isDefault":false},
+
+    {"clientId":218905,"clientName":"Sonda","profileKey":"default","settingName":"Default Sonda","vehicleSettingId":5588,"isDefault":true},
+    {"clientId":218908,"clientName":"Reiter Log","profileKey":"default","settingName":"Default - Reiter","vehicleSettingId":5589,"isDefault":true},
+    {"clientId":218933,"clientName":"Reunidas","profileKey":"default","settingName":"Default - Reunidas","vehicleSettingId":5590,"isDefault":true},
+    {"clientId":218969,"clientName":"Expresso Nordeste","profileKey":"default","settingName":"Default","vehicleSettingId":5595,"isDefault":true},
+    {"clientId":219002,"clientName":"Viação Cidade do Aço","profileKey":"default","settingName":"Default - Cidade do Aço","vehicleSettingId":5598,"isDefault":true},
+    {"clientId":219004,"clientName":"Viação Araçatuba","profileKey":"default","settingName":"Default - Araçatuba","vehicleSettingId":5599,"isDefault":true},
+    {"clientId":219005,"clientName":"Viação Pendotiba","profileKey":"default","settingName":"Default","vehicleSettingId":5600,"isDefault":true},
+
+    {"clientId":219007,"clientName":"Expresso Araguaia","profileKey":"dmas","settingName":"Default","vehicleSettingId":5602,"isDefault":true},
+    {"clientId":219007,"clientName":"Expresso Araguaia","profileKey":"dallas","settingName":"Default - Dallas","vehicleSettingId":5611,"isDefault":false},
+
+    {"clientId":219008,"clientName":"Caribus","profileKey":"default","settingName":"Defaul","vehicleSettingId":5603,"isDefault":true},
+    {"clientId":219121,"clientName":"Positivo","profileKey":"default","settingName":"Positivo - Default","vehicleSettingId":5609,"isDefault":true},
+    {"clientId":219145,"clientName":"TSL","profileKey":"default","settingName":"Default","vehicleSettingId":5610,"isDefault":true},
+    {"clientId":219322,"clientName":"Francisconi","profileKey":"default","settingName":"Default","vehicleSettingId":5618,"isDefault":true}
+  ]
+}

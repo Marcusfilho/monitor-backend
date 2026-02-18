@@ -54,6 +54,7 @@ function appendJobTag(comment: any, jobId: any) {
 }
 
 const WORKER_ID = process.env.WORKER_ID || "vm-worker-01";
+const WORKER_KEY = (process.env.WORKER_KEY || "").trim();
 const JOB_SERVER_BASE_URL =
   process.env.JOB_SERVER_BASE_URL || process.env.RENDER_BASE_URL || "http://127.0.0.1:3000";
 
@@ -185,15 +186,49 @@ const http = axios.create({
 });
 
 async function fetchNextJob(): Promise<SchemeBuilderJob | null> {
-  // Token LOCAL: não depende do backend Render.
+  // 1) garante session_token local
+  let tok: string | null = null;
   try {
-    const tok = await ensureLocalSessionTokenFile();
-    console.log(`[worker] session_token LOCAL OK (len=${tok.length})`);
-    return null as any;
+    tok = await ensureLocalSessionTokenFile();
   } catch (e: any) {
     const msg = String(e?.message || e);
     console.log(`[worker] falha ao obter session_token LOCAL: ${msg}`);
-    return null as any;
+    tok = null;
+  }
+
+  // 2) busca job no backend
+  try {
+    const r = await http.get("/api/jobs/next", {
+      params: { type: "scheme_builder", worker: WORKER_ID },
+      headers: WORKER_KEY ? { "x-worker-key": WORKER_KEY } : undefined,
+      validateStatus: () => true,
+    });
+
+    if (r.status === 204) return null;
+    if (r.status !== 200) {
+      console.log(`[worker] /api/jobs/next status=${r.status}`);
+      return null;
+    }
+
+    const data: any = (r as any).data;
+    const job: any = (data && (data.job || data)) || null;
+    if (!job || !job.id) return null;
+
+    job.payload = job.payload || {};
+
+    // backend pode não injetar token; usa local.
+    if (!String(job.payload.sessionToken || "").trim() && tok) {
+      job.payload.sessionToken = tok;
+    }
+
+    // garante tag do job no comment
+    job.payload.comment = appendJobTag(job.payload.comment, job.id);
+
+    return job as SchemeBuilderJob;
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    console.log(`[worker] erro ao buscar job: ${msg}`);
+    return null;
   }
 }
 
@@ -214,8 +249,7 @@ await reportProgress(job.id, 5, "started", `vehicleId=${(job as any)?.payload?.v
     const token = String(job.payload.sessionToken || "").trim();
     if (!token) throw new Error("Job veio sem sessionToken (backend não injetou token).");
 
-    const guid = String(process.env.MONITOR_WS_GUID || "").trim();
-    if (!guid) throw new Error("Faltou MONITOR_WS_GUID no env do worker.");
+    const guid = String(process.env.MONITOR_WS_GUID || "").trim() || makeGuidLike();
 
     const wsUrl = `wss://websocket.traffilog.com:8182/${guid}/${token}/json?defragment=1`;
     const origin = String(process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com");

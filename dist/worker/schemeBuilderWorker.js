@@ -87,6 +87,7 @@ function appendJobTag(comment, jobId) {
     return base ? `${base} ${tag}` : tag;
 }
 const WORKER_ID = process.env.WORKER_ID || "vm-worker-01";
+const WORKER_KEY = (process.env.WORKER_KEY || "").trim();
 const JOB_SERVER_BASE_URL = process.env.JOB_SERVER_BASE_URL || process.env.RENDER_BASE_URL || "http://127.0.0.1:3000";
 const BASE_POLL_INTERVAL_MS = Number(process.env.BASE_POLL_INTERVAL_MS || process.env.WORKER_POLL_INTERVAL_MS || "5000");
 const MAX_IDLE_POLL_INTERVAL_MS = Number(process.env.WORKER_MAX_IDLE_POLL_MS || "60000");
@@ -178,15 +179,45 @@ const http = axios_1.default.create({
     timeout: REQUEST_TIMEOUT_MS,
 });
 async function fetchNextJob() {
-    // Token LOCAL: não depende do backend Render.
+    // 1) garante session_token local
+    let tok = null;
     try {
-        const tok = await ensureLocalSessionTokenFile();
-        console.log(`[worker] session_token LOCAL OK (len=${tok.length})`);
-        return null;
+        tok = await ensureLocalSessionTokenFile();
     }
     catch (e) {
         const msg = String(e?.message || e);
         console.log(`[worker] falha ao obter session_token LOCAL: ${msg}`);
+        tok = null;
+    }
+    // 2) busca job no backend
+    try {
+        const r = await http.get("/api/jobs/next", {
+            params: { type: "scheme_builder", worker: WORKER_ID },
+            headers: WORKER_KEY ? { "x-worker-key": WORKER_KEY } : undefined,
+            validateStatus: () => true,
+        });
+        if (r.status === 204)
+            return null;
+        if (r.status !== 200) {
+            console.log(`[worker] /api/jobs/next status=${r.status}`);
+            return null;
+        }
+        const data = r.data;
+        const job = (data && (data.job || data)) || null;
+        if (!job || !job.id)
+            return null;
+        job.payload = job.payload || {};
+        // backend pode não injetar token; usa local.
+        if (!String(job.payload.sessionToken || "").trim() && tok) {
+            job.payload.sessionToken = tok;
+        }
+        // garante tag do job no comment
+        job.payload.comment = appendJobTag(job.payload.comment, job.id);
+        return job;
+    }
+    catch (e) {
+        const msg = String(e?.message || e);
+        console.log(`[worker] erro ao buscar job: ${msg}`);
         return null;
     }
 }
@@ -206,9 +237,7 @@ async function processJob(job) {
         const token = String(job.payload.sessionToken || "").trim();
         if (!token)
             throw new Error("Job veio sem sessionToken (backend não injetou token).");
-        const guid = String(process.env.MONITOR_WS_GUID || "").trim();
-        if (!guid)
-            throw new Error("Faltou MONITOR_WS_GUID no env do worker.");
+        const guid = String(process.env.MONITOR_WS_GUID || "").trim() || makeGuidLike();
         const wsUrl = `wss://websocket.traffilog.com:8182/${guid}/${token}/json?defragment=1`;
         const origin = String(process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com");
         const args = [

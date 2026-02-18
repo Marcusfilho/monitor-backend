@@ -165,20 +165,35 @@ async function onJobCompleted(job, result) {
 
   // Quando CAN snapshot termina:
   if (String(job.type) === "monitor_can_snapshot") {
-    // guarda summary se existir
     const meta = (result && result.meta) ? result.meta : null;
+
+    const inst2 = store.getInstallation(installationId);
+    inst2.can = inst2.can || {};
+
+    const prev = Array.isArray(inst2.can.snapshots) ? inst2.can.snapshots : [];
+    let incoming = [];
+
     if (meta) {
-      const inst2 = store.getInstallation(installationId);
-      inst2.can = inst2.can || {};
+      // snapshot pode vir como meta.snapshot (unitário) ou meta.snapshots (lista)
+      if (Array.isArray(meta.snapshots)) incoming = meta.snapshots;
+      else if (meta.snapshot != null) incoming = [meta.snapshot];
+
       inst2.can.last_snapshot_at = new Date().toISOString();
-      inst2.can.summary = meta.summary || meta;
-      store.patchInstallation(installationId, { can: inst2.can, status: "CAN_SNAPSHOT_READY" });
+
+      // summary: se vier explicitamente, usa; senão mantém o existente (ou usa meta como fallback)
+      if (meta.summary !== undefined) inst2.can.summary = meta.summary;
+      else inst2.can.summary = inst2.can.summary || meta || null;
     } else {
-      store.patchInstallation(installationId, { status: "CAN_SNAPSHOT_READY" });
+      // sem meta: não sobrescreve summary; só garante estrutura
+      inst2.can.summary = inst2.can.summary || null;
     }
+
+    const merged = incoming.concat(prev).filter(v => v != null);
+    inst2.can.snapshots = merged.slice(0, 5);
+
+    store.patchInstallation(installationId, { can: inst2.can, status: "CAN_SNAPSHOT_READY" });
     return;
   }
-
   // Quando GS termina:
   if (String(job.type) === "monitor_gs") {
     store.patchInstallation(installationId, { status: "COMPLETED" });

@@ -58,6 +58,57 @@ function _alreadyHasSb(installationId: string): boolean {
     );
   } catch { return false; }
 }
+function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
+  try {
+    if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation) return;
+    if (!job || String(job.type || "") !== "monitor_can_snapshot") return;
+
+    const installationId = _getInstallationId(job);
+    if (!installationId) return;
+
+    const inst = installationsStore.getInstallation(installationId);
+    if (!inst) return;
+
+    const meta = (result && typeof result === "object") ? (result as any).meta : null;
+
+    const can: any = (inst as any).can && typeof (inst as any).can === "object" ? (inst as any).can : {};
+    const prev = Array.isArray(can.snapshots) ? can.snapshots : [];
+    let incoming: any[] = [];
+
+    if (meta) {
+      if (Array.isArray((meta as any).snapshots)) incoming = (meta as any).snapshots;
+      else if ((meta as any).snapshot != null) incoming = [(meta as any).snapshot];
+
+      can.last_snapshot_at = new Date().toISOString();
+
+      if ((meta as any).summary !== undefined) can.summary = (meta as any).summary;
+      else can.summary = can.summary || meta || null;
+    } else {
+      can.summary = can.summary || null;
+    }
+
+    const merged = incoming.concat(prev).filter((v) => v != null);
+    can.snapshots = merged.slice(0, 5);
+
+    try {
+      installationsStore.patchInstallation(installationId, { can, status: "CAN_SNAPSHOT_READY" });
+    } catch {}
+
+    try {
+      const metaSmall = meta && (meta as any).summary !== undefined ? (meta as any).summary : null;
+      installationsStore.pushJob && installationsStore.pushJob(installationId, {
+        type: "monitor_can_snapshot",
+        job_id: String(jobId || job?.id || ""),
+        status: "completed",
+        ok: _resultOk(result),
+        meta: metaSmall,
+      });
+    } catch {}
+  } catch (e: any) {
+    console.log("[jobs] handle CAN snapshot failed:", e && (e.message || String(e)));
+  }
+}
+
 function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
   try {
     if (!job || String(job.type || "") !== "html5_install") return;
@@ -201,6 +252,7 @@ const finalStatus = okFlag ? "completed" : "error";
   // dispara encadeamento para Monitor (SB) após HTML5
   if (finalStatus === "completed") {
     _enqueueSchemeBuilderAfterHtml5(job, result);
+    _handleCanSnapshotComplete(job, result, id);
   }
 
   return res.json({ job });

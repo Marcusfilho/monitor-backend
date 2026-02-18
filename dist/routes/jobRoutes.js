@@ -66,6 +66,58 @@ function _alreadyHasSb(installationId) {
         return false;
     }
 }
+function _handleCanSnapshotComplete(job, result, jobId) {
+    try {
+        if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation)
+            return;
+        if (!job || String(job.type || "") !== "monitor_can_snapshot")
+            return;
+        const installationId = _getInstallationId(job);
+        if (!installationId)
+            return;
+        const inst = installationsStore.getInstallation(installationId);
+        if (!inst)
+            return;
+        const meta = (result && typeof result === "object") ? result.meta : null;
+        const can = inst.can && typeof inst.can === "object" ? inst.can : {};
+        const prev = Array.isArray(can.snapshots) ? can.snapshots : [];
+        let incoming = [];
+        if (meta) {
+            if (Array.isArray(meta.snapshots))
+                incoming = meta.snapshots;
+            else if (meta.snapshot != null)
+                incoming = [meta.snapshot];
+            can.last_snapshot_at = new Date().toISOString();
+            if (meta.summary !== undefined)
+                can.summary = meta.summary;
+            else
+                can.summary = can.summary || meta || null;
+        }
+        else {
+            can.summary = can.summary || null;
+        }
+        const merged = incoming.concat(prev).filter((v) => v != null);
+        can.snapshots = merged.slice(0, 5);
+        try {
+            installationsStore.patchInstallation(installationId, { can, status: "CAN_SNAPSHOT_READY" });
+        }
+        catch { }
+        try {
+            const metaSmall = meta && meta.summary !== undefined ? meta.summary : null;
+            installationsStore.pushJob && installationsStore.pushJob(installationId, {
+                type: "monitor_can_snapshot",
+                job_id: String(jobId || job?.id || ""),
+                status: "completed",
+                ok: _resultOk(result),
+                meta: metaSmall,
+            });
+        }
+        catch { }
+    }
+    catch (e) {
+        console.log("[jobs] handle CAN snapshot failed:", e && (e.message || String(e)));
+    }
+}
 function _enqueueSchemeBuilderAfterHtml5(job, result) {
     try {
         if (!job || String(job.type || "") !== "html5_install")
@@ -138,37 +190,29 @@ router.post("/", (req, res) => {
     return res.status(201).json({ job });
 });
 /** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
+/** GET /api/jobs/next?type=scheme_builder&worker=vm-worker-01 */
+/** GET /api/jobs/next?type=...&worker=... */
 router.get("/next", (req, res) => {
-    const type = req.query.type || "";
-    const workerId = req.query.worker || "unknown-worker";
+    const type = String((req.query || {}).type || "");
+    const workerId = String((req.query || {}).worker || "unknown-worker");
     if (!type)
         return res.status(400).json({ error: "Query param 'type' is required" });
-    // ✅ HTML5 jobs não dependem de session token (são server-to-server via HTML5 cookie-jar)
-    const typeLc = String(type).toLowerCase();
+    const typeLc = type.toLowerCase();
     const isHtml5 = typeLc.startsWith("html5_");
-    const isSchemeBuilder = typeLc === "scheme_builder";
-    if (!isHtml5) {
-        // ✅ scheme_builder não depende de token global no Render (worker faz user_login local)
-        // ✅ demais tipos mantêm o gating atual
-        const token = ((0, sessionTokenStore_1.getSessionToken)() || "").trim();
-        if (!isSchemeBuilder) {
-            if (!token)
-                return res.status(503).json({ error: "missing session token (set via /api/admin/session-token)" });
-        }
-        const job = (0, jobStore_1.getNextJob)(type, workerId);
-        if (!job)
-            return res.status(204).send();
-        // ✅ injeta token apenas na resposta
-        const out = JSON.parse(JSON.stringify(job));
-        out.payload = out.payload || {};
-        if (token)
-            out.payload.sessionToken = token;
-        return res.json({ job: out });
-    }
-    // ✅ HTML5: não injeta token
+    const token = String(((0, sessionTokenStore_1.getSessionToken)() || "")).trim();
+    // Gate disabled: jobs/next não deve depender de session token global
+    res.setHeader("x-jobsnext-gate", token ? "present" : "missing_allowed_v4");
     const job = (0, jobStore_1.getNextJob)(type, workerId);
     if (!job)
         return res.status(204).send();
+    // Injeta token só em jobs não-HTML5 (HTML5 usa cookie-jar / fluxo próprio)
+    if (!isHtml5 && token) {
+        const out = JSON.parse(JSON.stringify(job));
+        out.payload = out.payload || {};
+        if (!out.payload.sessionToken)
+            out.payload.sessionToken = token;
+        return res.json({ job: out });
+    }
     return res.json({ job });
 });
 /** POST /api/jobs/:id/complete */
@@ -213,6 +257,7 @@ router.post("/:id/complete", (req, res) => {
     // dispara encadeamento para Monitor (SB) após HTML5
     if (finalStatus === "completed") {
         _enqueueSchemeBuilderAfterHtml5(job, result);
+        _handleCanSnapshotComplete(job, result, id);
     }
     return res.json({ job });
 });

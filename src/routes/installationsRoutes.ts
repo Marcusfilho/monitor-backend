@@ -478,11 +478,21 @@ router.post("/:id/actions/request-can-snapshot", async (req, res) => {
       (body.vehicleId != null ? body.vehicleId :
       (body.VEHICLE_ID != null ? body.VEHICLE_ID : null)));
 
-    const vehicle_id = vehicleIdRaw != null ? Number(vehicleIdRaw) : NaN;
+    let vehicle_id = vehicleIdRaw != null ? Number(vehicleIdRaw) : NaN;
+
+    // Para o app oficial: vehicle_id pode vir omitido, desde que a instalação já tenha resolved.vehicle_id.
+    if (!Number.isFinite(vehicle_id) || vehicle_id <= 0) {
+      try {
+        const inst = installationsStore.getInstallation(String(id));
+        const resolved = Number((inst as any)?.resolved?.vehicle_id || 0);
+        if (Number.isFinite(resolved) && resolved > 0) vehicle_id = resolved;
+      } catch {}
+    }
+
     if (!Number.isFinite(vehicle_id) || vehicle_id <= 0) {
       return res.status(400).json({
         error: "missing_vehicle_id",
-        detail: "body.vehicle_id (number) é obrigatório"
+        detail: "body.vehicle_id (number) é obrigatório (ou resolved.vehicle_id precisa existir)"
       });
     }
 

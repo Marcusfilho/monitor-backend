@@ -13,8 +13,21 @@ const jobs = [];
 function generateId() {
     return crypto_1.default.randomBytes(8).toString("hex");
 }
-function createJob(type, payload) {
+function createJob(typeOrJob, maybePayload) {
     const now = new Date().toISOString();
+    let type;
+    let payload;
+    if (typeOrJob && typeof typeOrJob === "object") {
+        type = String(typeOrJob.type || "").trim();
+        payload = typeOrJob.payload;
+    }
+    else {
+        type = String(typeOrJob || "").trim();
+        payload = maybePayload;
+    }
+    if (!type) {
+        throw new Error("missing_type");
+    }
     const job = {
         id: generateId(),
         type,
