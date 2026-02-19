@@ -196,6 +196,8 @@
 
   function extractCanSnapshot(inst){
     const candidates = [
+      lastOf(pick(inst, [["can","snapshots"],["can","snapShots"]])),
+      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
       pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
       pick(inst, [["can_snapshot"],["canSnapshot"]]),
       lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
