@@ -3,6 +3,18 @@ import { Router, Request, Response } from "express";
 import { createJob, getNextJob, completeJob, getJob, listJobs } from "../jobs/jobStore";
 import { getSessionToken } from "../services/sessionTokenStore";
 
+
+function pickCanSnapshotFromCompleteBody(body){
+  const b = body || {};
+  return (b.can_snapshot && b.can_snapshot[0]) ||
+         (b.canSnapshot && b.canSnapshot[0]) ||
+         (b.can && b.can.snapshots && b.can.snapshots[0]) ||
+         (b.result && (b.result.snapshot || (b.result.snapshots && b.result.snapshots[0]))) ||
+         (b.snapshot) ||
+         null;
+}
+
+
 const router = Router();
 
 // === PIPELINE_AUTO_SB_V1 (encadear Monitor após HTML5 sem workaround) ===
@@ -91,7 +103,16 @@ function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
     can.snapshots = merged.slice(0, 5);
 
     try {
-      installationsStore.patchInstallation(installationId, { can, status: "CAN_SNAPSHOT_READY" });
+      const __snap = pickCanSnapshotFromCompleteBody(body);
+      const __summary = (__snap && __snap.counts) ? __snap.counts : null;
+
+      const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {
+        snapshots: __snap ? [__snap] : ((can && can.snapshots) ? can.snapshots : []),
+        summary: __summary || ((can && can.summary) ? can.summary : null),
+        last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
+      });
+
+      installationsStore.patchInstallation(installationId, { can: __canPatched, status: "CAN_SNAPSHOT_READY" });
     } catch {}
 
     try {
