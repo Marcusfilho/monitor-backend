@@ -4,15 +4,43 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
-function pickCanSnapshotFromCompleteBody(body) {
-    const b = body || {};
-    return (b.can_snapshot && b.can_snapshot[0]) ||
-        (b.canSnapshot && b.canSnapshot[0]) ||
-        (b.can && b.can.snapshots && b.can.snapshots[0]) ||
-        (b.result && (b.result.snapshot || (b.result.snapshots && b.result.snapshots[0]))) ||
-        (b.snapshot) ||
-        null;
+function pickCanSnapshotFromCompleteBody(body){
+  const root = body || {};
+  const looks = (o) => {
+    if (!o || typeof o !== "object") return false;
+    if (Array.isArray(o.parameters)) return true;
+    if (Array.isArray(o.moduleState)) return true;
+    if (o.counts && typeof o.counts === "object") return true;
+    return false;
+  };
+  const first = (v) => Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v;
+
+  const cand = [
+    root.snapshot,
+    root.best,
+    root.bestSnapshot,
+    root.best_snapshot,
+    root.can_snapshot_latest,
+    root.canSnapshotLatest,
+    root.snapshot_best,
+    root.can_snapshot_best,
+    first(root.snapshots),
+    first(root.can_snapshot),
+    first(root.canSnapshot),
+    (root.can && first(root.can.snapshots)),
+    (root.result && (root.result.snapshot || root.result.can_snapshot_latest || root.result.canSnapshotLatest ||
+      root.result.best || root.result.bestSnapshot || root.result.best_snapshot || first(root.result.snapshots) ||
+      first(root.result.can_snapshot) || first(root.result.canSnapshot) || (root.result.can && first(root.result.can.snapshots)))),
+    root,
+  ];
+
+  for (const c of cand){
+    const v = first(c);
+    if (looks(v)) return v;
+  }
+  return null;
 }
+
 const router = (0, express_1.Router)();
 // === PIPELINE_AUTO_SB_V1 (encadear Monitor após HTML5 sem workaround) ===
 // Nota: services/* vivem em dist/ (JS). Em dev (ts-node), esse require pode falhar — por isso é best-effort.
@@ -115,7 +143,9 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                 summary: __summary || ((can && can.summary) ? can.summary : null),
                 last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
             });
-            installationsStore.patchInstallation(installationId, { can: __canPatched, status: "CAN_SNAPSHOT_READY" });
+            installationsStore.patchInstallation(installationId, { can: __canPatched,
+    can_snapshot_latest: (__snap || snap || null),
+    can_snapshot: (__snap || snap || null), status: "CAN_SNAPSHOT_READY" });
         }
         catch { }
         try {
