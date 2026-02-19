@@ -15,7 +15,15 @@
     .ok { color: #1a7f37; font-size: 12px; }
     hr { margin: 12px 0; }
     .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; }
-  </style>
+  
+    /* === CAN Snapshot UI (raw_value) === */
+    .tableWrap{ background:#111; border:1px solid #333; border-radius:8px; overflow:auto; max-height:260px; }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th,td{ padding:6px 8px; border-bottom:1px solid #222; vertical-align:top; }
+    th{ position:sticky; top:0; background:#161616; color:#cfe6ff; }
+    details summary{ cursor:pointer; }
+  
+</style>
 </head>
 <body>
   <h2>APP V1 (provisório) — Installations (v1.3)</h2>
@@ -123,6 +131,35 @@
 
       <div class="muted">Saída do backend</div>
       <pre id="out">{}</pre>
+      <div class="muted" style="margin-top:10px">CAN Snapshot (último)</div>
+      <div class="muted" id="canSummary">snapshot: —</div>
+      <input id="canFilter" placeholder="filtrar parâmetro (name/id/type)..." />
+
+      <div class="muted" style="margin:10px 0 6px">Parameters</div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>name</th><th>type</th><th>value (value/raw_value)</th><th>last_update</th><th>source</th></tr>
+          </thead>
+          <tbody id="tblParamsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="muted" style="margin:12px 0 6px">Module State</div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>id</th><th>name</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
+          </thead>
+          <tbody id="tblMsBody"></tbody>
+        </table>
+      </div>
+
+      <details style="margin-top:10px">
+        <summary class="muted">JSON do snapshot</summary>
+        <pre id="canOut">{}</pre>
+      </details>
+
     </div>
   </div>
 
@@ -149,6 +186,142 @@ async function api(path, opts={}) {
 }
 
 function showOut(x) { $("out").textContent = JSON.stringify(x, null, 2); }
+
+function showCanOut(x) { $("canOut").textContent = JSON.stringify(x, null, 2); }
+
+const _canFilterEl = $("canFilter");
+const _paramsBodyEl = $("tblParamsBody");
+const _msBodyEl = $("tblMsBody");
+
+let __LAST_CAN = { params: [], ms: [] };
+
+function esc(s){
+  return String(s==null?"":s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function pick(obj, paths){
+  for (const p of paths){
+    let cur = obj; let ok = true;
+    for (const k of p){
+      if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
+      else { ok = false; break; }
+    }
+    if (ok && cur !== undefined && cur !== null) return cur;
+  }
+  return null;
+}
+
+function unwrapSnapshot(s){
+  let cur = s;
+  for (let i=0;i<4;i++){
+    if (!cur || typeof cur !== "object") break;
+    if (cur.snapshot) cur = cur.snapshot;
+    else if (cur.data) cur = cur.data;
+    else if (cur.payload) cur = cur.payload;
+    else break;
+  }
+  return cur;
+}
+
+function lastOf(v){
+  if (Array.isArray(v) && v.length) return v[v.length-1];
+  return v;
+}
+
+function extractCanSnapshot(inst){
+  const candidates = [
+    lastOf(pick(inst, [["can","snapshots"],["can_snapshots"],["canSnapshots"]])),
+    pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
+    pick(inst, [["can_snapshot"],["canSnapshot"]]),
+  ].filter(Boolean);
+  if (!candidates.length) return null;
+  return unwrapSnapshot(candidates[0]);
+}
+
+function displayValue(p){
+  const v = (p && (p.value ?? p.val ?? p.current_value ?? p.currentValue ?? p.raw_value ?? p.rawValue));
+  return (v===null || v===undefined) ? "" : String(v);
+}
+
+function extractRowsFromSnapshot(snap){
+  if (!snap) return { params: [], ms: [] };
+  const params =
+    pick(snap, [["parameters"],["params"],["parameters_tab","rows"],["parametersTab","rows"],["tabs","parameters","rows"]]) || [];
+  const moduleState =
+    pick(snap, [["moduleState"],["module_state"],["module_state_tab","rows"],["moduleStateTab","rows"],["tabs","module_state","rows"]]) || [];
+
+  const paramsRows = Array.isArray(params) ? params : (params && Array.isArray(params.rows) ? params.rows : []);
+  const msRows = Array.isArray(moduleState) ? moduleState : (moduleState && Array.isArray(moduleState.rows) ? moduleState.rows : []);
+  return { params: paramsRows, ms: msRows };
+}
+
+function renderParamsTable(rows, filter){
+  const q = String(filter||"").trim().toLowerCase();
+  let list = rows || [];
+  if (q){
+    list = list.filter(p => {
+      const name = String(p?.name ?? "").toLowerCase();
+      const id = String(p?.id ?? p?.param_id ?? p?.paramId ?? "").toLowerCase();
+      const t = String(p?.param_type ?? p?.type ?? "").toLowerCase();
+      return name.includes(q) || id.includes(q) || t.includes(q);
+    });
+  }
+
+  const MAX = 250;
+  const sliced = list.slice(0, MAX);
+
+  _paramsBodyEl.innerHTML = sliced.map(p => {
+    const name = esc(p?.name ?? "");
+    const t = esc(p?.param_type ?? p?.type ?? "");
+    const val = esc(displayValue(p));
+    const lu = esc(p?.last_update ?? p?.lastUpdate ?? "");
+    const src = esc(p?.source ?? "");
+    return `<tr><td>${name}</td><td>${t}</td><td>${val}</td><td>${lu}</td><td>${src}</td></tr>`;
+  }).join("") || `<tr><td colspan="5" class="muted">sem dados</td></tr>`;
+
+  if (list.length > MAX){
+    _paramsBodyEl.insertAdjacentHTML("beforeend", `<tr><td colspan="5" class="muted">… mostrando ${MAX} de ${list.length}</td></tr>`);
+  }
+}
+
+function renderMsTable(rows){
+  const MAX = 120;
+  const sliced = (rows||[]).slice(0, MAX);
+  _msBodyEl.innerHTML = sliced.map(r => {
+    const id = esc(r?.id ?? r?.module_id ?? r?.moduleId ?? "");
+    const name = esc(r?.name ?? r?.module_name ?? r?.moduleName ?? "");
+    const active = esc(r?.active ?? "");
+    const ok = esc(r?.ok ?? r?.is_ok ?? r?.isOk ?? "");
+    const was = esc(r?.was_ok ?? r?.wasOk ?? "");
+    const msg = esc(r?.message ?? r?.msg ?? "");
+    return `<tr><td>${id}</td><td>${name}</td><td>${active}</td><td>${ok}</td><td>${was}</td><td>${msg}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">sem dados</td></tr>`;
+
+  if ((rows||[]).length > MAX){
+    _msBodyEl.insertAdjacentHTML("beforeend", `<tr><td colspan="6" class="muted">… mostrando ${MAX} de ${(rows||[]).length}</td></tr>`);
+  }
+}
+
+function renderCanFromInstallation(inst){
+  const snap = extractCanSnapshot(inst);
+  showCanOut({ snapshot: snap });
+
+  const x = extractRowsFromSnapshot(snap);
+  __LAST_CAN = x;
+
+  const withValue = x.params.filter(p => displayValue(p).trim() !== "").length;
+  $("canSummary").textContent = snap ? `params: ${x.params.length} (com valor: ${withValue}) | moduleState: ${x.ms.length}` : "snapshot: —";
+
+  renderParamsTable(x.params, _canFilterEl ? _canFilterEl.value : "");
+  renderMsTable(x.ms);
+}
+
+if (_canFilterEl){
+  _canFilterEl.addEventListener("input", () => {
+    renderParamsTable(__LAST_CAN.params, _canFilterEl.value);
+  });
+}
+
 function showPayload(x) { $("payloadPreview").textContent = JSON.stringify(x, null, 2); }
 
 function norm(v){ return String(v == null ? "" : v).trim(); }
@@ -405,6 +578,8 @@ $("btnPoll").onclick = async () => {
   const id = $("installation_id").value.trim();
   const r = await api("/api/installations/" + encodeURIComponent(id));
   showOut(r);
+
+  if (r && r.json) renderCanFromInstallation(r.json);
 };
 
 $("btnSnap").onclick = async () => {

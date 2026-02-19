@@ -40,7 +40,18 @@
       background:#000; color:#e8eef2; font-family:var(--mono); font-size:12px; line-height:1.35;
       overflow:auto; max-height: 74vh;
     }
-  </style>
+  
+    /* === CAN Snapshot UI (raw_value) === */
+    .kv{font-size:12px;color:var(--muted);margin:8px 0 10px;display:flex;gap:10px;flex-wrap:wrap}
+    .pill{border:1px solid #273245;background:#0b1118;padding:4px 8px;border-radius:999px}
+    .tableWrap{border:1px solid #273245;border-radius:14px;overflow:auto;max-height:32vh;background:#000}
+    table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+    th,td{padding:7px 10px;border-bottom:1px solid #1f2a38;vertical-align:top}
+    th{position:sticky;top:0;background:#0b1118;color:#cfe6ff}
+    tr:hover td{background:#0b1118}
+    details summary{cursor:pointer;color:#cfe6ff;font-size:12px;margin:10px 0}
+  
+</style>
 </head>
 <body>
 <header>
@@ -90,8 +101,41 @@
     </div>
 
     <div class="card">
-      <h2>Saída (inst + snapshot)</h2>
-      <pre id="out">{}</pre>
+      <h2>CAN Snapshot (último)</h2>
+      <div class="kv" id="canSummary">
+        <span class="pill">snapshot: —</span>
+        <span class="pill" id="pillParams">params: 0</span>
+        <span class="pill" id="pillParamsWith">com valor: 0</span>
+        <span class="pill" id="pillMs">module: 0</span>
+      </div>
+
+      <label style="margin-top:8px">Filtro (Parameters)</label>
+      <input id="canFilter" placeholder="filtrar por name / id / type..." />
+
+      <div class="muted" style="font-size:12px;color:var(--muted);margin:10px 0 6px">Parameters</div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>name</th><th>type</th><th>value (value/raw_value)</th><th>last_update</th><th>source</th></tr>
+          </thead>
+          <tbody id="tblParamsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="muted" style="font-size:12px;color:var(--muted);margin:12px 0 6px">Module State</div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>id</th><th>name</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
+          </thead>
+          <tbody id="tblMsBody"></tbody>
+        </table>
+      </div>
+
+      <details>
+        <summary>JSON (inst + snapshot)</summary>
+        <pre id="out">{}</pre>
+      </details>
     </div>
   </div>
 </div>
@@ -163,6 +207,108 @@
     return unwrapSnapshot(candidates[0]);
   }
 
+
+  // === CAN Snapshot render (raw_value) ===
+  const canFilterEl = qs("canFilter");
+  const paramsBodyEl = qs("tblParamsBody");
+  const msBodyEl = qs("tblMsBody");
+  const pillParamsEl = qs("pillParams");
+  const pillParamsWithEl = qs("pillParamsWith");
+  const pillMsEl = qs("pillMs");
+
+  let __LAST_CAN = { params: [], ms: [] };
+
+  function esc(s){
+    return String(s==null?"":s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  function displayValue(p){
+    const v = (p && (p.value ?? p.val ?? p.current_value ?? p.currentValue ?? p.raw_value ?? p.rawValue));
+    return (v===null || v===undefined) ? "" : String(v);
+  }
+
+  function extractRowsFromSnapshot(snap){
+    if (!snap) return { params: [], ms: [] };
+
+    const params =
+      pick(snap, [["parameters"],["params"],["parameters_tab","rows"],["parametersTab","rows"],["tabs","parameters","rows"]]) || [];
+    const moduleState =
+      pick(snap, [["moduleState"],["module_state"],["module_state_tab","rows"],["moduleStateTab","rows"],["tabs","module_state","rows"]]) || [];
+
+    const paramsRows = Array.isArray(params) ? params : (params && Array.isArray(params.rows) ? params.rows : []);
+    const msRows = Array.isArray(moduleState) ? moduleState : (moduleState && Array.isArray(moduleState.rows) ? moduleState.rows : []);
+
+    return { params: paramsRows, ms: msRows };
+  }
+
+  function renderParamsTable(rows, filter){
+    const q = String(filter||"").trim().toLowerCase();
+    let list = rows || [];
+    if (q){
+      list = list.filter(p => {
+        const name = String(p?.name ?? "").toLowerCase();
+        const id = String(p?.id ?? p?.param_id ?? p?.paramId ?? "").toLowerCase();
+        const t = String(p?.param_type ?? p?.type ?? "").toLowerCase();
+        return name.includes(q) || id.includes(q) || t.includes(q);
+      });
+    }
+
+    const MAX = 250;
+    const sliced = list.slice(0, MAX);
+
+    paramsBodyEl.innerHTML = sliced.map(p => {
+      const name = esc(p?.name ?? "");
+      const t = esc(p?.param_type ?? p?.type ?? "");
+      const val = esc(displayValue(p));
+      const lu = esc(p?.last_update ?? p?.lastUpdate ?? "");
+      const src = esc(p?.source ?? "");
+      return `<tr><td>${name}</td><td>${t}</td><td>${val}</td><td>${lu}</td><td>${src}</td></tr>`;
+    }).join("") || `<tr><td colspan="5" style="color:#93a4b8">sem dados</td></tr>`;
+
+    if (list.length > MAX){
+      paramsBodyEl.insertAdjacentHTML("beforeend", `<tr><td colspan="5" style="color:#93a4b8">… mostrando ${MAX} de ${list.length}</td></tr>`);
+    }
+  }
+
+  function renderMsTable(rows){
+    const MAX = 120;
+    const sliced = (rows||[]).slice(0, MAX);
+    msBodyEl.innerHTML = sliced.map(r => {
+      const id = esc(r?.id ?? r?.module_id ?? r?.moduleId ?? "");
+      const name = esc(r?.name ?? r?.module_name ?? r?.moduleName ?? "");
+      const active = esc(r?.active ?? "");
+      const ok = esc(r?.ok ?? r?.is_ok ?? r?.isOk ?? "");
+      const was = esc(r?.was_ok ?? r?.wasOk ?? "");
+      const msg = esc(r?.message ?? r?.msg ?? "");
+      return `<tr><td>${id}</td><td>${name}</td><td>${active}</td><td>${ok}</td><td>${was}</td><td>${msg}</td></tr>`;
+    }).join("") || `<tr><td colspan="6" style="color:#93a4b8">sem dados</td></tr>`;
+
+    if ((rows||[]).length > MAX){
+      msBodyEl.insertAdjacentHTML("beforeend", `<tr><td colspan="6" style="color:#93a4b8">… mostrando ${MAX} de ${(rows||[]).length}</td></tr>`);
+    }
+  }
+
+  function renderCanSnapshot(snap){
+    const x = extractRowsFromSnapshot(snap);
+    __LAST_CAN = x;
+
+    const withValue = x.params.filter(p => displayValue(p).trim() !== "").length;
+
+    pillParamsEl.textContent = `params: ${x.params.length}`;
+    pillParamsWithEl.textContent = `com valor: ${withValue}`;
+    pillMsEl.textContent = `module: ${x.ms.length}`;
+
+    renderParamsTable(x.params, (canFilterEl && canFilterEl.value) ? canFilterEl.value : "");
+    renderMsTable(x.ms);
+  }
+
+  if (canFilterEl){
+    canFilterEl.addEventListener("input", () => {
+      renderParamsTable(__LAST_CAN.params, canFilterEl.value);
+    });
+  }
+
+
   async function loadInstallation(id){
     setStatus("carregando...");
     const r = await api(`/api/installations/${encodeURIComponent(id)}`);
@@ -170,7 +316,11 @@
       const inst = r.data;
       LAST_INST = inst;
       const snap = extractCanSnapshot(inst);
-      outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
+      
+      
+          renderCanSnapshot(snap);
+renderCanSnapshot(snap);
+outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
       qs("installation_id").value = instIdOf(inst) || id;
       localStorage.setItem("can_probe_last_installation_id", instIdOf(inst) || id);
 
