@@ -141,8 +141,8 @@ function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
       });
 
       installationsStore.patchInstallation(installationId, { can: __canPatched,
-    can_snapshot_latest: (__snap || snap || null),
-    can_snapshot: (__snap || snap || null), status: "CAN_SNAPSHOT_READY" });
+    can_snapshot_latest: (__snap || null),
+    can_snapshot: (__snap || null), status: "CAN_SNAPSHOT_READY" });
     } catch {}
 
     try {

@@ -144,8 +144,8 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                 last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
             });
             installationsStore.patchInstallation(installationId, { can: __canPatched,
-    can_snapshot_latest: (__snap || snap || null),
-    can_snapshot: (__snap || snap || null), status: "CAN_SNAPSHOT_READY" });
+    can_snapshot_latest: (__snap || null),
+    can_snapshot: (__snap || null), status: "CAN_SNAPSHOT_READY" });
         }
         catch { }
         try {
