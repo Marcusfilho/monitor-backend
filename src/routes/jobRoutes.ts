@@ -4,7 +4,7 @@ import { createJob, getNextJob, completeJob, getJob, listJobs } from "../jobs/jo
 import { getSessionToken } from "../services/sessionTokenStore";
 
 
-function pickCanSnapshotFromCompleteBody(body){
+function pickCanSnapshotFromCompleteBody(body: any){
   const b = body || {};
   return (b.can_snapshot && b.can_snapshot[0]) ||
          (b.canSnapshot && b.canSnapshot[0]) ||
@@ -103,7 +103,7 @@ function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
     can.snapshots = merged.slice(0, 5);
 
     try {
-      const __snap = pickCanSnapshotFromCompleteBody(body);
+      const __snap = pickCanSnapshotFromCompleteBody(result);
       const __summary = (__snap && __snap.counts) ? __snap.counts : null;
 
       const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {

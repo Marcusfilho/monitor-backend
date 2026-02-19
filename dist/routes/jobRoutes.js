@@ -1,21 +1,18 @@
 "use strict";
-
-function pickCanSnapshotFromCompleteBody(body){
-  const b = body || {};
-  return (b.can_snapshot && b.can_snapshot[0]) ||
-         (b.canSnapshot && b.canSnapshot[0]) ||
-         (b.can && b.can.snapshots && b.can.snapshots[0]) ||
-         (b.result && (b.result.snapshot || (b.result.snapshots && b.result.snapshots[0]))) ||
-         (b.snapshot) ||
-         null;
-}
-
-
 Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/jobRoutes.ts
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
+function pickCanSnapshotFromCompleteBody(body) {
+    const b = body || {};
+    return (b.can_snapshot && b.can_snapshot[0]) ||
+        (b.canSnapshot && b.canSnapshot[0]) ||
+        (b.can && b.can.snapshots && b.can.snapshots[0]) ||
+        (b.result && (b.result.snapshot || (b.result.snapshots && b.result.snapshots[0]))) ||
+        (b.snapshot) ||
+        null;
+}
 const router = (0, express_1.Router)();
 // === PIPELINE_AUTO_SB_V1 (encadear Monitor após HTML5 sem workaround) ===
 // Nota: services/* vivem em dist/ (JS). Em dev (ts-node), esse require pode falhar — por isso é best-effort.
@@ -112,15 +109,13 @@ function _handleCanSnapshotComplete(job, result, jobId) {
         can.snapshots = merged.slice(0, 5);
         try {
             const __snap = pickCanSnapshotFromCompleteBody(result);
-      const __summary = (__snap && __snap.counts) ? __snap.counts : null;
-
-      const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {
-        snapshots: __snap ? [__snap] : ((can && can.snapshots) ? can.snapshots : []),
-        summary: __summary || ((can && can.summary) ? can.summary : null),
-        last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
-      });
-
-      installationsStore.patchInstallation(installationId, { can: __canPatched, status: "CAN_SNAPSHOT_READY" });
+            const __summary = (__snap && __snap.counts) ? __snap.counts : null;
+            const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {
+                snapshots: __snap ? [__snap] : ((can && can.snapshots) ? can.snapshots : []),
+                summary: __summary || ((can && can.summary) ? can.summary : null),
+                last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
+            });
+            installationsStore.patchInstallation(installationId, { can: __canPatched, status: "CAN_SNAPSHOT_READY" });
         }
         catch { }
         try {
@@ -273,18 +268,6 @@ router.post("/:id/complete", (req, res) => {
         (result?.ok === true);
     const finalStatus = okFlag ? "completed" : "error";
     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);
-    // hook: atualiza installationsStore via installationsEngine (CAN snapshots / status pipeline)
-    if (finalStatus === "completed") {
-        try {
-            const installationsEngine = require("../services/installationsEngine");
-            const fn = installationsEngine && (installationsEngine.onJobCompleted || installationsEngine.on_job_completed);
-            if (typeof fn === "function") {
-                Promise.resolve(fn(job, result)).catch((e) => {
-                    console.log("[jobs] onJobCompleted hook failed:", e && (e.message || String(e)));
-                });
-            }
-        } catch (_) { }
-    }
     if (!job)
         return res.status(404).json({ error: "Job not found" });
     // dispara encadeamento para Monitor (SB) após HTML5
