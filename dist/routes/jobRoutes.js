@@ -104,6 +104,48 @@ function _alreadyHasSb(installationId) {
     }
 }
 function _handleCanSnapshotComplete(job, result, jobId) {
+  // OPTC_STORE_RESOLVE (dist)
+  var __pickStore = function(mod){
+    try {
+      var cand = [mod, mod && mod.default, mod && mod.installationsStore, mod && mod.store, mod && mod.installations];
+      for (var i=0;i<cand.length;i++){
+        var c = cand[i];
+        if (!c || typeof c !== "object") continue;
+        var gi = c.getInstallation || c.get || null;
+        var pi = c.patchInstallation || c.updateInstallation || c.setInstallation || c.patch || null;
+        if (typeof gi === "function" && typeof pi === "function"){
+          if (!c.patchInstallation && c.updateInstallation) {
+            try { c.patchInstallation = c.updateInstallation; } catch(_e){}
+          }
+          return c;
+        }
+      }
+    } catch(_e){}
+    return null;
+  };
+
+  var __resolveStore = function(){
+    var paths = ["../services/installationsStore", "../services/installationsEngine"];
+    for (var i=0;i<paths.length;i++){
+      try {
+        var mod = require(paths[i]);
+        var st = __pickStore(mod);
+        if (st) {
+          console.log("[jobs] installationsStore OK via", paths[i]);
+          return st;
+        }
+      } catch(_e){}
+    }
+    console.log("[jobs] installationsStore INDISPONÍVEL — persist CAN snapshot DESLIGADO");
+    return null;
+  };
+
+  var installationsStore = __resolveStore();
+  if (!installationsStore || typeof installationsStore.getInstallation !== "function" || typeof installationsStore.patchInstallation !== "function") {
+    console.log("[jobs] CAN snapshot: sem store/get+patch, skip persist");
+    return;
+  }
+
     try {
         if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation)
             return;

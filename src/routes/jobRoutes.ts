@@ -47,7 +47,40 @@ const router = Router();
 
 // === PIPELINE_AUTO_SB_V1 (encadear Monitor após HTML5 sem workaround) ===
 // Nota: services/* vivem em dist/ (JS). Em dev (ts-node), esse require pode falhar — por isso é best-effort.
-const installationsStore: any = (() => { try { return require("../services/installationsStore"); } catch { return null; } })();
+function __pickInstallStore(mod: any){
+  try {
+    const cand = [mod, mod && mod.default, mod && mod.installationsStore, mod && mod.store, mod && mod.installations];
+    for (const c of cand){
+      if (!c || typeof c !== "object") continue;
+      const gi = c.getInstallation || c.get || null;
+      const pi = c.patchInstallation || c.updateInstallation || c.setInstallation || c.patch || null;
+      if (typeof gi === "function" && typeof pi === "function"){
+        if (!c.patchInstallation && c.updateInstallation) {
+          try { c.patchInstallation = c.updateInstallation; } catch {}
+        }
+        return c;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+const installationsStore: any = (() => {
+  const paths = ["../services/installationsStore", "../services/installationsEngine"];
+  for (const p of paths){
+    try {
+      const mod = require(p);
+      const store = __pickInstallStore(mod);
+      if (store) {
+        console.log("[jobs] installationsStore OK via", p);
+        return store;
+      }
+    } catch {}
+  }
+  console.log("[jobs] installationsStore INDISPONÍVEL — persist CAN snapshot DESLIGADO");
+  return null;
+})();
+
 const catalogs: any = (() => { try { return require("../services/catalogs"); } catch { return null; } })();
 
 function _num(v: any): number | null {
@@ -100,7 +133,7 @@ function _alreadyHasSb(installationId: string): boolean {
 }
 function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
   try {
-    if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation) return;
+    if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation) { console.log("[jobs] CAN snapshot: sem store/get+patch, skip persist"); return; }
     if (!job || String(job.type || "") !== "monitor_can_snapshot") return;
 
     const installationId = _getInstallationId(job);
