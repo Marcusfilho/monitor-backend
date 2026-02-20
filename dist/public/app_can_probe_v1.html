@@ -553,6 +553,122 @@
     `;
   }
 
+
+  // PROBE_HELPERS_RESTORED_V1
+  function esc(v){
+    const s = (v == null) ? "—" : String(v);
+    return s.replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  }
+
+  function rowParamId(p){
+    return p?.id ?? p?.param_id ?? p?.parameter_id ?? p?.parameter?.id ?? p?.param?.id ?? p?.index ?? null;
+  }
+
+  function displayValue(p){
+    const v = firstNonEmpty([p?.value, p?.val, p?.param_value, p?.parameter_value]);
+    if (v !== "—") return String(v);
+    const rv = firstNonEmpty([p?.raw_value, p?.rawValue, p?.raw, p?.parameter_raw_value]);
+    if (rv !== "—") return String(rv);
+    return "";
+  }
+
+  function extractRowsFromSnapshot(snap){
+    const s = snap || {};
+    const pickArr = (cands) => {
+      for (const x of cands){
+        if (Array.isArray(x)) return x;
+        if (x && Array.isArray(x.rows)) return x.rows;
+        if (x && Array.isArray(x.items)) return x.items;
+        if (x && Array.isArray(x.data)) return x.data;
+      }
+      return [];
+    };
+
+    const params = pickArr([
+      s.parameters, s.params,
+      s?.data?.parameters, s?.data?.params,
+      s?.snapshot?.parameters, s?.snapshot?.params,
+      s?.payload?.parameters, s?.payload?.params
+    ]);
+
+    const ms = pickArr([
+      s.moduleState, s.module_state, s.modules,
+      s?.data?.moduleState, s?.data?.module_state, s?.data?.modules,
+      s?.snapshot?.moduleState, s?.snapshot?.module_state, s?.snapshot?.modules,
+      s?.payload?.moduleState, s?.payload?.module_state, s?.payload?.modules
+    ]);
+
+    return { params, ms };
+  }
+
+  function renderParamsTable(rows, filterText){
+    if (!paramsBodyEl) return;
+    const q = String(filterText || "").trim().toLowerCase();
+    const list = Array.isArray(rows) ? rows : [];
+
+    const filtered = !q ? list : list.filter(p => {
+      const idTxt = normIdVariants(rowParamId(p)).join(" ");
+      const hay = [
+        p?.name, p?.type, p?.source, p?.last_update, p?.lastUpdate,
+        p?.value, p?.raw_value, idTxt
+      ].map(v => String(v ?? "").toLowerCase()).join(" | ");
+      return hay.includes(q);
+    });
+
+    if (!filtered.length){
+      paramsBodyEl.innerHTML = `<tr><td colspan="5" class="muted">sem parâmetros</td></tr>`;
+      return;
+    }
+
+    paramsBodyEl.innerHTML = filtered.map(p => {
+      const name = p?.name ?? "—";
+      const type = p?.type ?? p?.param_type ?? "—";
+      const idTxt = normIdVariants(rowParamId(p))[0] || "";
+      const valueTxt = displayValue(p) || "—";
+      const rawTxt = firstNonEmpty([p?.raw_value, p?.rawValue, p?.raw]);
+      const shown = (rawTxt !== "—" && valueTxt !== rawTxt) ? `${valueTxt} / ${rawTxt}` : valueTxt;
+      const last = firstNonEmpty([p?.last_update, p?.lastUpdate, p?.updated_at, p?.ts]);
+      const source = firstNonEmpty([p?.source, p?.src]);
+      const nameHtml = idTxt ? `${esc(name)} <span class="muted" style="font-size:11px">[#${esc(idTxt)}]</span>` : esc(name);
+
+      return `<tr>
+        <td>${nameHtml}</td>
+        <td>${esc(type)}</td>
+        <td>${esc(shown)}</td>
+        <td>${esc(last)}</td>
+        <td>${esc(source)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderMsTable(msRows){
+    if (!msBodyEl) return;
+    const list = Array.isArray(msRows) ? msRows : [];
+
+    if (!list.length){
+      msBodyEl.innerHTML = `<tr><td colspan="6" class="muted">sem module state</td></tr>`;
+      return;
+    }
+
+    msBodyEl.innerHTML = list.map(r => {
+      const id = rowModuleId(r);
+      const name = rowModuleName(r) || "—";
+      const active = firstNonEmpty([r?.active]);
+      const ok = firstNonEmpty([r?.ok]);
+      const wasOk = firstNonEmpty([r?.was_ok, r?.wasOk]);
+      const msg = firstNonEmpty([r?.message, r?.msg, r?.error]);
+
+      return `<tr>
+        <td>${esc(id == null ? "—" : id)}</td>
+        <td>${esc(name)}</td>
+        <td>${esc(active)}</td>
+        <td>${esc(ok)}</td>
+        <td>${esc(wasOk)}</td>
+        <td>${esc(msg)}</td>
+      </tr>`;
+    }).join("");
+  }
+
   function renderCanSnapshot(snap){
     const x = extractRowsFromSnapshot(snap);
     __LAST_CAN = x;
@@ -563,7 +679,10 @@
     pillParamsWithEl.textContent = `com valor: ${withValue}`;
     pillMsEl.textContent = `module: ${x.ms.length}`;
 
-    try { renderProbeScreen(LAST_INST, snap, x); } catch(_e) {}
+    try { renderProbeScreen(LAST_INST, snap, x); } catch(_e) {
+      console.error("[CAN_PROBE] renderProbeScreen error", _e);
+      if (probeScreenEl) probeScreenEl.textContent = "erro ao renderizar probe (veja console)";
+    }
     renderParamsTable(x.params, (canFilterEl && canFilterEl.value) ? canFilterEl.value : "");
     renderMsTable(x.ms);
   }
