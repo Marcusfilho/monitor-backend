@@ -328,7 +328,10 @@
     return firstNonEmpty([
       p?.raw_value,
       p?.rawValue,
+      p?.raw?.value,
+      p?.raw,
       p?.value,
+      p?.val,
       p?.formatted_value,
       p?.formattedValue
     ]);
@@ -388,7 +391,7 @@
     if (!want.size) return null;
 
     for (const p of list){
-      const pid = p?.id ?? p?.param_id ?? p?.parameter_id;
+      const pid = p?.id ?? p?.param_id ?? p?.parameter_id ?? p?.parameter?.id ?? p?.param?.id ?? p?.index;
       const vars = normIdVariants(pid);
       for (const v of vars){
         if (want.has(v)) return p;
