@@ -41,6 +41,29 @@ function pickCanSnapshotFromCompleteBody(body: any){
   return null;
 }
 
+// OPTC_UNWRAP_SNAPSHOT_V1: normaliza formatos diferentes de snapshot (progress/complete)
+function unwrapSnapshot(x: any){
+  if (!x) return null;
+  const lastOf = (v: any) => Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v;
+  let cur: any = lastOf(x);
+  for (let i=0;i<5;i++){
+    if (!cur || typeof cur !== "object") break;
+    if (Array.isArray(cur)) { cur = lastOf(cur); continue; }
+    if ((cur as any).snapshot) { cur = (cur as any).snapshot; continue; }
+    if ((cur as any).data) { cur = (cur as any).data; continue; }
+    if ((cur as any).payload) { cur = (cur as any).payload; continue; }
+    if ((cur as any).result) { cur = (cur as any).result; continue; }
+    break;
+  }
+  const looks = (v: any) => !!(v && typeof v === "object" && ((v as any).counts || Array.isArray((v as any).parameters) || Array.isArray((v as any).moduleState)));
+  let snap: any = looks(cur) ? cur : null;
+  if (!snap) snap = pickCanSnapshotFromCompleteBody(cur) || pickCanSnapshotFromCompleteBody(x) || null;
+  if (snap && typeof snap === "object"){
+    if (!(snap as any).captured_at && !(snap as any).capturedAt) (snap as any).captured_at = new Date().toISOString();
+  }
+  return snap;
+}
+
 
 
 const router = Router();
@@ -330,6 +353,16 @@ const okFlag =
   ((result as any)?.ok === true);
 
 const finalStatus = okFlag ? "completed" : "error";
+
+// OPTC_COMPLETE_BODY_SNAPSHOT_FALLBACK_V1: se o worker mandar snapshot fora de result, copia para dentro
+try {
+  const rootSnap = pickCanSnapshotFromCompleteBody(req.body);
+  if (rootSnap && result && typeof result === "object"){
+    const rAny: any = result as any;
+    if (!rAny.snapshot) rAny.snapshot = rootSnap;
+    if (!Array.isArray(rAny.snapshots)) rAny.snapshots = [rootSnap];
+  }
+} catch(_e) {}
   const job = completeJob(id, finalStatus, result, workerId);
   if (!job) return res.status(404).json({ error: "Job not found" });
 

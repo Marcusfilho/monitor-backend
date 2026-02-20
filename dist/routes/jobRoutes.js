@@ -41,6 +41,29 @@ function pickCanSnapshotFromCompleteBody(body){
   return null;
 }
 
+// OPTC_UNWRAP_SNAPSHOT_V1: normaliza formatos diferentes de snapshot (progress/complete)
+function unwrapSnapshot(x){
+  if(!x) return null;
+  const lastOf = (v) => Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v;
+  let cur = lastOf(x);
+  for(let i=0;i<5;i++){
+    if(!cur || typeof cur !== "object") break;
+    if(Array.isArray(cur)) { cur = lastOf(cur); continue; }
+    if(cur.snapshot) { cur = cur.snapshot; continue; }
+    if(cur.data) { cur = cur.data; continue; }
+    if(cur.payload) { cur = cur.payload; continue; }
+    if(cur.result) { cur = cur.result; continue; }
+    break;
+  }
+  const looks = (v) => !!(v && typeof v === "object" && (v.counts || Array.isArray(v.parameters) || Array.isArray(v.moduleState)));
+  let snap = looks(cur) ? cur : null;
+  if(!snap) snap = pickCanSnapshotFromCompleteBody(cur) || pickCanSnapshotFromCompleteBody(x) || null;
+  if(snap && typeof snap === "object"){
+    if(!snap.captured_at && !snap.capturedAt) snap.captured_at = new Date().toISOString();
+  }
+  return snap;
+}
+
 const router = (0, express_1.Router)();
 // === PIPELINE_AUTO_SB_V1 (encadear Monitor após HTML5 sem workaround) ===
 // Nota: services/* vivem em dist/ (JS). Em dev (ts-node), esse require pode falhar — por isso é best-effort.
@@ -339,6 +362,16 @@ router.post("/:id/complete", (req, res) => {
         (req.body?.ok === true) ||
         (result?.ok === true);
     const finalStatus = okFlag ? "completed" : "error";
+
+    // OPTC_COMPLETE_BODY_SNAPSHOT_FALLBACK_V1: se o worker mandar snapshot fora de result, copia para dentro
+    try {
+        const rootSnap = pickCanSnapshotFromCompleteBody(req.body);
+        if (rootSnap && result && typeof result === "object") {
+            if (!result.snapshot) result.snapshot = rootSnap;
+            if (!Array.isArray(result.snapshots)) result.snapshots = [rootSnap];
+        }
+    }
+    catch (_e) { }
     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);
     if (!job)
         return res.status(404).json({ error: "Job not found" });

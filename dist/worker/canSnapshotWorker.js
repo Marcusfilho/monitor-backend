@@ -24,12 +24,19 @@
  */
 
 const fs = require("fs");
+const __DBG_DIR = "/home/questar/monitor-backend/tmp";
+try { fs.mkdirSync(__DBG_DIR, { recursive: true }); } catch(_e) {}
+try { fs.writeFileSync(`${__DBG_DIR}/can_worker_boot.txt`, new Date().toISOString()); } catch(_e) {}
 const crypto = require("crypto");
 const { collectVehicleMonitorSnapshot, summarizeCanFromModuleState } = require("../services/vehicleMonitorSnapshotService");
 
 const WORKER_ID = process.env.WORKER_ID || "can_snapshot";
 const BASE = (process.env.JOB_SERVER_BASE_URL || process.env.BASE_URL || process.env.BACKEND_BASE_URL || "").replace(/\/$/, "");
 const KEY  = (process.env.WORKER_KEY || "").trim();
+
+// OPTC_PROGRESS_SEND_V1
+const CAN_SUMMARY_MAX_PARAMS = Number(process.env.CAN_SUMMARY_MAX_PARAMS || "80");
+const CAN_SUMMARY_MAX_MS = Number(process.env.CAN_SUMMARY_MAX_MS || "80");
 
 const MONITOR_WS_ORIGIN = String(process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com");
 const MONITOR_SESSION_TOKEN_PATH = (process.env.SESSION_TOKEN_PATH || process.env.MONITOR_SESSION_TOKEN_PATH || "/tmp/.session_token");
@@ -48,7 +55,280 @@ const DEFAULT_CYCLES = Number(process.env.VM_DEFAULT_CYCLES || "3");
 const DEFAULT_INTERVAL_MS = Number(process.env.VM_DEFAULT_INTERVAL_MS || "12000");
 const URL_ENCODE = (process.env.VM_URL_ENCODE || "1") !== "0";
 
+// === OPT C: Complete com 1 snapshot resumido (evita HTTP 413) ===
+function __cs_displayValue(p){
+  const v = p && (p.value ?? p.val ?? p.current_value ?? p.currentValue ?? p.raw_value ?? p.rawValue);
+  return (v === null || v === undefined) ? "" : String(v);
+}
+
+function __cs_summarizeSnapshot(snap){
+  if (!snap || typeof snap !== "object") return null;
+
+  const params = Array.isArray(snap.parameters) ? snap.parameters
+              : Array.isArray(snap.params) ? snap.params
+              : [];
+
+  const ms = Array.isArray(snap.moduleState) ? snap.moduleState
+           : Array.isArray(snap.module_state) ? snap.module_state
+           : [];
+
+  const paramsWithValue = params.filter(p => __cs_displayValue(p).trim() !== "").length;
+
+  // mantém só campos pequenos por param (sem blob)
+  const pickedParams = params
+    .filter(p => __cs_displayValue(p).trim() !== "")
+    .slice(0, 40)
+    .map(p => ({
+      id: p.id ?? p.param_id ?? p.paramId ?? null,
+      name: p.name ?? null,
+      param_type: p.param_type ?? p.type ?? null,
+      value: p.value ?? null,
+      raw_value: p.raw_value ?? p.rawValue ?? null,
+      last_update: p.last_update ?? p.lastUpdate ?? null,
+      source: p.source ?? null,
+      duplicate_unit: p.duplicate_unit ?? p.duplicateUnit ?? null,
+    }));
+
+  // moduleState é pequeno; mantém inteiro (38 itens costuma ser ok)
+  const pickedMs = ms.slice(0, 80).map(r => ({
+    id: r.id ?? r.module_id ?? r.moduleId ?? null,
+    name: r.name ?? r.module_name ?? r.moduleName ?? null,
+    active: r.active ?? null,
+    ok: r.ok ?? r.is_ok ?? r.isOk ?? null,
+    was_ok: r.was_ok ?? r.wasOk ?? null,
+    message: r.message ?? r.msg ?? null,
+  }));
+
+  return {
+    captured_at: new Date().toISOString(),
+    meta: { summary_v: 1 },
+    counts: {
+      params_total: params.length,
+      params_with_value: paramsWithValue,
+      module_total: ms.length,
+    },
+    parameters: pickedParams,
+    moduleState: pickedMs,
+  };
+}
+
+function __cs_pickBestSummary(curr, cand){
+  if (!cand) return curr;
+  if (!curr) return cand;
+  const a = (curr.counts && curr.counts.params_with_value) || 0;
+  const b = (cand.counts && cand.counts.params_with_value) || 0;
+  if (b > a) return cand;
+  const am = (curr.counts && curr.counts.params_total) || 0;
+  const bm = (cand.counts && cand.counts.params_total) || 0;
+  if (bm > am) return cand;
+  return curr;
+}
+
+function __cs_shrinkResultForComplete(result){
+  if (!result || typeof result !== "object") return result;
+
+  const snaps = Array.isArray(result.snapshots) ? result.snapshots
+              : Array.isArray(result.can_snapshots) ? result.can_snapshots
+              : Array.isArray(result.canSnapshots) ? result.canSnapshots
+              : [];
+
+  let best = null;
+  for (const s of snaps){
+    const summary = __cs_summarizeSnapshot(s);
+    best = __cs_pickBestSummary(best, summary);
+  }
+
+  // fallback: se worker montou "snapshot" direto em outro campo
+  if (!best && result.snapshot && typeof result.snapshot === "object"){
+    best = __cs_summarizeSnapshot(result.snapshot) || result.snapshot;
+  }
+
+  const out = {
+    ok: result.ok !== false,
+    reason: result.reason || result.error || null,
+    installation_id: result.installation_id || result.installationId || null,
+    vehicle_id: result.vehicle_id || result.vehicleId || null,
+    snapshot: best,
+    snapshots: best ? [best] : [],
+  };
+
+  // ajuda debug (pequeno)
+  try{
+    out._result_bytes = JSON.stringify(out).length;
+  }catch(_){}
+  return out;
+}
+// === /OPT C ===
+
+
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+// === OPT C (fix 413): complete sempre pequeno + body_bytes ===
+function __cs_trimStr(x, maxLen){
+  const s = (x===null || x===undefined) ? "" : String(x);
+  return s.length > maxLen ? (s.slice(0, maxLen) + "…") : s;
+}
+function __cs_displayValue(p){
+  const v = p && (p.value ?? p.val ?? p.current_value ?? p.currentValue ?? p.raw_value ?? p.rawValue);
+  return (v === null || v === undefined) ? "" : String(v);
+}
+function __cs_summarizeSnapshot(snap){
+  if (!snap || typeof snap !== "object") return null;
+
+  const params = Array.isArray(snap.parameters) ? snap.parameters
+              : Array.isArray(snap.params) ? snap.params
+              : [];
+  const ms = Array.isArray(snap.moduleState) ? snap.moduleState
+           : Array.isArray(snap.module_state) ? snap.module_state
+           : [];
+
+  const paramsWithValue = params.filter(p => __cs_displayValue(p).trim() !== "").length;
+
+  // IMPORTANT: manter bem pequeno (evitar 413)
+  const pickedParams = params
+    .filter(p => __cs_displayValue(p).trim() !== "")
+    .slice(0, 15)
+    .map(p => ({
+      id: p.id ?? p.param_id ?? p.paramId ?? null,
+      name: __cs_trimStr(p.name ?? "", 80) || null,
+      param_type: __cs_trimStr(p.param_type ?? p.type ?? "", 40) || null,
+      value: __cs_trimStr(p.value ?? "", 80) || null,
+      raw_value: __cs_trimStr(p.raw_value ?? p.rawValue ?? "", 160) || null,
+      last_update: __cs_trimStr(p.last_update ?? p.lastUpdate ?? "", 40) || null,
+      source: __cs_trimStr(p.source ?? "", 30) || null,
+    }));
+
+  const pickedMs = ms.slice(0, CAN_SUMMARY_MAX_MS).map(r => ({
+    id: r.id ?? r.module_id ?? r.moduleId ?? null,
+    name: __cs_trimStr(r.name ?? r.module_name ?? r.moduleName ?? "", 60) || null,
+    active: r.active ?? null,
+    ok: r.ok ?? r.is_ok ?? r.isOk ?? null,
+    was_ok: r.was_ok ?? r.wasOk ?? null,
+    message: __cs_trimStr(r.message ?? r.msg ?? "", 120) || null,
+  }));
+
+  return {
+    captured_at: new Date().toISOString(),
+    counts: {
+      params_total: params.length,
+      params_with_value: paramsWithValue,
+      module_total: ms.length,
+    },
+    parameters: pickedParams,
+    moduleState: pickedMs,
+  };
+}
+
+
+function __cs_pickSnapshotCandidate(result){
+  const r = result || {};
+  const last = (arr) => (Array.isArray(arr) && arr.length) ? arr[arr.length-1] : null;
+
+  const meta =
+    (r && r.meta) ||
+    (r && r.result && r.result.meta) ||
+    (r && r.data && r.data.meta) ||
+    null;
+
+  const metaSnaps =
+    (meta && Array.isArray(meta.snapshots) ? meta.snapshots : null) ||
+    (meta && Array.isArray(meta.can_snapshot) ? meta.can_snapshot : null) ||
+    (meta && Array.isArray(meta.canSnapshots) ? meta.canSnapshots : null) ||
+    null;
+
+  const metaBest =
+    (meta && (meta.best || meta.snapshot || meta.can_snapshot_latest || meta.canSnapshotLatest)) ||
+    null;
+
+  const cand = [
+    metaBest,
+    (metaSnaps && metaSnaps[0]) || null,
+
+    r.best, r.bestSnapshot, r.best_snapshot,
+    r.snapshot, r.lastSnapshot, r.last_snapshot,
+    r.can_snapshot_latest, r.canSnapshotLatest,
+
+    last(r.snapshots), last(r.can_snapshot), last(r.canSnapshot),
+    (r.can && last(r.can.snapshots)),
+    (r.result && (r.result.snapshot || r.result.best || r.result.bestSnapshot || r.result.best_snapshot ||
+      last(r.result.snapshots) || last(r.result.can_snapshot) || last(r.result.canSnapshot) ||
+      (r.result.can && last(r.result.can.snapshots)))),
+    (r.data && (r.data.snapshot || r.data.best || r.data.bestSnapshot || r.data.best_snapshot ||
+      last(r.data.snapshots) || last(r.data.can_snapshot) || last(r.data.canSnapshot) ||
+      (r.data.can && last(r.data.can.snapshots)))),
+  ];
+
+  for (const c of cand){
+    if (!c) continue;
+    if (Array.isArray(c.parameters) || Array.isArray(c.moduleState) || c.counts) return c;
+  }
+  return null;
+}
+
+
+function __cs_buildSmallResult(result){
+  const meta = (result && result.meta) ? result.meta : null;
+  const metaSnaps = (meta && Array.isArray(meta.snapshots)) ? meta.snapshots : null;
+
+  let best = null;
+  if (metaSnaps && metaSnaps.length){
+    for (const s of metaSnaps){
+      const summary = __cs_summarizeSnapshot(s);
+      best = __cs_pickBestSummary(best, summary);
+    }
+  }
+
+  const cand = best || __cs_pickSnapshotCandidate(result);
+  const isSummary = !!(cand && cand.counts && Array.isArray(cand.parameters));
+  const snap = cand ? (isSummary ? cand : (__cs_summarizeSnapshot(cand) || cand)) : null;
+
+  return {
+    ok: (result && result.ok === false) ? false : true,
+    reason: (result && (result.reason || result.error)) || null,
+    installation_id: (result && (result.installation_id || result.installationId)) || null,
+    vehicle_id: (result && (result.vehicle_id || result.vehicleId)) || null,
+    snapshot: snap,
+    snapshots: snap ? [snap] : [],
+  };
+}
+
+
+
+function __cs_completeBody(result){
+  const payloadResult = __cs_buildSmallResult(result);
+  const snap = payloadResult.snapshot || ((payloadResult.snapshots && payloadResult.snapshots[0]) || null);
+
+  const payload = {
+    status: "completed",
+    workerId: WORKER_ID,
+    result: payloadResult,
+
+    // aliases para o backend/probe (1 item apenas)
+    can_snapshot_latest: snap,
+    can_snapshot: snap ? [snap] : [],
+    meta: { kind: "can_snapshot_summary_v1", counts: (snap && snap.counts) ? snap.counts : null },
+  };
+
+  let body = JSON.stringify(payload);
+  console.log("[INFO] complete body_bytes=", body.length, "hasSnap=", !!snap, "counts=", (snap && snap.counts) ? snap.counts : null);
+
+  if (body.length > 90000 && snap){
+    // fallback ultra-compacto
+    const p2 = Object.assign({}, snap);
+    if (Array.isArray(p2.parameters)) p2.parameters = p2.parameters.slice(0,5);
+    if (Array.isArray(p2.moduleState)) p2.moduleState = p2.moduleState.slice(0,5);
+    payload.can_snapshot_latest = p2;
+    payload.can_snapshot = [p2];
+    payload.result.snapshot = p2;
+    payload.result.snapshots = [p2];
+    body = JSON.stringify(payload);
+    console.log("[WARN] complete body_bytes (fallback)=", body.length);
+  }
+  return body;
+}
+
+// === /OPT C (fix 413) ===
+
 
 async function fetchJsonOrText(url, opts){
   const r = await fetch(url, opts);
@@ -57,6 +337,22 @@ async function fetchJsonOrText(url, opts){
   try { j = JSON.parse(t); } catch {}
   return { r, text: t, json: j };
 }
+
+// OPTC_PROGRESS_SEND_V1: envia snapshot parcial ao backend durante o job
+async function postProgress(jobId, percent, snapshot, detail){
+  try{
+    if(!BASE || !KEY) return;
+    const url = `${BASE}/api/jobs/${encodeURIComponent(String(jobId))}/progress`;
+    const p = Math.max(0, Math.min(100, Math.round(Number(percent)||0)));
+    const payload = { percent: p, stage: "monitor_can_snapshot", detail: detail || null, snapshot: snapshot || null, workerId: WORKER_ID };
+    const body = JSON.stringify(payload);
+    await fetch(url, { method:"POST", headers:{ "x-worker-key": KEY, "content-type":"application/json", "accept":"application/json" }, body });
+  } catch(e){
+    const msg = String(e && (e.message||e) || "");
+    console.log("[WARN] progress falhou", jobId, msg.slice(0,200));
+  }
+}
+
 
 function clampInt(v, lo, hi, def){
   const n = Number(v);
@@ -134,7 +430,8 @@ async function ensureLocalSessionToken(){
 async function openMonitorWs(sessionToken, timeoutMs){
   const wsMod = require("ws");
   const WebSocketCtor = wsMod?.default || wsMod;
-  const guid = makeGuidLike();
+  const guid = String(process.env.MONITOR_WS_GUID || "").trim();
+  if(!guid) throw new Error("[can] falta env: MONITOR_WS_GUID (guid do Monitor WS)");
   const url = `wss://websocket.traffilog.com:8182/${guid}/${sessionToken}/json?defragment=1`;
 
   return await new Promise((resolve, reject) => {
@@ -192,7 +489,15 @@ async function pollOnce(){
     return;
   }
 
-  const job = json;
+  let raw = json;
+  // fallback: alguns responses vêm com BOM/bytes nulos e o JSON.parse falha
+  if (!raw && typeof text === "string" && text.trim()) {
+    const t = text.replace(/^\uFEFF/, "").replace(/\u0000/g, "").trim();
+    try { raw = JSON.parse(t); } catch (_) {}
+  }
+
+  const job = (raw && typeof raw === 'object' && raw.job && typeof raw.job === 'object') ? raw.job : raw;
+
   const jobId = job?.id || job?.job_id;
   if(!jobId){
     console.log("[WARN] jobs/next retornou formato inesperado:", (text || "").slice(0, 200));
@@ -224,11 +529,26 @@ async function pollOnce(){
   }
 
   if(sessionToken && vehicleId){
-    for(let i=0;i<cycles;i++){
+          // OPTC_PROGRESS_SEND_V1 trackers
+      let __bestSummary = null;
+      let __bestWith = 0;
+      
+for(let i=0;i<cycles;i++){
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
         snapshots.unshift(snap); // newest first
         console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters)?snap.parameters.length:0);
+// OPTC_PROGRESS_SEND_V1_LOOP
+try{
+  const summary = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(snap) || snap) : snap;
+  if (!__bestSummary) __bestSummary = summary;
+  if (typeof __cs_pickBestSummary === "function") __bestSummary = __cs_pickBestSummary(__bestSummary, summary);
+  const percent = Math.round(((i+1)/cycles)*100);
+  await postProgress(jobId, percent, (__bestSummary || summary), `cycle ${i+1}/${cycles}`);
+  const withVal = Number(((__bestSummary||summary) && (__bestSummary||summary).counts && (__bestSummary||summary).counts.params_with_value) || 0);
+  if (withVal > __bestWith) __bestWith = withVal;
+}catch(_e){}
+
       }catch(e){
         const msg = String(e?.message || e);
         errors.push(msg);
@@ -266,10 +586,17 @@ async function pollOnce(){
     : { ok: false, status: "error", message: (errors[0] || "snapshot falhou"), meta };
 
   const completeUrl = `${BASE}/api/jobs/${encodeURIComponent(String(jobId))}/complete`;
+  // PROVA: dump do body do /complete (optC)
+  const __completeBody = __cs_completeBody(result);
+  try {
+    const __jid = (typeof jobId !== "undefined" ? jobId : (typeof id !== "undefined" ? id : "unknown"));
+    fs.writeFileSync(`${__DBG_DIR}/can_complete_${String(__jid)}.json`, __completeBody);
+  } catch(_e) {}
+
   const { r: rc, text: out } = await fetchJsonOrText(completeUrl, {
     method: "POST",
     headers: { "x-worker-key": KEY, "content-type": "application/json", "accept": "application/json" },
-    body: JSON.stringify({ status: "completed", workerId: WORKER_ID, result })
+    body: __completeBody
   });
 
   console.log("[INFO] complete", jobId, "HTTP", rc.status, (out || "").slice(0, 200));

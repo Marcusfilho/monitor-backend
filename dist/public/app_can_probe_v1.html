@@ -206,7 +206,9 @@
       pick(inst, [["can"],["monitor_snapshot"]])
     ].filter((v)=>{ if(!v) return false; if (Array.isArray(v) && !v.length) return false; return true; });
     if (!candidates.length) return null;
-    return unwrapSnapshot(candidates[0]);
+    const c0 = candidates[0];
+  const v0 = Array.isArray(c0) ? lastOf(c0) : c0;
+  return unwrapSnapshot(v0);
   }
 
 
