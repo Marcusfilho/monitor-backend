@@ -40,7 +40,49 @@
       background:#000; color:#e8eef2; font-family:var(--mono); font-size:12px; line-height:1.35;
       overflow:auto; max-height: 74vh;
     }
-  </style>
+  
+    /* === CAN Snapshot UI (raw_value) === */
+    .kv{font-size:12px;color:var(--muted);margin:8px 0 10px;display:flex;gap:10px;flex-wrap:wrap}
+    .pill{border:1px solid #273245;background:#0b1118;padding:4px 8px;border-radius:999px}
+    .tableWrap{border:1px solid #273245;border-radius:14px;overflow:auto;max-height:32vh;background:#000}
+    table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+    th,td{padding:7px 10px;border-bottom:1px solid #1f2a38;vertical-align:top}
+    th{position:sticky;top:0;background:#0b1118;color:#cfe6ff}
+    tr:hover td{background:#0b1118}
+    details summary{cursor:pointer;color:#cfe6ff;font-size:12px;margin:10px 0}
+  
+
+    /* === Probe screen (validação CAN) === */
+    .probeScreen{
+      background:#000;border:1px solid #273245;border-radius:20px;padding:10px; margin:8px 0 12px;
+      font-family:var(--mono); color:#f4f7fb;
+    }
+    .probeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+    .probeBox{
+      border:1px solid #25b5ff; border-radius:10px; padding:6px 8px; min-height:42px;
+      display:flex; align-items:center; justify-content:center; text-align:center;
+      background:#02070b;
+      font-size:11px; line-height:1.25;
+    }
+    .probeBox b{color:#fff; font-weight:700}
+    .probeBig{
+      border:1px solid #25b5ff; border-radius:26px; padding:14px 16px; background:#02070b;
+      min-height:260px;
+    }
+    .probeSectionTitle{color:#fff;font-weight:700;margin:8px 0 4px 0;font-size:12px}
+    .probeItem{margin:2px 0; color:#dfeaf7; font-size:11px}
+    .probeItem .k{display:inline-block; min-width:132px; color:#dfeaf7}
+    .probeItem .v{color:#fff; font-style:italic}
+    .probeItem.miss .v{color:#9aaabd}
+    .probeLegend{font-size:11px;color:#93a4b8;margin:8px 0 0}
+    .okDot,.badDot,.unkDot{
+      display:inline-block; width:8px; height:8px; border-radius:999px; margin-right:6px; vertical-align:middle;
+    }
+    .okDot{background:#36d66b}
+    .badDot{background:#ff6161}
+    .unkDot{background:#93a4b8}
+
+</style>
 </head>
 <body>
 <header>
@@ -90,8 +132,47 @@
     </div>
 
     <div class="card">
-      <h2>Saída (inst + snapshot)</h2>
-      <pre id="out">{}</pre>
+      <h2>CAN Probe (validação)</h2>
+      <div class="kv" id="canSummary">
+        <span class="pill">snapshot: —</span>
+        <span class="pill" id="pillParams">params: 0</span>
+        <span class="pill" id="pillParamsWith">com valor: 0</span>
+        <span class="pill" id="pillMs">module: 0</span>
+      </div>
+
+      <div id="probeScreen" class="probeScreen">aguardando snapshot...</div>
+
+      <details>
+        <summary>Debug / Parameters / Module State</summary>
+
+        <label style="margin-top:8px">Filtro (Parameters)</label>
+        <input id="canFilter" placeholder="filtrar por name / id / type..." />
+
+        <div class="muted" style="font-size:12px;color:var(--muted);margin:10px 0 6px">Parameters</div>
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr><th>name</th><th>type</th><th>value (value/raw_value)</th><th>last_update</th><th>source</th></tr>
+            </thead>
+            <tbody id="tblParamsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="muted" style="font-size:12px;color:var(--muted);margin:12px 0 6px">Module State</div>
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr><th>id</th><th>name</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
+            </thead>
+            <tbody id="tblMsBody"></tbody>
+          </table>
+        </div>
+
+        <details>
+          <summary>JSON (inst + snapshot)</summary>
+          <pre id="out">{}</pre>
+        </details>
+      </details>
     </div>
   </div>
 </div>
@@ -152,16 +233,330 @@
 
   function extractCanSnapshot(inst){
     const candidates = [
+      lastOf(pick(inst, [["can","snapshots"],["can","snapShots"]])),
+      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
       pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
       pick(inst, [["can_snapshot"],["canSnapshot"]]),
       lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
       lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
       pick(inst, [["monitor","can_snapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
       pick(inst, [["can"],["monitor_snapshot"]])
-    ].filter(Boolean);
+    ].filter((v)=>{ if(!v) return false; if (Array.isArray(v) && !v.length) return false; return true; });
     if (!candidates.length) return null;
-    return unwrapSnapshot(candidates[0]);
+    const c0 = candidates[0];
+  const v0 = Array.isArray(c0) ? lastOf(c0) : c0;
+  return unwrapSnapshot(v0);
   }
+
+
+  // === CAN Snapshot render (raw_value) ===
+  const canFilterEl = qs("canFilter");
+  const paramsBodyEl = qs("tblParamsBody");
+  const msBodyEl = qs("tblMsBody");
+  const pillParamsEl = qs("pillParams");
+  const pillParamsWithEl = qs("pillParamsWith");
+  const pillMsEl = qs("pillMs");
+  const probeScreenEl = qs("probeScreen");
+
+  let __LAST_CAN = { params: [], ms: [] };
+
+  // Configurável: adicione/remova aliases conforme sua validação CAN evoluir
+  const PROBE_PARAM_ALIASES = {
+    ignition: ["ignition", "ignition_status", "sys_param_ignition"],
+    driver_code: ["driver_code", "driver id", "driver_id", "ibutton", "dallas", "driver"],
+    fuel_total_used: ["engine_total_fuel_used", "total fuel used"],
+    fuel_level: ["fuel_level_1", "fuel level", "fuel_level"],
+    fuel_rate: ["engine_fuel_rate", "fuel rate", "fuel_rate"],
+    oil_pressure: ["engine_oil_pressure", "oil pressure"],
+    oil_temp: ["engine_oil_temperature_1", "oil temperature"],
+    coolant_temp: ["engine_coolant_temperature", "coolant temperature"],
+    fuel_temp: ["engine_fuel_temperature_1", "fuel temperature"],
+    odometer: ["sys_param_vehicle_distance", "vehicle distance", "odometer"],
+    windshield: ["arm_analog_input_3", "wiper", "windshield", "limpador"]
+  };
+
+  function normKey(s){
+    return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+  }
+  function toBool01(v){
+    if (v === true || v === false) return v;
+    const s = String(v == null ? "" : v).trim().toLowerCase();
+    if (["1","true","yes","y","ok","on","active"].includes(s)) return true;
+    if (["0","false","no","n","off","inactive"].includes(s)) return false;
+    return null;
+  }
+  function rowModuleName(r){
+    return String(r?.name ?? r?.module_name ?? r?.moduleName ?? "").trim();
+  }
+  function rowModuleId(r){
+    const v = r?.id ?? r?.module_id ?? r?.moduleId ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function findParamByAliases(rows, aliases){
+    const list = Array.isArray(rows) ? rows : [];
+    const wants = (aliases || []).map(normKey).filter(Boolean);
+    if (!wants.length) return null;
+
+    let best = null;
+    let bestScore = -1;
+    for (const p of list){
+      const nk = normKey(p?.name ?? "");
+      if (!nk) continue;
+      for (const w of wants){
+        let score = -1;
+        if (nk === w) score = 100;
+        else if (nk.includes(w)) score = 70;
+        else if (w.includes(nk) && nk.length >= 6) score = 60;
+        if (score > bestScore){ bestScore = score; best = p; }
+      }
+    }
+    return best;
+  }
+  function getParamDisplay(rows, aliases){
+    const p = findParamByAliases(rows, aliases);
+    if (!p) return { ok:false, text:"—", row:null };
+    const txt = displayValue(p).trim();
+    return { ok: !!txt, text: txt || "—", row: p };
+  }
+  function findModule(msRows, ids, names){
+    const rows = Array.isArray(msRows) ? msRows : [];
+    const idsSet = new Set((ids||[]).map(Number).filter(Number.isFinite));
+    const nameKeys = (names||[]).map(normKey).filter(Boolean);
+    return rows.find(r => {
+      const id = rowModuleId(r);
+      const nk = normKey(rowModuleName(r));
+      if (id != null && idsSet.has(id)) return true;
+      if (nk && nameKeys.some(k => nk.includes(k))) return true;
+      return false;
+    }) || null;
+  }
+  function moduleChip(label, row){
+    const ok = row ? (toBool01(row.ok) ?? toBool01(row.active) ?? toBool01(row.was_ok)) : null;
+    const dot = ok === true ? "okDot" : ok === false ? "badDot" : "unkDot";
+    const text = row ? `${label}:${rowModuleName(row) || "ok"} (${ok===true?"OK":ok===false?"FAIL":"?"})` : `${label}:—`;
+    return `<span class="pill"><span class="${dot}"></span>${esc(text)}</span>`;
+  }
+  function commText(msRows){
+    const can0 = findModule(msRows, [8], ["can0"]);
+    const can1 = findModule(msRows, [9], ["can1"]);
+    const j1708 = findModule(msRows, [15], ["j1708"]);
+    const anyCan = [can0,can1,j1708].some(r => (toBool01(r?.ok) ?? toBool01(r?.active) ?? toBool01(r?.was_ok)) === true);
+    const online = anyCan ? "CAN conectada" : "CAN sem sinal";
+    const detail = [can0,can1,j1708].map(r => {
+      if (!r) return "—";
+      const label = rowModuleName(r) || ("id " + rowModuleId(r));
+      const ok = (toBool01(r?.ok) ?? toBool01(r?.active) ?? toBool01(r?.was_ok));
+      return `${label}:${ok===true?"OK":ok===false?"FAIL":"?"}`;
+    }).join(" | ");
+    return { online, detail, can0, can1, j1708 };
+  }
+  function firstNonEmpty(values){
+    for (const v of values){
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) return s;
+    }
+    return "—";
+  }
+  function getHeaderLite(inst, snap, rows){
+    const sum = pick(inst || {}, [["can","summary"],["can","meta","summary"]]) || {};
+    const h = pick(snap || {}, [["header"],["headerLite"],["meta","header"],["summary","header"]]) || {};
+    const ignP = getParamDisplay(rows, PROBE_PARAM_ALIASES.ignition);
+    const drvP = getParamDisplay(rows, PROBE_PARAM_ALIASES.driver_code);
+
+    return {
+      ignition: firstNonEmpty([h.ignition, h.ignition_status, h.ignitionStatus, ignP.text]),
+      progress: firstNonEmpty([
+        h.configuration_progress, h.progress,
+        (sum && (sum.cyclesDone != null || sum.cyclesRequested != null)) ? `${sum.cyclesDone ?? "?"}/${sum.cyclesRequested ?? "?"}` : null,
+        (inst && inst.status) ? String(inst.status) : null
+      ]),
+      driver_code: firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, drvP.text]),
+      license_number: firstNonEmpty([
+        h.license_number, h.licenseNumber,
+        pick(inst||{}, [["payload","LICENSE_NMBR"],["payload","plate_real"],["payload","plate"],["payload","lookup_license"],["resolved","license_number"],["license_number"]])
+      ]),
+      serial: firstNonEmpty([
+        h.serial, h.inner_id, h.innerId,
+        pick(inst||{}, [["payload","serial"],["payload","INNER_ID"],["resolved","serial"],["resolved","inner_id"],["inner_id"]])
+      ]),
+      client: firstNonEmpty([
+        h.client, h.client_name, h.clientName,
+        pick(inst||{}, [["payload","target_client_id"],["resolved","client_id"],["payload","client_id"]])
+      ]),
+      model: firstNonEmpty([
+        h.model, h.manufacturer_model,
+        pick(inst||{}, [["payload","vehicleSettingId"],["resolved","vehicle_setting_id"],["resolved","vehicleSettingId"]])
+      ])
+    };
+  }
+  function probeLine(label, param){
+    const cls = (param && param.ok) ? "probeItem" : "probeItem miss";
+    return `<div class="${cls}"><span class="k">${esc(label)}:</span> <span class="v">[${esc(param ? param.text : "—")}]</span></div>`;
+  }
+  function renderProbeScreen(inst, snap, x){
+    if (!probeScreenEl) return;
+    const rows = (x && x.params) || [];
+    const msRows = (x && x.ms) || [];
+    const comm = commText(msRows);
+    const header = getHeaderLite(inst, snap, rows);
+
+    const fuelTotal = getParamDisplay(rows, PROBE_PARAM_ALIASES.fuel_total_used);
+    const fuelLvl = getParamDisplay(rows, PROBE_PARAM_ALIASES.fuel_level);
+    const fuelRate = getParamDisplay(rows, PROBE_PARAM_ALIASES.fuel_rate);
+    const oilPressure = getParamDisplay(rows, PROBE_PARAM_ALIASES.oil_pressure);
+    const oilTemp = getParamDisplay(rows, PROBE_PARAM_ALIASES.oil_temp);
+    const coolantTemp = getParamDisplay(rows, PROBE_PARAM_ALIASES.coolant_temp);
+    const fuelTemp = getParamDisplay(rows, PROBE_PARAM_ALIASES.fuel_temp);
+    const odometer = getParamDisplay(rows, PROBE_PARAM_ALIASES.odometer);
+    const windshield = getParamDisplay(rows, PROBE_PARAM_ALIASES.windshield);
+
+    const keypadDallas = findModule(msRows, [19], ["dallas", "ibutton"]);
+    const keypadRamzor = findModule(msRows, [20], ["ramzor"]);
+
+    probeScreenEl.innerHTML = `
+      <div class="probeRow">
+        <div class="probeBox"><b>ignition</b><br>${esc(header.ignition)}</div>
+        <div class="probeBox"><b>communication</b><br>${esc(comm.online)}</div>
+      </div>
+      <div class="probeRow">
+        <div class="probeBox"><b>progress</b><br>${esc(header.progress)}</div>
+        <div class="probeBox"><b>driver code</b><br>${esc(header.driver_code)}</div>
+      </div>
+      <div class="probeRow">
+        <div class="probeBox"><b>[license number]</b> ${esc(header.license_number)}</div>
+        <div class="probeBox"><b>serial</b> ${esc(header.serial)}</div>
+      </div>
+      <div class="probeRow">
+        <div class="probeBox"><b>client</b> ${esc(header.client)}</div>
+        <div class="probeBox"><b>model</b> ${esc(header.model)}</div>
+      </div>
+
+      <div class="kv" style="margin:4px 0 8px">
+        ${moduleChip("CAN0", comm.can0)}
+        ${moduleChip("CAN1", comm.can1)}
+        ${moduleChip("J1708", comm.j1708)}
+        ${moduleChip("Dallas", keypadDallas)}
+        ${moduleChip("Ramzor", keypadRamzor)}
+      </div>
+
+      <div class="probeBig">
+        <div class="probeSectionTitle">FUEL</div>
+        ${probeLine("engine_total_fuel_used", fuelTotal)}
+        ${probeLine("fuel_level_1", fuelLvl)}
+        ${probeLine("engine_fuel_rate", fuelRate)}
+
+        <div class="probeSectionTitle">PRESSURE</div>
+        ${probeLine("engine_oil_pressure", oilPressure)}
+
+        <div class="probeSectionTitle">TEMPERATURE</div>
+        ${probeLine("engine_oil_temperature_1", oilTemp)}
+        ${probeLine("engine_coolant_temperature", coolantTemp)}
+        ${probeLine("engine_fuel_temperature_1", fuelTemp)}
+
+        <div class="probeSectionTitle">ODOMETER</div>
+        ${probeLine("sys_param_vehicle_distance", odometer)}
+
+        <div class="probeSectionTitle">WINDSHIELD</div>
+        ${probeLine("arm_analog_input_3", windshield)}
+
+        <div class="probeLegend">${esc(comm.detail)}</div>
+      </div>
+    `;
+  }
+
+  function esc(s){
+    return String(s==null?"":s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  function displayValue(p){
+    const v = (p && (p.value ?? p.val ?? p.current_value ?? p.currentValue ?? p.raw_value ?? p.rawValue));
+    return (v===null || v===undefined) ? "" : String(v);
+  }
+
+  function extractRowsFromSnapshot(snap){
+    if (!snap) return { params: [], ms: [] };
+
+    const params =
+      pick(snap, [["parameters"],["params"],["parameters_tab","rows"],["parametersTab","rows"],["tabs","parameters","rows"]]) || [];
+    const moduleState =
+      pick(snap, [["moduleState"],["module_state"],["module_state_tab","rows"],["moduleStateTab","rows"],["tabs","module_state","rows"]]) || [];
+
+    const paramsRows = Array.isArray(params) ? params : (params && Array.isArray(params.rows) ? params.rows : []);
+    const msRows = Array.isArray(moduleState) ? moduleState : (moduleState && Array.isArray(moduleState.rows) ? moduleState.rows : []);
+
+    return { params: paramsRows, ms: msRows };
+  }
+
+  function renderParamsTable(rows, filter){
+    const q = String(filter||"").trim().toLowerCase();
+    let list = rows || [];
+    if (q){
+      list = list.filter(p => {
+        const name = String(p?.name ?? "").toLowerCase();
+        const id = String(p?.id ?? p?.param_id ?? p?.paramId ?? "").toLowerCase();
+        const t = String(p?.param_type ?? p?.type ?? "").toLowerCase();
+        return name.includes(q) || id.includes(q) || t.includes(q);
+      });
+    }
+
+    const MAX = 250;
+    const sliced = list.slice(0, MAX);
+
+    paramsBodyEl.innerHTML = sliced.map(p => {
+      const name = esc(p?.name ?? "");
+      const t = esc(p?.param_type ?? p?.type ?? "");
+      const val = esc(displayValue(p));
+      const lu = esc(p?.last_update ?? p?.lastUpdate ?? "");
+      const src = esc(p?.source ?? "");
+      return `<tr><td>${name}</td><td>${t}</td><td>${val}</td><td>${lu}</td><td>${src}</td></tr>`;
+    }).join("") || `<tr><td colspan="5" style="color:#93a4b8">sem dados</td></tr>`;
+
+    if (list.length > MAX){
+      paramsBodyEl.insertAdjacentHTML("beforeend", `<tr><td colspan="5" style="color:#93a4b8">… mostrando ${MAX} de ${list.length}</td></tr>`);
+    }
+  }
+
+  function renderMsTable(rows){
+    const MAX = 120;
+    const sliced = (rows||[]).slice(0, MAX);
+    msBodyEl.innerHTML = sliced.map(r => {
+      const id = esc(r?.id ?? r?.module_id ?? r?.moduleId ?? "");
+      const name = esc(r?.name ?? r?.module_name ?? r?.moduleName ?? "");
+      const active = esc(r?.active ?? "");
+      const ok = esc(r?.ok ?? r?.is_ok ?? r?.isOk ?? "");
+      const was = esc(r?.was_ok ?? r?.wasOk ?? "");
+      const msg = esc(r?.message ?? r?.msg ?? "");
+      return `<tr><td>${id}</td><td>${name}</td><td>${active}</td><td>${ok}</td><td>${was}</td><td>${msg}</td></tr>`;
+    }).join("") || `<tr><td colspan="6" style="color:#93a4b8">sem dados</td></tr>`;
+
+    if ((rows||[]).length > MAX){
+      msBodyEl.insertAdjacentHTML("beforeend", `<tr><td colspan="6" style="color:#93a4b8">… mostrando ${MAX} de ${(rows||[]).length}</td></tr>`);
+    }
+  }
+
+  function renderCanSnapshot(snap){
+    const x = extractRowsFromSnapshot(snap);
+    __LAST_CAN = x;
+
+    const withValue = x.params.filter(p => displayValue(p).trim() !== "").length;
+
+    pillParamsEl.textContent = `params: ${x.params.length}`;
+    pillParamsWithEl.textContent = `com valor: ${withValue}`;
+    pillMsEl.textContent = `module: ${x.ms.length}`;
+
+    try { renderProbeScreen(LAST_INST, snap, x); } catch(_e) {}
+    renderParamsTable(x.params, (canFilterEl && canFilterEl.value) ? canFilterEl.value : "");
+    renderMsTable(x.ms);
+  }
+
+  if (canFilterEl){
+    canFilterEl.addEventListener("input", () => {
+      renderParamsTable(__LAST_CAN.params, canFilterEl.value);
+    });
+  }
+
 
   async function loadInstallation(id){
     setStatus("carregando...");
@@ -170,7 +565,10 @@
       const inst = r.data;
       LAST_INST = inst;
       const snap = extractCanSnapshot(inst);
-      outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
+      
+      
+          renderCanSnapshot(snap);
+outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
       qs("installation_id").value = instIdOf(inst) || id;
       localStorage.setItem("can_probe_last_installation_id", instIdOf(inst) || id);
 
@@ -256,23 +654,29 @@
     await pollCan(id);
   }
 
-  async function pollCan(id, { tries=30, sleepMs=3000 } = {}){
+  async function pollCan(id, { tries=180, sleepMs=2000 } = {}){
     for (let i=0; i<tries; i++){
       const r = await api(`/api/installations/${encodeURIComponent(id)}`);
       if (r.status === 200 && r.data){
         const inst = r.data;
         LAST_INST = inst;
         const snap = extractCanSnapshot(inst);
+        try { renderCanSnapshot(snap); } catch(_e) {}
         outEl.textContent = pretty({
           poll: { attempt: i+1, tries, inst_status: inst.status || null },
-          installation: inst,
-          can_snapshot: snap
+          inst: { installation_id: instIdOf(inst), status: inst.status || null, jobs: (inst.jobs||[]).slice(-3) },
+          snap_counts: (snap && snap.counts) ? snap.counts : null
         });
-
-        const hasSummary = !!(snap && snap.summary);
+const hasSummary = !!(snap && snap.summary);
         const hasList = !!(snap && Array.isArray(snap.snapshots) && snap.snapshots.length);
-        if (hasSummary || hasList){
-          setStatus("CAN pronto ✅");
+        const hasCounts = !!(snap && snap.counts && ((snap.counts.params_total||0)>0 || (snap.counts.module_total||0)>0));
+        const hasParams = !!(snap && Array.isArray(snap.parameters) && snap.parameters.length);
+        const hasModule = !!(snap && Array.isArray(snap.moduleState) && snap.moduleState.length);
+        const statusReady = String(inst.status || "") === "CAN_SNAPSHOT_READY";
+        if (statusReady || hasSummary || hasList || hasCounts || hasParams || hasModule){
+          const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;
+          const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;
+          setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);
           return r;
         }
       } else {
