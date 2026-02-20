@@ -204,7 +204,7 @@
       lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
       pick(inst, [["monitor","can_snapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
       pick(inst, [["can"],["monitor_snapshot"]])
-    ].filter(Boolean);
+    ].filter((v)=>{ if(!v) return false; if (Array.isArray(v) && !v.length) return false; return true; });
     if (!candidates.length) return null;
     return unwrapSnapshot(candidates[0]);
   }
@@ -408,7 +408,7 @@ outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
     await pollCan(id);
   }
 
-  async function pollCan(id, { tries=30, sleepMs=3000 } = {}){
+  async function pollCan(id, { tries=120, sleepMs=3000 } = {}){
     for (let i=0; i<tries; i++){
       const r = await api(`/api/installations/${encodeURIComponent(id)}`);
       if (r.status === 200 && r.data){
@@ -423,8 +423,14 @@ outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
 
         const hasSummary = !!(snap && snap.summary);
         const hasList = !!(snap && Array.isArray(snap.snapshots) && snap.snapshots.length);
-        if (hasSummary || hasList){
-          setStatus("CAN pronto ✅");
+        const hasCounts = !!(snap && snap.counts && ((snap.counts.params_total||0)>0 || (snap.counts.module_total||0)>0));
+        const hasParams = !!(snap && Array.isArray(snap.parameters) && snap.parameters.length);
+        const hasModule = !!(snap && Array.isArray(snap.moduleState) && snap.moduleState.length);
+        const statusReady = String(inst.status || "") === "CAN_SNAPSHOT_READY";
+        if (statusReady || hasSummary || hasList || hasCounts || hasParams || hasModule){
+          const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;
+          const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;
+          setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);
           return r;
         }
       } else {
