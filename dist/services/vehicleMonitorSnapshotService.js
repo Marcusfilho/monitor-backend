@@ -295,6 +295,53 @@ async function collectVehicleMonitorSnapshot(opts) {
         },
     };
 }
+
+function __vm_pick(o) {
+    if (!o || typeof o !== "object") return null;
+    for (var i = 1; i < arguments.length; i++) {
+        var k = arguments[i];
+        if (!k) continue;
+        var v = o[k];
+        if (v !== undefined && v !== null && String(v) !== "") return v;
+    }
+    return null;
+}
+function __vm_mergeParameters(opr, latestMap) {
+    var rows = Array.isArray(opr && opr.data) ? opr.data : [];
+    var out = [];
+    var seen = new Set();
+
+    for (var i = 0; i < rows.length; i++) {
+        var r = rows[i] || {};
+        var id = __vm_pick(r, "id", "param_id", "paramid");
+        id = (id === undefined || id === null) ? null : String(id);
+        var latest = (id && latestMap && typeof latestMap.get === "function") ? latestMap.get(id) : null;
+
+        out.push({
+            id: id,
+            name: __vm_pick(r, "name", "param_name", "param_descr") || (latest && latest.name) || null,
+            value: __vm_pick(r, "value", "param_value", "calculated_value", "param_calculated_value") || (latest && latest.value) || null,
+            raw_value: __vm_pick(r, "raw_value", "param_raw_value", "hex_value") || (latest && latest.raw_value) || null,
+            source: __vm_pick(r, "source", "param_source") || (latest && latest.source) || null,
+            last_update: __vm_pick(r, "last_update", "last_update_date", "orig_time", "time") || (latest && (latest.last_update || latest.orig_time)) || null,
+            orig_time: __vm_pick(r, "orig_time", "last_update_date", "time") || (latest && latest.orig_time) || null,
+            inner_id: __vm_pick(r, "inner_id") || (latest && latest.inner_id) || null
+        });
+
+        if (id) seen.add(id);
+    }
+
+    if (latestMap && typeof latestMap.forEach === "function") {
+        latestMap.forEach(function (v, id) {
+            var sid = (id === undefined || id === null) ? null : String(id);
+            if (sid && seen.has(sid)) return;
+            out.push(v);
+        });
+    }
+
+    return out;
+}
+
 function summarizeCanFromModuleState(moduleState) {
     const pick = (module, sub) => moduleState.find((r) => r.module === module && r.sub === sub) ?? null;
     const can0 = pick("CAN", "CAN0");

@@ -167,33 +167,49 @@ async function onJobCompleted(job, result) {
 
   // Quando CAN snapshot termina:
   if (String(job.type) === "monitor_can_snapshot") {
-    const meta = (result && result.meta) ? result.meta : null;
+    const meta = (result && result.meta && typeof result.meta === "object") ? result.meta : {};
+    const topSummary =
+      (meta && meta.summary && typeof meta.summary === "object" && !Array.isArray(meta.summary)) ? meta.summary :
+      (result && result.summary && typeof result.summary === "object" ? result.summary : null);
 
-    const inst2 = store.getInstallation(installationId);
-    inst2.can = inst2.can || {};
-
-    const prev = Array.isArray(inst2.can.snapshots) ? inst2.can.snapshots : [];
-    let incoming = [];
-
-    if (meta) {
-      // snapshot pode vir como meta.snapshot (unitário) ou meta.snapshots (lista)
-      if (Array.isArray(meta.snapshots)) incoming = meta.snapshots;
-      else if (meta.snapshot != null) incoming = [meta.snapshot];
-
-      inst2.can.last_snapshot_at = new Date().toISOString();
-
-      // summary: se vier explicitamente, usa; senão mantém o existente (ou usa meta como fallback)
-      if (meta.summary !== undefined) inst2.can.summary = meta.summary;
-      else inst2.can.summary = inst2.can.summary || meta || null;
-    } else {
-      // sem meta: não sobrescreve summary; só garante estrutura
-      inst2.can.summary = inst2.can.summary || null;
+    let incomingSnaps = [];
+    if (Array.isArray(meta.snapshots)) {
+      incomingSnaps = meta.snapshots.filter(Boolean);
+    } else if (Array.isArray(result?.can_snapshot)) {
+      incomingSnaps = result.can_snapshot.filter(Boolean);
+    } else if (Array.isArray(result?.result?.snapshots)) {
+      incomingSnaps = result.result.snapshots.filter(Boolean);
+    } else if (result?.can_snapshot_latest && typeof result.can_snapshot_latest === "object") {
+      incomingSnaps = [ result.can_snapshot_latest ];
+    } else if (result?.can_snapshot && typeof result.can_snapshot === "object" && !Array.isArray(result.can_snapshot)) {
+      incomingSnaps = [ result.can_snapshot ];
+    } else if (result?.result?.snapshot && typeof result.result.snapshot === "object") {
+      incomingSnaps = [ result.result.snapshot ];
     }
 
-    const merged = incoming.concat(prev).filter(v => v != null);
-    inst2.can.snapshots = merged.slice(0, 5);
+    const bestSnap = incomingSnaps[0] || null;
+    const prevSnaps = Array.isArray(inst.can?.snapshots) ? inst.can.snapshots : [];
+    const mergedSnaps = [...incomingSnaps, ...prevSnaps].filter(Boolean).slice(0, 12);
 
-    store.patchInstallation(installationId, { can: inst2.can, status: "CAN_SNAPSHOT_READY" });
+    const canPatch = {
+      can: {
+        requested_at: inst.can?.requested_at || new Date().toISOString(),
+        summary: topSummary || inst.can?.summary || null,
+        snapshots: mergedSnaps,
+        status: (result && result.ok === false) ? "error" : "ready"
+      },
+      status: (result && result.ok === false) ? "CAN_SNAPSHOT_ERROR" : "CAN_SNAPSHOT_READY"
+    };
+
+    if (bestSnap) {
+      canPatch.can_snapshot_latest = bestSnap;
+      canPatch.can_snapshot = bestSnap;
+    }
+    if (Array.isArray(meta.errors) && meta.errors.length) {
+      canPatch.can_errors = meta.errors.slice(0, 10);
+    }
+
+    store.patchInstallation(installationId, canPatch);
     return;
   }
   // Quando GS termina:
@@ -224,7 +240,7 @@ async function requestCanSnapshot(installationId) {
   const reqEarlyTotal = _n(payload.early_stop_min_total ?? payload.earlyStopMinTotal);
   const reqEarlyWith = _n(payload.early_stop_min_with ?? payload.earlyStopMinWith);
 
-  const cycles = _clamp(reqCycles, 1, 30, CAN_SNAPSHOT_DEFAULT_CYCLES);
+  const cycles = _clamp(reqCycles, 1, 180, CAN_SNAPSHOT_DEFAULT_CYCLES);
   const interval_ms = _clamp(reqInterval, 2000, 60000, CAN_SNAPSHOT_DEFAULT_INTERVAL_MS);
 
   const canPayload = Object.assign(

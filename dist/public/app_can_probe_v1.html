@@ -183,6 +183,14 @@
   const statusEl = qs("status");
   let LAST_INST = null;
 
+  const PROBE_SNAPSHOT_REQ = {
+    cycles: 180,
+    interval_ms: 2000,
+    early_stop_min_total: 20,
+    early_stop_min_with: 8
+  };
+  const PROBE_POLL_OPTS = { tries: 180, sleepMs: 2000 };
+
   function setStatus(msg){ statusEl.textContent = "status: " + msg; }
   function pretty(obj){ try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); } }
 
@@ -415,6 +423,232 @@
       serial: firstNonEmpty([serialRaw, serialP.text]),
       client: firstNonEmpty([clientRaw, clientP.text]),
       model: firstNonEmpty([modelRaw, modelP.text])
+    };
+  }
+
+
+
+  // === CAN Snapshot render (raw_value) ===
+  const canFilterEl = qs("canFilter");
+  const paramsBodyEl = qs("tblParamsBody");
+  const msBodyEl = qs("tblMsBody");
+  const pillParamsEl = qs("pillParams");
+  const pillParamsWithEl = qs("pillParamsWith");
+  const pillMsEl = qs("pillMs");
+  const probeScreenEl = qs("probeScreen");
+
+  let __LAST_CAN = { params: [], ms: [] };
+
+
+  // Configurável: adicione/remova aliases conforme sua validação CAN evoluir
+  const PROBE_PARAM_ALIASES = {
+    ignition: ["ignition", "ignition_status", "sys_param_ignition"],
+    server_time: ["server_time"],
+    progress: ["progress"],
+    driver_code: ["driver_code", "driver id", "driver_id"],
+    license_number: ["license_nmbr", "license_number", "license"],
+    serial: ["inner_id", "serial"],
+    client: ["vcl_client_description", "client_description", "client"],
+    model: ["vcl_model", "model"]
+  };
+
+  // IDs preferenciais (mais confiável que nome)
+  const PROBE_PARAM_IDS = {
+    fuel_total_used: ["00000031", "000000C5"],
+    fuel_level: ["00000032", "000000C3"],
+    fuel_rate: ["0000003C"],
+    oil_pressure: ["00000024", "0000010D"],
+    oil_temp: ["0000168E"],
+    coolant_temp: ["0000002F", "0000010E"],
+    fuel_temp: ["0000002E", "0000010F"],
+    odometer: ["00002714"],
+    windshield: ["0000AF8C", "0000D419", "0000D41A"]
+  };
+
+  function normKey(s){
+    return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+  }
+  function toBool01(v){
+    if (v === true || v === false) return v;
+    const s = String(v == null ? "" : v).trim().toLowerCase();
+    if (["1","true","yes","y","ok","on","active"].includes(s)) return true;
+    if (["0","false","no","n","off","inactive"].includes(s)) return false;
+    return null;
+  }
+  function toIgnitionBool(v){
+    const b = toBool01(v);
+    if (b != null) return b;
+    const s = String(v == null ? "" : v).trim();
+    if (!s) return null;
+    if (/^[0-9]+$/.test(s)) return Number(s) !== 0;
+    if (/^[0-9a-fA-F]+$/.test(s)) {
+      const n16 = parseInt(s, 16);
+      if (Number.isFinite(n16)) return n16 !== 0;
+    }
+    return null;
+  }
+  function rowModuleName(r){
+    return String(r?.name ?? r?.module_name ?? r?.moduleName ?? "").trim();
+  }
+  function rowModuleId(r){
+    const v = r?.id ?? r?.module_id ?? r?.moduleId ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function firstNonEmpty(values){
+    for (const v of values){
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) return s;
+    }
+    return "—";
+  }
+  function rawParamValue(p){
+    return firstNonEmpty([
+      p?.raw_value,
+      p?.rawValue,
+      p?.raw?.value,
+      p?.raw,
+      p?.value,
+      p?.val,
+      p?.formatted_value,
+      p?.formattedValue
+    ]);
+  }
+
+  function normIdVariants(v){
+    const out = new Set();
+    if (v == null) return out;
+    let s = String(v).trim().toUpperCase();
+    if (!s) return out;
+    s = s.replace(/^0X/, "");
+    out.add(s);
+
+    if (/^[0-9A-F]+$/.test(s)) {
+      // Interpretando como HEX (caso comum no Monitor)
+      const n16 = parseInt(s, 16);
+      if (Number.isFinite(n16)) out.add(n16.toString(16).toUpperCase().padStart(8, "0"));
+      // Se só dígitos, também tenta decimal (alguns payloads podem vir assim)
+      if (/^[0-9]+$/.test(s)) {
+        const n10 = parseInt(s, 10);
+        if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+      }
+    } else if (/^[0-9]+$/.test(s)) {
+      const n10 = parseInt(s, 10);
+      if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+    }
+    return out;
+  }
+
+  function findParamByAliases(rows, aliases){
+    const list = Array.isArray(rows) ? rows : [];
+    const wants = (aliases || []).map(normKey).filter(Boolean);
+    if (!wants.length) return null;
+
+    let best = null;
+    let bestScore = -1;
+    for (const p of list){
+      const nk = normKey(p?.name ?? "");
+      if (!nk) continue;
+      for (const w of wants){
+        let score = -1;
+        if (nk === w) score = 100;
+        else if (nk.includes(w)) score = 70;
+        else if (w.includes(nk) && nk.length >= 6) score = 60;
+        if (score > bestScore){ bestScore = score; best = p; }
+      }
+    }
+    return best;
+  }
+
+  function findParamByIds(rows, ids){
+    const list = Array.isArray(rows) ? rows : [];
+    const want = new Set();
+    (ids || []).forEach(id => {
+      for (const v of normIdVariants(id)) want.add(v);
+    });
+    if (!want.size) return null;
+
+    for (const p of list){
+      const pid = p?.id ?? p?.param_id ?? p?.parameter_id ?? p?.parameter?.id ?? p?.param?.id ?? p?.index;
+      const vars = normIdVariants(pid);
+      for (const v of vars){
+        if (want.has(v)) return p;
+      }
+    }
+    return null;
+  }
+
+  function getParamDisplay(rows, aliases){
+    const p = findParamByAliases(rows, aliases);
+    if (!p) return { ok:false, text:"—", row:null };
+    const txt = firstNonEmpty([displayValue(p), rawParamValue(p)]);
+    return { ok: txt !== "—", text: txt, row: p };
+  }
+
+  function getParamRawByIds(rows, ids, fallbackAliases){
+    const p = findParamByIds(rows, ids) || findParamByAliases(rows, fallbackAliases || []);
+    if (!p) return { ok:false, text:"—", row:null };
+    const txt = rawParamValue(p);
+    return { ok: txt !== "—", text: txt, row: p };
+  }
+
+  function findModule(msRows, ids, names){
+    const rows = Array.isArray(msRows) ? msRows : [];
+    const idsSet = new Set((ids||[]).map(Number).filter(Number.isFinite));
+    const nameKeys = (names||[]).map(normKey).filter(Boolean);
+    return rows.find(r => {
+      const id = rowModuleId(r);
+      const nk = normKey(rowModuleName(r));
+      if (id != null && idsSet.has(id)) return true;
+      if (nk && nameKeys.some(k => nk.includes(k))) return true;
+      return false;
+    }) || null;
+  }
+
+  function moduleChip(label, row){
+    const ok = row ? (toBool01(row.ok) ?? toBool01(row.active) ?? toBool01(row.was_ok)) : null;
+    const dot = ok === true ? "okDot" : ok === false ? "badDot" : "unkDot";
+    const text = row ? `${label}:${ok===true?"OK":ok===false?"FAIL":"?"}` : `${label}:—`;
+    return `<span class="pill"><span class="${dot}"></span>${esc(text)}</span>`;
+  }
+
+  function commModules(msRows){
+    const can0 = findModule(msRows, [8], ["can0"]);
+    const can1 = findModule(msRows, [9], ["can1"]);
+    const j1708 = findModule(msRows, [15], ["j1708"]);
+    const dallas = findModule(msRows, [19], ["dallas", "ibutton"]);
+    const ramzor = findModule(msRows, [20], ["ramzor"]);
+    const detail = [can0, can1, j1708].map(r => {
+      if (!r) return "—";
+      const id = rowModuleId(r);
+      const ok = (toBool01(r?.ok) ?? toBool01(r?.active) ?? toBool01(r?.was_ok));
+      return `id ${id}:${ok===true?"OK":ok===false?"FAIL":"?"}`;
+    }).join(" | ");
+    return { can0, can1, j1708, dallas, ramzor, detail };
+  }
+
+  function getHeaderLite(inst, snap, rows){
+    const h = pick(snap || {}, [["header"],["headerLite"],["meta","header"],["summary","header"]]) || {};
+
+    const ignP = getParamDisplay(rows, PROBE_PARAM_ALIASES.ignition);
+    const progressP = getParamDisplay(rows, PROBE_PARAM_ALIASES.progress);
+    const driverP = getParamDisplay(rows, PROBE_PARAM_ALIASES.driver_code);
+    const licP = getParamDisplay(rows, PROBE_PARAM_ALIASES.license_number);
+    const serialP = getParamDisplay(rows, PROBE_PARAM_ALIASES.serial);
+    const clientP = getParamDisplay(rows, PROBE_PARAM_ALIASES.client);
+    const modelP = getParamDisplay(rows, PROBE_PARAM_ALIASES.model);
+    const serverTimeP = getParamDisplay(rows, PROBE_PARAM_ALIASES.server_time);
+
+    return {
+      ignition: firstNonEmpty([h.ignition, h.ignition_status, ignP.text]),
+      communication: firstNonEmpty([h.server_time, h.serverTime, snap?.server_time, serverTimeP.text, snap?.captured_at]),
+      progress: firstNonEmpty([progressP.text, h.progress, h.configuration_progress, inst?.status]),
+      driver_code: firstNonEmpty([driverP.text, h.driver_code, h.driverCode]),
+      license_number: firstNonEmpty([licP.text, h.license_nmbr, h.license_number]),
+      serial: firstNonEmpty([serialP.text, h.inner_id, h.serial]),
+      client: firstNonEmpty([clientP.text, h.vcl_client_description, h.client, h.client_name]),
+      model: firstNonEmpty([modelP.text, h.vcl_model, h.model])
     };
   }
 

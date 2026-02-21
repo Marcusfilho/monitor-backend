@@ -702,6 +702,7 @@ for(let i=0;i<cycles;i++){
       let __cycleWindowMs = 0;
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
+      __lastSnap = snap;
         snapshots.unshift(snap); // newest first
         try {
           const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");
@@ -809,3 +810,108 @@ async function main(){
 }
 
 main();
+
+
+// === CAN_ACQ_ENRICH_V2 (override final) ===
+// Força summary rico (header + counts úteis) mesmo se existirem versões antigas acima.
+function __cs_summarizeSnapshot(snap){
+  if (!snap || typeof snap !== "object") return null;
+
+  const params = Array.isArray(snap.parameters) ? snap.parameters
+              : Array.isArray(snap.params) ? snap.params
+              : [];
+
+  const ms = Array.isArray(snap.moduleState) ? snap.moduleState
+           : Array.isArray(snap.module_state) ? snap.module_state
+           : [];
+
+  const header = (snap.header && typeof snap.header === "object") ? snap.header : null;
+  const rawCounts = (snap.rawCounts && typeof snap.rawCounts === "object") ? snap.rawCounts
+                 : (snap.raw_counts && typeof snap.raw_counts === "object") ? snap.raw_counts
+                 : null;
+
+  const __valStr = (p) => {
+    const v = p && (p.value ?? p.val ?? p.current_value ?? p.currentValue ?? p.raw_value ?? p.rawValue);
+    return (v === null || v === undefined) ? "" : String(v);
+  };
+
+  const paramsWithValue = params.filter(p => __valStr(p).trim() !== "").length;
+  const paramsWithTime  = params.filter(p => String(p?.last_update ?? p?.lastUpdate ?? p?.orig_time ?? "").trim() !== "").length;
+
+  const CAN_SUMMARY_MAX_PARAMS_SAFE = Number(process.env.CAN_SUMMARY_MAX_PARAMS || "120");
+  const CAN_SUMMARY_MAX_MS_SAFE = Number(process.env.CAN_SUMMARY_MAX_MS || "80");
+
+  const pickedParams = params
+    .filter(p => __valStr(p).trim() !== "")
+    .slice(0, CAN_SUMMARY_MAX_PARAMS_SAFE)
+    .map(p => ({
+      id: p.id ?? p.param_id ?? p.paramId ?? null,
+      name: p.name ?? null,
+      param_type: p.param_type ?? p.type ?? null,
+      value: p.value ?? p.val ?? p.current_value ?? p.currentValue ?? null,
+      raw_value: p.raw_value ?? p.rawValue ?? null,
+      last_update: p.last_update ?? p.lastUpdate ?? p.orig_time ?? null,
+      source: p.source ?? null,
+      duplicate_unit: p.duplicate_unit ?? p.duplicateUnit ?? null,
+    }));
+
+  const wantedIds = new Set(["8","9","15","19","20"]);
+  const pickedMs = ms
+    .filter(r => wantedIds.has(String(r?.id ?? r?.module_id ?? r?.moduleId ?? "")) || (r && (r.active!=null || r.ok!=null || r.was_ok!=null)))
+    .slice(0, CAN_SUMMARY_MAX_MS_SAFE)
+    .map(r => ({
+      id: r.id ?? r.module_id ?? r.moduleId ?? null,
+      name: r.name ?? r.module_name ?? r.moduleName ?? r.module ?? null,
+      module: r.module ?? null,
+      sub: r.sub ?? null,
+      active: r.active ?? null,
+      ok: r.ok ?? r.is_ok ?? r.isOk ?? null,
+      was_ok: r.was_ok ?? r.wasOk ?? null,
+      message: r.message ?? r.msg ?? r.error_descr ?? null,
+      last_update: r.last_update_date ?? r.last_update ?? null,
+    }));
+
+  const msKey = pickedMs.filter(r => wantedIds.has(String(r?.id ?? ""))).length;
+
+  return {
+    captured_at: snap.capturedAt || snap.captured_at || new Date().toISOString(),
+    header: header,
+    raw_events: rawCounts,
+    counts: {
+      params_total: params.length,
+      params_with_value: paramsWithValue,
+      params_with_time: paramsWithTime,
+      module_total: ms.length,
+      module_state_key: msKey,
+      unit_parameters_events: rawCounts?.unitParametersEvents ?? rawCounts?.unit_parameters_events ?? null,
+      unit_messages_events: rawCounts?.unitMessagesEvents ?? rawCounts?.unit_messages_events ?? null,
+      unit_conn_events: rawCounts?.unitConnEvents ?? rawCounts?.unit_conn_events ?? null,
+    },
+    parameters: pickedParams,
+    moduleState: pickedMs,
+  };
+}
+
+function __cs_pickBestSummary(curr, cand){
+  if (!cand) return curr;
+  if (!curr) return cand;
+
+  const aHdr = curr?.header ? 1 : 0;
+  const bHdr = cand?.header ? 1 : 0;
+  if (bHdr !== aHdr) return bHdr > aHdr ? cand : curr;
+
+  const aMs = Number(curr?.counts?.module_state_key ?? 0) || 0;
+  const bMs = Number(cand?.counts?.module_state_key ?? 0) || 0;
+  if (bMs !== aMs) return bMs > aMs ? cand : curr;
+
+  const aRaw = Number(curr?.counts?.params_with_value ?? 0) || 0;
+  const bRaw = Number(cand?.counts?.params_with_value ?? 0) || 0;
+  if (bRaw !== aRaw) return bRaw > aRaw ? cand : curr;
+
+  const aTot = Number(curr?.counts?.params_total ?? 0) || 0;
+  const bTot = Number(cand?.counts?.params_total ?? 0) || 0;
+  if (bTot !== aTot) return bTot > aTot ? cand : curr;
+
+  return curr;
+}
+// === /CAN_ACQ_ENRICH_V2 ===
