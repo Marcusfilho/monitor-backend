@@ -53,6 +53,9 @@ const VM_WS_OPEN_TIMEOUT_MS = Number(process.env.VM_WS_OPEN_TIMEOUT_MS || "15000
 const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "8");
 const DEFAULT_CYCLES = Number(process.env.VM_DEFAULT_CYCLES || "3");
 const DEFAULT_INTERVAL_MS = Number(process.env.VM_DEFAULT_INTERVAL_MS || "12000");
+const EARLY_STOP_MIN_TOTAL = Number(process.env.VM_EARLY_STOP_MIN_TOTAL || "6");
+const EARLY_STOP_MIN_WITH = Number(process.env.VM_EARLY_STOP_MIN_WITH || "6");
+const ZERO_PARAMS_SLEEP_MS = Number(process.env.VM_ZERO_PARAMS_SLEEP_MS || "4000");
 const URL_ENCODE = (process.env.VM_URL_ENCODE || "1") !== "0";
 
 // === OPT C: Complete com 1 snapshot resumido (evita HTTP 413) ===
@@ -77,7 +80,7 @@ function __cs_summarizeSnapshot(snap){
   // mantém só campos pequenos por param (sem blob)
   const pickedParams = params
     .filter(p => __cs_displayValue(p).trim() !== "")
-    .slice(0, 40)
+    .slice(0, CAN_SUMMARY_MAX_MS)
     .map(p => ({
       id: p.id ?? p.param_id ?? p.paramId ?? null,
       name: p.name ?? null,
@@ -127,10 +130,16 @@ function __cs_pickBestSummary(curr, cand){
 function __cs_shrinkResultForComplete(result){
   if (!result || typeof result !== "object") return result;
 
-  const snaps = Array.isArray(result.snapshots) ? result.snapshots
-              : Array.isArray(result.can_snapshots) ? result.can_snapshots
-              : Array.isArray(result.canSnapshots) ? result.canSnapshots
-              : [];
+  const meta = (result && result.meta && typeof result.meta === "object") ? result.meta : null;
+
+  const snaps =
+    Array.isArray(result.snapshots) ? result.snapshots :
+    Array.isArray(result.can_snapshots) ? result.can_snapshots :
+    Array.isArray(result.canSnapshots) ? result.canSnapshots :
+    (meta && Array.isArray(meta.snapshots)) ? meta.snapshots :
+    (meta && Array.isArray(meta.can_snapshots)) ? meta.can_snapshots :
+    (meta && Array.isArray(meta.canSnapshots)) ? meta.canSnapshots :
+    [];
 
   let best = null;
   for (const s of snaps){
@@ -138,24 +147,25 @@ function __cs_shrinkResultForComplete(result){
     best = __cs_pickBestSummary(best, summary);
   }
 
-  // fallback: se worker montou "snapshot" direto em outro campo
-  if (!best && result.snapshot && typeof result.snapshot === "object"){
-    best = __cs_summarizeSnapshot(result.snapshot) || result.snapshot;
+  if (!best){
+    const direct =
+      (result.snapshot && typeof result.snapshot === "object") ? result.snapshot :
+      (meta && meta.snapshot && typeof meta.snapshot === "object") ? meta.snapshot :
+      null;
+    if (direct) best = __cs_summarizeSnapshot(direct) || direct;
   }
 
   const out = {
     ok: result.ok !== false,
     reason: result.reason || result.error || null,
-    installation_id: result.installation_id || result.installationId || null,
-    vehicle_id: result.vehicle_id || result.vehicleId || null,
+    installation_id: result.installation_id || result.installationId || (meta && meta.summary && (meta.summary.installationId || meta.summary.installation_id)) || null,
+    vehicle_id: result.vehicle_id || result.vehicleId || (meta && meta.summary && (meta.summary.vehicleId || meta.summary.vehicle_id)) || null,
     snapshot: best,
     snapshots: best ? [best] : [],
+    meta: { summary: (meta && meta.summary) ? meta.summary : null, snapshots: best ? [best] : [] }
   };
 
-  // ajuda debug (pequeno)
-  try{
-    out._result_bytes = JSON.stringify(out).length;
-  }catch(_){}
+  try { out._result_bytes = JSON.stringify(out).length; } catch(_){}
   return out;
 }
 // === /OPT C ===
@@ -187,7 +197,7 @@ function __cs_summarizeSnapshot(snap){
   // IMPORTANT: manter bem pequeno (evitar 413)
   const pickedParams = params
     .filter(p => __cs_displayValue(p).trim() !== "")
-    .slice(0, 15)
+    .slice(0, CAN_SUMMARY_MAX_PARAMS)
     .map(p => ({
       id: p.id ?? p.param_id ?? p.paramId ?? null,
       name: __cs_trimStr(p.name ?? "", 80) || null,
@@ -511,8 +521,10 @@ async function pollOnce(){
 
   const cycles = clampInt(p.cycles, 1, MAX_CYCLES, DEFAULT_CYCLES);
   const intervalMs = clampInt(p.interval_ms, 2000, 60000, DEFAULT_INTERVAL_MS);
+  const earlyStopMinTotal = clampInt(p.early_stop_min_total, 0, 999999, EARLY_STOP_MIN_TOTAL);
+  const earlyStopMinWith = clampInt(p.early_stop_min_with, 0, 999999, EARLY_STOP_MIN_WITH);
 
-  console.log("[INFO] job", jobId, "vehicleId=", vehicleId, "cycles=", cycles, "intervalMs=", intervalMs);
+  console.log("[INFO] job", jobId, "vehicleId=", vehicleId, "cycles=", cycles, "intervalMs=", intervalMs, "earlyStopTotal=", earlyStopMinTotal, "earlyStopWith=", earlyStopMinWith);
 
   const errors = [];
   const snapshots = []; // vamos manter NEWEST FIRST (engine faz incoming.concat(prev))
@@ -538,6 +550,19 @@ for(let i=0;i<cycles;i++){
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
         snapshots.unshift(snap); // newest first
         console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters)?snap.parameters.length:0);
+        // early-stop: usa counts (inclui raw_value) via summarizeSnapshot
+        let __sum = null;
+        try{ __sum = __cs_summarizeSnapshot(snap) || null; }catch(_e){}
+        const __c = (__sum && __sum.counts) ? __sum.counts : null;
+        const __total = Number((__c && __c.params_total) || (Array.isArray(snap.parameters)?snap.parameters.length:0) || 0);
+        const __with = Number((__c && __c.params_with_value) || 0);
+        const hitWith = (earlyStopMinWith > 0) ? (__with >= earlyStopMinWith) : false;
+        const hitTotal = (earlyStopMinTotal > 0) ? (__total >= earlyStopMinTotal) : false;
+        if (hitWith || hitTotal){
+          console.log("[INFO] early-stop", jobId, "total=", __total, "with=", __with, "thrTotal=", earlyStopMinTotal, "thrWith=", earlyStopMinWith);
+          break;
+        }
+
 // OPTC_PROGRESS_SEND_V1_LOOP
 try{
   const summary = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(snap) || snap) : snap;
@@ -554,7 +579,7 @@ try{
         errors.push(msg);
         console.log("[WARN] snapshot falhou", jobId, msg.slice(0,200));
       }
-      if(i < cycles-1) await sleep(intervalMs);
+      if(i < cycles-1) await sleep((Array.isArray(snap.parameters)&&snap.parameters.length===0)?ZERO_PARAMS_SLEEP_MS:intervalMs);
     }
   }
 

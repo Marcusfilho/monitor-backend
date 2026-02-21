@@ -6,6 +6,8 @@ let __createJob = null;
 try { __createJob = require("../jobs/jobStore").createJob; } catch (_) {}
 
 const catalogs = require("./catalogs");
+const CAN_SNAPSHOT_DEFAULT_CYCLES = Number(process.env.CAN_SNAPSHOT_CYCLES || "3");
+const CAN_SNAPSHOT_DEFAULT_INTERVAL_MS = Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "8000");
 const store = require("./installationsStore");
 
 // IMPORTANTE: você JÁ tem /api/jobs (enqueue). Vamos chamar a mesma função que essa rota usa.
@@ -155,7 +157,7 @@ async function onJobCompleted(job, result) {
     const vid = (store.getInstallation(installationId).resolved || {}).vehicle_id;
     const canJob = await enqueueJob({
       type: "monitor_can_snapshot",
-      payload: { installation_id: installationId, vehicleId: vid, cycles: 8, interval_ms: 12000 }
+      payload: { installation_id: installationId, vehicleId: vid, cycles: CAN_SNAPSHOT_DEFAULT_CYCLES, interval_ms: CAN_SNAPSHOT_DEFAULT_INTERVAL_MS }
     });
 
     store.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id || canJob.job_id || null, status: "queued" });
@@ -214,9 +216,26 @@ async function requestCanSnapshot(installationId) {
 
   if (!vid) throw Object.assign(new Error("no_vehicle_id"), { code: "no_vehicle_id" });
 
+  const _n = (v) => Number(v);
+  const _clamp = (n, min, max, defv) => (Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : defv);
+
+  const reqCycles = _n(payload.cycles ?? payload.CYCLES);
+  const reqInterval = _n(payload.interval_ms ?? payload.intervalMs);
+  const reqEarlyTotal = _n(payload.early_stop_min_total ?? payload.earlyStopMinTotal);
+  const reqEarlyWith = _n(payload.early_stop_min_with ?? payload.earlyStopMinWith);
+
+  const cycles = _clamp(reqCycles, 1, 30, CAN_SNAPSHOT_DEFAULT_CYCLES);
+  const interval_ms = _clamp(reqInterval, 2000, 60000, CAN_SNAPSHOT_DEFAULT_INTERVAL_MS);
+
+  const canPayload = Object.assign(
+    { installation_id: installationId, vehicleId: vid, cycles, interval_ms },
+    Number.isFinite(reqEarlyTotal) ? { early_stop_min_total: Math.max(0, Math.trunc(reqEarlyTotal)) } : {},
+    Number.isFinite(reqEarlyWith) ? { early_stop_min_with: Math.max(0, Math.trunc(reqEarlyWith)) } : {}
+  );
+
   const canJob = await enqueueJob({
     type: "monitor_can_snapshot",
-    payload: { installation_id: installationId, vehicleId: vid, cycles: 8, interval_ms: 12000 }
+    payload: canPayload
   });
 
   store.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id || canJob.job_id || null, status: "queued" });
