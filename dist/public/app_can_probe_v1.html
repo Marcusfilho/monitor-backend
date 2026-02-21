@@ -258,6 +258,11 @@
     pushOne(can?.can_snapshot_latest, "can.can_snapshot_latest");
     pushOne(can?.can_snapshot, "can.can_snapshot");
 
+    // Resumo persistido (algumas versões salvam tudo em can.summary)
+    pushOne(can?.summary, "can.summary");
+    pushOne(inst?.summary, "inst.summary");
+    pushOne(inst?.can?.summary, "inst.can.summary");
+
     // Históricos (normalmente newest-first no backend)
     pushArr(can?.snapshots, "can.snapshots");
     pushArr(inst?.snapshots, "inst.snapshots");
@@ -265,10 +270,11 @@
     if (!pool.length) return null;
 
     const scoreSnap = (s) => {
-      const rows = Array.isArray(s?.parameters) ? s.parameters : [];
-      const ms = Array.isArray(s?.moduleState) ? s.moduleState : [];
-      const c = s?.counts || {};
-      const hdr = s?.header || {};
+      const sx = (s && s.summary && typeof s.summary === "object") ? s.summary : s;
+      const rows = Array.isArray(sx?.parameters) ? sx.parameters : (Array.isArray(sx?.params) ? sx.params : []);
+      const ms = Array.isArray(sx?.moduleState) ? sx.moduleState : (Array.isArray(sx?.module_state) ? sx.module_state : []);
+      const c = sx?.counts || s?.counts || {};
+      const hdr = sx?.header || s?.header || {};
 
       const pTot = Number(c.params_total ?? c.parameters_total ?? rows.length ?? 0) || 0;
       const pRaw = Number(c.params_with_value ?? c.parameters_with_value ?? 0) || 0;
@@ -747,13 +753,20 @@
   function displayValue(p){
     const v = firstNonEmpty([p?.value, p?.val, p?.param_value, p?.parameter_value]);
     if (v !== "—") return String(v);
-    const rv = firstNonEmpty([p?.raw_value, p?.rawValue, p?.raw, p?.parameter_raw_value]);
+    const rawObj = (p && typeof p.raw === "object") ? p.raw : null;
+    const rv = firstNonEmpty([
+      p?.raw_value, p?.rawValue,
+      rawObj?.value, rawObj?.raw_value, rawObj?.rawValue,
+      p?.raw,
+      p?.parameter_raw_value
+    ]);
     if (rv !== "—") return String(rv);
     return "";
   }
 
   function extractRowsFromSnapshot(snap){
-    const s = snap || {};
+    const s0 = snap || {};
+    const s = (s0 && s0.summary && typeof s0.summary === "object") ? s0.summary : s0;
     const pickArr = (cands) => {
       for (const x of cands){
         if (Array.isArray(x)) return x;
@@ -768,17 +781,40 @@
       s.parameters, s.params,
       s?.data?.parameters, s?.data?.params,
       s?.snapshot?.parameters, s?.snapshot?.params,
-      s?.payload?.parameters, s?.payload?.params
+      s?.payload?.parameters, s?.payload?.params,
+      s0?.summary?.parameters, s0?.summary?.params,
+      s0?.can?.summary?.parameters, s0?.can?.summary?.params
     ]);
 
     const ms = pickArr([
       s.moduleState, s.module_state, s.modules,
       s?.data?.moduleState, s?.data?.module_state, s?.data?.modules,
       s?.snapshot?.moduleState, s?.snapshot?.module_state, s?.snapshot?.modules,
-      s?.payload?.moduleState, s?.payload?.module_state, s?.payload?.modules
+      s?.payload?.moduleState, s?.payload?.module_state, s?.payload?.modules,
+      s0?.summary?.moduleState, s0?.summary?.module_state, s0?.summary?.modules,
+      s0?.can?.summary?.moduleState, s0?.can?.summary?.module_state, s0?.can?.summary?.modules
     ]);
 
     return { params, ms };
+  }
+
+  function rowModuleId(r){
+    if (!r || typeof r !== "object") return null;
+    const id = r.id ?? r.module_id ?? r.moduleId;
+    if (id != null && String(id).trim() !== "") return id;
+    const m = String(r.module ?? "").trim();
+    const sub = String(r.sub ?? "").trim();
+    return m && sub ? `${m}:${sub}` : (m || null);
+  }
+
+  function rowModuleName(r){
+    if (!r || typeof r !== "object") return "";
+    const n = firstNonEmpty([r.name, r.module_name, r.moduleName, r.message_name]);
+    if (n !== "—") return String(n);
+    const m = String(r.module ?? "").trim();
+    const sub = String(r.sub ?? "").trim();
+    if (m && sub) return `${m} (${sub})`;
+    return m || "";
   }
 
   function renderParamsTable(rows, filterText){
@@ -1002,7 +1038,7 @@ const hasSummary = !!(snap && snap.summary);
           return !!s && s !== "—" && s !== "CAN sem sinal";
         }));
 
-        if (statusReady || ((hasParams || hasModule || hasCounts || hasList || hasSummary) && headerReady)){
+        if (((statusReady && (hasParams || hasModule || hasCounts || hasList || hasSummary)) || ((hasParams || hasModule || hasCounts || hasList || hasSummary) && headerReady))){
           const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;
           const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;
           setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);
