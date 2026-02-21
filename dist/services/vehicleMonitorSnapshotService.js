@@ -170,6 +170,60 @@ async function collectVehicleMonitorSnapshot(opts) {
         }
         if (ds === "UNIT_MESSAGES") {
             unitMessagesEvents++;
+            const r = props?.data?.[0] ?? {};
+            try {
+                const dec = (v) => (v == null ? null : safeDecodeURIComponent(String(v)));
+                const numOrNull = (v) => {
+                    const n = Number(v);
+                    return Number.isFinite(n) ? n : null;
+                };
+                header.server_time = dec(r.server_time) ?? header.server_time ?? null;
+                header.communication = header.server_time ?? header.communication ?? null;
+                header.gps = dec(r.orig_time) ?? header.gps ?? null;
+                header.progress = dec(r.progress) ?? header.progress ?? null;
+                header.driver_code = dec(r.driver_code) ?? header.driver_code ?? null;
+
+                header.license_number = dec(r.license_nmbr ?? r.license_number) ?? header.license_number ?? header.license_nmbr ?? null;
+                header.license_nmbr = header.license_number ?? header.license_nmbr ?? null;
+
+                header.inner_id = dec(r.inner_id) ?? header.inner_id ?? null;
+                header.serial = header.inner_id ?? header.serial ?? null;
+
+                header.vcl_manufacturer = dec(r.vcl_manufacturer) ?? header.vcl_manufacturer ?? null;
+                header.manufacturer = header.vcl_manufacturer ?? header.manufacturer ?? null;
+
+                header.vcl_model = dec(r.vcl_model) ?? header.vcl_model ?? null;
+                header.model = header.vcl_model ?? header.model ?? null;
+
+                header.vcl_client_description = dec(r.vcl_client_description ?? r.vcl_client) ?? header.vcl_client_description ?? null;
+                header.client = header.vcl_client_description ?? header.client ?? null;
+
+                header.speed = numOrNull(r.speed);
+                if (header.speed == null) header.speed = numOrNull(r.speed_km);
+                header.fuel = numOrNull(r.fuel) ?? header.fuel ?? null;
+                header.mileage = numOrNull(r.mileage) ?? header.mileage ?? null;
+                header.engine_hours = numOrNull(r.engine_hours) ?? header.engine_hours ?? null;
+
+                header.imei = dec(r.imei) ?? header.imei ?? null;
+                header.sim_number = dec(r.sim_number) ?? header.sim_number ?? null;
+                header.number_of_schemes = numOrNull(r.number_of_schemes) ?? header.number_of_schemes ?? null;
+                header.number_of_parameters = numOrNull(r.number_of_parameters) ?? header.number_of_parameters ?? null;
+            } catch {}
+            return;
+        }
+        if (ds === "UNIT_CONFIG_STATUS") {
+            const r = props?.data?.[0] ?? {};
+            try {
+                const dec = (v) => (v == null ? null : safeDecodeURIComponent(String(v)));
+                header.configuration_status = dec(r.configuration_status ?? r.status) ?? header.configuration_status ?? null;
+                header.configuration_type = dec(r.configuration_type ?? r.type) ?? header.configuration_type ?? null;
+                header.configuration_progress = dec(r.progress) ?? header.configuration_progress ?? null;
+                header.configuration_error = dec(r.error ?? r.error_descr) ?? header.configuration_error ?? null;
+                header.configuration_retries = dec(r.retries) ?? header.configuration_retries ?? null;
+                if (header.progress == null && header.configuration_progress != null) {
+                    header.progress = header.configuration_progress;
+                }
+            } catch {}
             return;
         }
         if (ds === "unit_connection_status") {
@@ -193,17 +247,33 @@ async function collectVehicleMonitorSnapshot(opts) {
         filter: "",
         vehicle_id: String(opts.vehicleId),
     });
-    const moduleState = (ms?.data ?? []).map((r) => ({
-        id: String(r?.id ?? ""),
-        module: String(r?.module_descr ?? ""),
-        sub: String(r?.sub_module_descr ?? ""),
-        last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-        active: asBool01(r?.active),
-        was_ok: asBool01(r?.was_ok),
-        ok: asBool01(r?.ok),
-        error: asBool01(r?.error),
-        error_descr: r?.error_descr != null ? String(r.error_descr) : null,
-    }));
+    const moduleNameById = {
+        "8": "CAN0",
+        "9": "CAN1",
+        "15": "J1708",
+        "19": "KEYPAD_DALLAS_IBUTTON",
+        "20": "KEYPAD_RAMZOR",
+    };
+    const moduleState = (ms?.data ?? []).map((r) => {
+        const _id = String(r?.id ?? "");
+        const _module = String(r?.module_descr ?? "");
+        const _sub = String(r?.sub_module_descr ?? "");
+        const _name = moduleNameById[_id] || [_module, _sub].filter(Boolean).join("/") || null;
+        return {
+            id: _id,
+            module: _module,
+            sub: _sub,
+            name: _name,
+            module_name: _name,
+            sub_module_name: _sub || null,
+            last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+            active: asBool01(r?.active),
+            was_ok: asBool01(r?.was_ok),
+            ok: asBool01(r?.ok),
+            error: asBool01(r?.error),
+            error_descr: r?.error_descr != null ? String(r.error_descr) : null,
+        };
+    });
     await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => { });
     return {
         capturedAt: new Date().toISOString(),

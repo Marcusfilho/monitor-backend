@@ -232,217 +232,80 @@
   }
 
   function extractCanSnapshot(inst){
-    const candidates = [
-      lastOf(pick(inst, [["can","snapshots"],["can","snapShots"]])),
-      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
-      pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
-      pick(inst, [["can_snapshot"],["canSnapshot"]]),
-      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
-      lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
-      pick(inst, [["monitor","can_snapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
-      pick(inst, [["can"],["monitor_snapshot"]])
-    ].filter((v)=>{ if(!v) return false; if (Array.isArray(v) && !v.length) return false; return true; });
-    if (!candidates.length) return null;
-    const c0 = candidates[0];
-  const v0 = Array.isArray(c0) ? lastOf(c0) : c0;
-  return unwrapSnapshot(v0);
-  }
+    const can = inst?.can || {};
 
+    const pool = [];
+    const pushOne = (x, src) => {
+      if (!x || typeof x !== "object" || Array.isArray(x)) return;
+      pool.push({ snap:x, src });
+    };
+    const pushArr = (arr, src) => {
+      if (!Array.isArray(arr)) return;
+      arr.forEach((x, idx) => pushOne(x, `${src}[${idx}]`));
+    };
 
-  // === CAN Snapshot render (raw_value) ===
-  const canFilterEl = qs("canFilter");
-  const paramsBodyEl = qs("tblParamsBody");
-  const msBodyEl = qs("tblMsBody");
-  const pillParamsEl = qs("pillParams");
-  const pillParamsWithEl = qs("pillParamsWith");
-  const pillMsEl = qs("pillMs");
-  const probeScreenEl = qs("probeScreen");
+    // Prioridade: aliases latest do backend
+    pushOne(inst?.can_snapshot_latest, "inst.can_snapshot_latest");
+    pushOne(inst?.can_snapshot, "inst.can_snapshot");
+    pushOne(can?.can_snapshot_latest, "can.can_snapshot_latest");
+    pushOne(can?.can_snapshot, "can.can_snapshot");
 
-  let __LAST_CAN = { params: [], ms: [] };
+    // Históricos (normalmente newest-first no backend)
+    pushArr(can?.snapshots, "can.snapshots");
+    pushArr(inst?.snapshots, "inst.snapshots");
 
-  const PROBE_SNAPSHOT_REQ = {
-    cycles: 8,
-    interval_ms: 6000,
-    // força varrer mais ciclos (worker respeita isso após patch do Bloco C)
-    early_stop_min_total: 9999,
-    early_stop_min_with: 9999
-  };
-  const PROBE_POLL_OPTS = { tries: 360, sleepMs: 2000 };
+    if (!pool.length) return null;
 
+    const scoreSnap = (s) => {
+      const rows = Array.isArray(s?.parameters) ? s.parameters : [];
+      const ms = Array.isArray(s?.moduleState) ? s.moduleState : [];
+      const c = s?.counts || {};
+      const hdr = s?.header || {};
 
+      const pTot = Number(c.params_total ?? c.parameters_total ?? rows.length ?? 0) || 0;
+      const pRaw = Number(c.params_with_value ?? c.parameters_with_value ?? 0) || 0;
+      const msKey = Number(c.module_state_key ?? 0) || 0;
 
-  // Configurável: adicione/remova aliases conforme sua validação CAN evoluir
-  const PROBE_PARAM_ALIASES = {
-    ignition: ["ignition", "ignition_status", "sys_param_ignition"],
-    server_time: ["server_time"],
-    progress: ["progress"],
-    driver_code: ["driver_code", "driver id", "driver_id"],
-    license_number: ["license_nmbr", "license_number", "license"],
-    serial: ["inner_id", "serial"],
-    client: ["vcl_client_description", "client_description", "client"],
-    model: ["vcl_model", "model"]
-  };
+      const hasHdr = !!(hdr && (hdr.communication || hdr.server_time || hdr.license_nmbr || hdr.license_number || hdr.inner_id || hdr.serial || hdr.client || hdr.model || hdr.manufacturer || hdr.progress));
 
-  // IDs preferenciais (mais confiável que nome)
-  const PROBE_PARAM_IDS = {
-    fuel_total_used: ["00000031", "000000C5"],
-    fuel_level: ["00000032", "000000C3"],
-    fuel_rate: ["0000003C"],
-    oil_pressure: ["00000024", "0000010D"],
-    oil_temp: ["0000168E"],
-    coolant_temp: ["0000002F", "0000010E"],
-    fuel_temp: ["0000002E", "0000010F"],
-    odometer: ["00002714"],
-    windshield: ["0000AF8C", "0000D419", "0000D41A"]
-  };
-
-  function normKey(s){
-    return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
-  }
-  function toBool01(v){
-    if (v === true || v === false) return v;
-    const s = String(v == null ? "" : v).trim().toLowerCase();
-    if (["1","true","yes","y","ok","on","active"].includes(s)) return true;
-    if (["0","false","no","n","off","inactive"].includes(s)) return false;
-    return null;
-  }
-  function toIgnitionBool(v){
-    const b = toBool01(v);
-    if (b != null) return b;
-    const s = String(v == null ? "" : v).trim();
-    if (!s) return null;
-    if (/^[0-9]+$/.test(s)) return Number(s) !== 0;
-    if (/^[0-9a-fA-F]+$/.test(s)) {
-      const n16 = parseInt(s, 16);
-      if (Number.isFinite(n16)) return n16 !== 0;
-    }
-    return null;
-  }
-  function rowModuleName(r){
-    return String(r?.name ?? r?.module_name ?? r?.moduleName ?? "").trim();
-  }
-  function rowModuleId(r){
-    const v = r?.id ?? r?.module_id ?? r?.moduleId ?? null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  function firstNonEmpty(values){
-    for (const v of values){
-      if (v == null) continue;
-      const s = String(v).trim();
-      if (s) return s;
-    }
-    return "—";
-  }
-  function rawParamValue(p){
-    return firstNonEmpty([
-      p?.raw_value,
-      p?.rawValue,
-      p?.raw?.value,
-      p?.raw,
-      p?.value,
-      p?.val,
-      p?.formatted_value,
-      p?.formattedValue
-    ]);
-  }
-
-  function normIdVariants(v){
-    const out = new Set();
-    if (v == null) return out;
-    let s = String(v).trim().toUpperCase();
-    if (!s) return out;
-    s = s.replace(/^0X/, "");
-    out.add(s);
-
-    if (/^[0-9A-F]+$/.test(s)) {
-      // Interpretando como HEX (caso comum no Monitor)
-      const n16 = parseInt(s, 16);
-      if (Number.isFinite(n16)) out.add(n16.toString(16).toUpperCase().padStart(8, "0"));
-      // Se só dígitos, também tenta decimal (alguns payloads podem vir assim)
-      if (/^[0-9]+$/.test(s)) {
-        const n10 = parseInt(s, 10);
-        if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+      let t = 0;
+      const ts = String(s?.captured_at || s?.capturedAt || "").trim();
+      if (ts) {
+        const n = Date.parse(ts);
+        if (Number.isFinite(n)) t = n;
       }
-    } else if (/^[0-9]+$/.test(s)) {
-      const n10 = parseInt(s, 10);
-      if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+
+      return (hasHdr ? 100000 : 0) + (msKey * 5000) + (pRaw * 50) + pTot + (t / 1e12);
+    };
+
+    let best = pool[0];
+    let bestScore = scoreSnap(best.snap);
+    for (let i=1; i<pool.length; i++){
+      const cur = pool[i];
+      const sc = scoreSnap(cur.snap);
+      if (sc > bestScore){ best = cur; bestScore = sc; }
     }
-    return out;
-  }
 
-  function findParamByAliases(rows, aliases){
-    const list = Array.isArray(rows) ? rows : [];
-    const wants = (aliases || []).map(normKey).filter(Boolean);
-    if (!wants.length) return null;
-
-    let best = null;
-    let bestScore = -1;
-    for (const p of list){
-      const nk = normKey(p?.name ?? "");
-      if (!nk) continue;
-      for (const w of wants){
-        let score = -1;
-        if (nk === w) score = 100;
-        else if (nk.includes(w)) score = 70;
-        else if (w.includes(nk) && nk.length >= 6) score = 60;
-        if (score > bestScore){ bestScore = score; best = p; }
+    try {
+      if (debugEl) {
+        const dbg = {
+          picked: best.src,
+          score: bestScore,
+          candidates: pool.slice(0, 10).map((x)=>({
+            src: x.src,
+            captured_at: x.snap?.captured_at || x.snap?.capturedAt || null,
+            counts: x.snap?.counts || null,
+            keys: Object.keys(x.snap || {})
+          }))
+        };
+        const prev = debugEl.textContent || "";
+        debugEl.textContent = `${JSON.stringify(dbg, null, 2)}\n\n${prev}`;
       }
-    }
-    return best;
+    } catch(_e){}
+
+    return best.snap;
   }
 
-  function findParamByIds(rows, ids){
-    const list = Array.isArray(rows) ? rows : [];
-    const want = new Set();
-    (ids || []).forEach(id => {
-      for (const v of normIdVariants(id)) want.add(v);
-    });
-    if (!want.size) return null;
-
-    for (const p of list){
-      const pid = p?.id ?? p?.param_id ?? p?.parameter_id ?? p?.parameter?.id ?? p?.param?.id ?? p?.index;
-      const vars = normIdVariants(pid);
-      for (const v of vars){
-        if (want.has(v)) return p;
-      }
-    }
-    return null;
-  }
-
-  function getParamDisplay(rows, aliases){
-    const p = findParamByAliases(rows, aliases);
-    if (!p) return { ok:false, text:"—", row:null };
-    const txt = firstNonEmpty([displayValue(p), rawParamValue(p)]);
-    return { ok: txt !== "—", text: txt, row: p };
-  }
-
-  function getParamRawByIds(rows, ids, fallbackAliases){
-    const p = findParamByIds(rows, ids) || findParamByAliases(rows, fallbackAliases || []);
-    if (!p) return { ok:false, text:"—", row:null };
-    const txt = rawParamValue(p);
-    return { ok: txt !== "—", text: txt, row: p };
-  }
-
-  function findModule(msRows, ids, names){
-    const rows = Array.isArray(msRows) ? msRows : [];
-    const idsSet = new Set((ids||[]).map(Number).filter(Number.isFinite));
-    const nameKeys = (names||[]).map(normKey).filter(Boolean);
-    return rows.find(r => {
-      const id = rowModuleId(r);
-      const nk = normKey(rowModuleName(r));
-      if (id != null && idsSet.has(id)) return true;
-      if (nk && nameKeys.some(k => nk.includes(k))) return true;
-      return false;
-    }) || null;
-  }
-
-  function moduleChip(label, row){
-    const ok = row ? (toBool01(row.ok) ?? toBool01(row.active) ?? toBool01(row.was_ok)) : null;
-    const dot = ok === true ? "okDot" : ok === false ? "badDot" : "unkDot";
-    const text = row ? `${label}:${ok===true?"OK":ok===false?"FAIL":"?"}` : `${label}:—`;
-    return `<span class="pill"><span class="${dot}"></span>${esc(text)}</span>`;
-  }
 
   function commModules(msRows){
     const can0 = findModule(msRows, [8], ["can0"]);

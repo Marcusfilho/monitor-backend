@@ -456,6 +456,143 @@ async function openMonitorWs(sessionToken, timeoutMs){
   });
 }
 
+// === CAN_ACQ_ENRICH_V1 (override final) ===
+function __cs_summarizeSnapshot(snap){
+  if (!snap || typeof snap !== "object") return null;
+  const params = Array.isArray(snap.parameters) ? snap.parameters : [];
+  const ms = Array.isArray(snap.moduleState) ? snap.moduleState : [];
+  const idsKeep = new Set(["8","9","15","19","20"]);
+
+  const pickedMs = ms.filter(function(r){
+    const id = String((r && (r.id || r.module_id || r.moduleId)) || "").trim();
+    return idsKeep.has(id);
+  }).map(function(r){
+    return {
+      id: (r && (r.id || r.module_id || r.moduleId) != null) ? String(r.id || r.module_id || r.moduleId) : null,
+      name: (r && (r.name || r.module_name || r.moduleName)) ? String(r.name || r.module_name || r.moduleName) : null,
+      module_name: (r && (r.module_name || r.moduleName || r.name)) ? String(r.module_name || r.moduleName || r.name) : null,
+      module: (r && r.module) ? String(r.module) : null,
+      sub: (r && (r.sub || r.sub_module_name || r.subModuleName)) ? String(r.sub || r.sub_module_name || r.subModuleName) : null,
+      active: !!(r && r.active),
+      ok: !!(r && r.ok),
+      was_ok: !!(r && r.was_ok),
+      error: !!(r && r.error),
+      error_descr: (r && r.error_descr != null) ? String(r.error_descr) : null,
+      last_update_date: (r && (r.last_update_date || r.last_update || r.lastUpdate) != null) ? String(r.last_update_date || r.last_update || r.lastUpdate) : null,
+    };
+  });
+
+  var hdr = (snap.header && typeof snap.header === "object") ? snap.header : null;
+  var hdrLite = hdr ? {
+    vehicle_id: hdr.vehicle_id || null,
+    inner_id: hdr.inner_id || hdr.serial || null,
+    serial: hdr.serial || hdr.inner_id || null,
+    license_nmbr: hdr.license_nmbr || hdr.license_number || null,
+    license_number: hdr.license_number || hdr.license_nmbr || null,
+    driver_code: hdr.driver_code || null,
+    communication: hdr.communication || hdr.server_time || null,
+    server_time: hdr.server_time || hdr.communication || null,
+    gps: hdr.gps || null,
+    progress: hdr.progress || hdr.configuration_progress || null,
+    configuration_status: hdr.configuration_status || null,
+    configuration_type: hdr.configuration_type || null,
+    configuration_progress: hdr.configuration_progress || hdr.progress || null,
+    configuration_error: hdr.configuration_error || null,
+    configuration_retries: hdr.configuration_retries || null,
+    vcl_manufacturer: hdr.vcl_manufacturer || hdr.manufacturer || null,
+    manufacturer: hdr.manufacturer || hdr.vcl_manufacturer || null,
+    vcl_model: hdr.vcl_model || hdr.model || null,
+    model: hdr.model || hdr.vcl_model || null,
+    vcl_client_description: hdr.vcl_client_description || hdr.client || null,
+    client: hdr.client || hdr.vcl_client_description || null,
+    speed: hdr.speed != null ? hdr.speed : null,
+    fuel: hdr.fuel != null ? hdr.fuel : null,
+    mileage: hdr.mileage != null ? hdr.mileage : null,
+    engine_hours: hdr.engine_hours != null ? hdr.engine_hours : null,
+    unit_type: hdr.unit_type || null,
+    unit_version: hdr.unit_version || null,
+    imei: hdr.imei || null,
+    sim_number: hdr.sim_number || null,
+    number_of_schemes: hdr.number_of_schemes != null ? hdr.number_of_schemes : null,
+    number_of_parameters: hdr.number_of_parameters != null ? hdr.number_of_parameters : null,
+  } : null;
+
+  var pWithRaw = 0, pWithName = 0, pWithTime = 0;
+  for (var i=0;i<params.length;i++){
+    var p = params[i] || {};
+    var raw = p.raw_value != null ? String(p.raw_value).trim() : "";
+    var nm = p.name != null ? String(p.name).trim() : "";
+    var tm = (p.orig_time || p.last_update || p.last_update_date || p.lastUpdate || null);
+    if (raw) pWithRaw++;
+    if (nm) pWithName++;
+    if (tm != null && String(tm).trim()) pWithTime++;
+  }
+
+  return {
+    captured_at: snap.capturedAt || snap.captured_at || new Date().toISOString(),
+    vehicle_id: snap.vehicleId || (hdrLite && hdrLite.vehicle_id) || null,
+    header: hdrLite,
+    counts: {
+      params_total: params.length,
+      parameters_total: params.length,
+      params_with_value: pWithRaw,
+      parameters_with_value: pWithRaw,
+      params_with_name: pWithName,
+      parameters_with_name: pWithName,
+      params_with_time: pWithTime,
+      parameters_with_time: pWithTime,
+      module_state_total: ms.length,
+      module_state_key: pickedMs.length,
+      raw_events: (snap.rawCounts || snap.raw_counts || null) || null,
+    },
+    parameters: params.slice(0, 220).map(function(p){
+      return {
+        id: p && p.id != null ? String(p.id) : null,
+        name: p && p.name != null ? String(p.name) : null,
+        raw_value: p && p.raw_value != null ? String(p.raw_value) : null,
+        value: (p && p.value != null) ? String(p.value) : null,
+        source: p && p.source != null ? String(p.source) : null,
+        orig_time: p && p.orig_time != null ? String(p.orig_time) : null,
+        last_update: (p && (p.last_update || p.last_update_date || p.lastUpdate) != null)
+          ? String(p.last_update || p.last_update_date || p.lastUpdate)
+          : ((p && p.orig_time != null) ? String(p.orig_time) : null),
+        inner_id: p && p.inner_id != null ? String(p.inner_id) : null,
+      };
+    }),
+    moduleState: pickedMs,
+  };
+}
+
+function __cs_pickBestSummary(){
+  var snaps = Array.prototype.slice.call(arguments || []);
+  if (snaps.length === 1 && Array.isArray(snaps[0])) snaps = snaps[0];
+  var arr = Array.isArray(snaps) ? snaps.filter(Boolean) : [];
+  if (!arr.length) return null;
+
+  var best = null, bestScore = -1;
+  for (var i=0;i<arr.length;i++){
+    var cur = (__cs_summarizeSnapshot(arr[i]) || arr[i]);
+    if (!cur) continue;
+
+    var c = cur.counts || {};
+    var h = cur.header || {};
+    var hasHdr = !!(h && (h.communication || h.server_time || h.license_nmbr || h.license_number || h.inner_id || h.serial || h.client || h.model || h.manufacturer || h.progress));
+    var msKey = Number(c.module_state_key || 0) || 0;
+    var pTot = Number(c.params_total || c.parameters_total || 0) || 0;
+    var pRaw = Number(c.params_with_value || c.parameters_with_value || 0) || 0;
+    var pNm  = Number(c.params_with_name || c.parameters_with_name || 0) || 0;
+    var pTm  = Number(c.params_with_time || c.parameters_with_time || 0) || 0;
+
+    var score = (hasHdr ? 100000 : 0) + (msKey * 5000) + (pRaw * 50) + (pTm * 10) + (pNm * 2) + pTot;
+
+    if (score > bestScore || (score === bestScore && i > 0)) {
+      bestScore = score;
+      best = cur;
+    }
+  }
+  return best;
+}
+
 async function takeSnapshotOnce(sessionToken, vehicleId){
   const ws = await openMonitorWs(sessionToken, VM_WS_OPEN_TIMEOUT_MS);
   try{
@@ -549,6 +686,12 @@ for(let i=0;i<cycles;i++){
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
         snapshots.unshift(snap); // newest first
+        try {
+          const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");
+          fs.mkdirSync(__dumpDir, { recursive: true });
+          const __dumpFile = path.join(__dumpDir, "can_cycle_" + String(jobId) + "_c" + String(i+1) + ".json");
+          fs.writeFileSync(__dumpFile, JSON.stringify(snap, null, 2));
+        } catch(_e_dump) {}
         console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters)?snap.parameters.length:0);
         // early-stop: usa counts (inclui raw_value) via summarizeSnapshot
         let __sum = null;
@@ -558,8 +701,14 @@ for(let i=0;i<cycles;i++){
         const __with = Number((__c && __c.params_with_value) || 0);
         const hitWith = (earlyStopMinWith > 0) ? (__with >= earlyStopMinWith) : false;
         const hitTotal = (earlyStopMinTotal > 0) ? (__total >= earlyStopMinTotal) : false;
-        if (hitWith || hitTotal){
-          console.log("[INFO] early-stop", jobId, "total=", __total, "with=", __with, "thrTotal=", earlyStopMinTotal, "thrWith=", earlyStopMinWith);
+        const __hdr = (__sum && __sum.header) ? __sum.header : null;
+        const __hasHdr = !!(__hdr && (__hdr.communication || __hdr.server_time || __hdr.license_nmbr || __hdr.license_number || __hdr.inner_id || __hdr.serial || __hdr.client || __hdr.model || __hdr.manufacturer || __hdr.progress));
+        const __msKey = Number((__sum && __sum.counts && __sum.counts.module_state_key) || 0) || 0;
+
+        console.log("[DBG] cycle-summary", jobId, "cycle=", (i+1), "pTot=", __total, "pRaw=", __with, "msKey=", __msKey, "hasHdr=", (__hasHdr?1:0), "snaps=", snapshots.length);
+
+        if ((hitWith || hitTotal) && snapshots.length >= 2 && __hasHdr && __msKey >= 3){
+          console.log("[INFO] early-stop", jobId, "total=", __total, "with=", __with, "msKey=", __msKey, "hasHdr=", (__hasHdr?1:0), "thrTotal=", earlyStopMinTotal, "thrWith=", earlyStopMinWith);
           break;
         }
 
@@ -579,7 +728,7 @@ try{
         errors.push(msg);
         console.log("[WARN] snapshot falhou", jobId, msg.slice(0,200));
       }
-      if(i < cycles-1) await sleep((Array.isArray(snap.parameters)&&snap.parameters.length===0)?ZERO_PARAMS_SLEEP_MS:intervalMs);
+      if(i < cycles-1){ const __last = snapshots[0] || null; const __pLen = Array.isArray(__last?.parameters) ? __last.parameters.length : 0; await sleep((__pLen===0)?ZERO_PARAMS_SLEEP_MS:intervalMs); }
     }
   }
 
