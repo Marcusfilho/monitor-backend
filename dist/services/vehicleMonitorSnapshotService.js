@@ -95,194 +95,204 @@ class TraffilogWsMux {
 async function collectVehicleMonitorSnapshot(opts) {
     const windowMs = opts.windowMs ?? 8000;
     const waitAfterCmdMs = opts.waitAfterCmdMs ?? 1000;
-    const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
-    // Header
-    const vehicleInfo = await mux.sendAction("get_vehicle_info", {
-        tag: "loading_screen",
-        vehicle_id: String(opts.vehicleId),
-    });
-    const vi = (vehicleInfo?.data?.[0] ?? {});
-    const unitKey = safeDecodeURIComponent(String(vi.unit_key ?? ""));
-    const header = {
-        vehicle_id: Number(vi.vehicle_id ?? opts.vehicleId),
-        client_id: vi.client_id != null ? Number(vi.client_id) : null,
-        inner_id: vi.inner_id != null ? String(vi.inner_id) : null,
-        unit_key: unitKey || null,
-        license_nmbr: vi.license_nmbr != null ? String(vi.license_nmbr) : null,
-        unit_type: vi.unit_type != null ? String(vi.unit_type) : null,
-        unit_version: vi.unit_version != null ? String(vi.unit_version) : null,
-        configuration_key_db: vi.configuration_key_db != null ? String(vi.configuration_key_db) : null,
-        configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit) : null,
-        raw: vi,
-    };
-    // Redis (no seu log: is_connected = "2")
-    const redis = await mux.sendAction("get_vehicle_data_from_redis", {
-        vehicle_id: String(opts.vehicleId),
-    });
-    const isConnectedRaw = redis?.data?.[0]?.is_connected;
-    const isConnected = isConnectedRaw == null ? null : Number(isConnectedRaw);
-    // Subs (igual monitor)
-    await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" });
-    await mux.sendAction("vehicle_subscribe", { vehicle_id: String(opts.vehicleId), object_type: "UNIT_MESSAGES" });
-    await mux.sendAction("vehicle_subscribe", { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
-    await mux.sendAction("vehicle_subscribe", { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
-    // Param list (id -> name)
-    const opr = await mux.sendAction("get_unit_parameters_opr", {
-        filter: "",
-        vehicle_id: String(opts.vehicleId),
-    });
-    const idToName = new Map();
-    for (const row of (opr?.data ?? [])) {
-        const id = String(row?.id ?? "");
-        const name = safeDecodeURIComponent(String(row?.param_type_descr ?? ""));
-        if (id)
-            idToName.set(id, name);
-    }
-    // Metadata (monitor chama; aqui é opcional — mantemos pela simetria)
-    await mux.sendAction("get_unit_parameters_metadata", {
-        filter: "",
-        vehicle_id: String(opts.vehicleId),
-    }).catch(() => { });
-    if (!header.unit_key)
-        throw new Error("[vm] unit_key ausente no get_vehicle_info");
-    // Captura refresh UNIT_PARAMETERS por janela
+    const mux = new TraffilogWsMux(opts.ws, opts.sessionToken);
     const latest = new Map();
-    let unitParametersEvents = 0;
-    let unitMessagesEvents = 0;
-    let unitConnEvents = 0;
-    const off = mux.onRefresh((props) => {
-        const ds = String(props?.data_source ?? "");
-        if (ds === "UNIT_PARAMETERS") {
-            unitParametersEvents++;
-            const d0 = props?.data?.[0] ?? {};
-            const id = String(d0.id ?? "");
-            if (!id)
-                return;
-            latest.set(id, {
-                id,
-                name: idToName.get(id) ?? null,
-                raw_value: d0.param_value != null ? String(d0.param_value) : (d0.paramvalue != null ? String(d0.paramvalue) : null),
-                source: d0.paramsource != null ? String(d0.paramsource) : null,
-                orig_time: d0.orig_time != null ? String(d0.orig_time) : null,
-                inner_id: d0.inner_id != null ? String(d0.inner_id) : null,
-            });
-            return;
-        }
-        if (ds === "UNIT_MESSAGES") {
-            unitMessagesEvents++;
-            const r = props?.data?.[0] ?? {};
-            try {
-                const dec = (v) => (v == null ? null : safeDecodeURIComponent(String(v)));
-                const numOrNull = (v) => {
-                    const n = Number(v);
-                    return Number.isFinite(n) ? n : null;
-                };
-                header.server_time = dec(r.server_time) ?? header.server_time ?? null;
-                header.communication = header.server_time ?? header.communication ?? null;
-                header.gps = dec(r.orig_time) ?? header.gps ?? null;
-                header.progress = dec(r.progress) ?? header.progress ?? null;
-                header.driver_code = dec(r.driver_code) ?? header.driver_code ?? null;
+    const idToName = new Map();
+    const refreshCounts = { UNIT_PARAMETERS: 0, UNIT_CONFIG_STATUS: 0, UNIT_MESSAGES: 0, unit_connection_status: 0 };
+    const refreshEventsSample = [];
+    let configStatusLast = null;
 
-                header.license_number = dec(r.license_nmbr ?? r.license_number) ?? header.license_number ?? header.license_nmbr ?? null;
-                header.license_nmbr = header.license_number ?? header.license_nmbr ?? null;
-
-                header.inner_id = dec(r.inner_id) ?? header.inner_id ?? null;
-                header.serial = header.inner_id ?? header.serial ?? null;
-
-                header.vcl_manufacturer = dec(r.vcl_manufacturer) ?? header.vcl_manufacturer ?? null;
-                header.manufacturer = header.vcl_manufacturer ?? header.manufacturer ?? null;
-
-                header.vcl_model = dec(r.vcl_model) ?? header.vcl_model ?? null;
-                header.model = header.vcl_model ?? header.model ?? null;
-
-                header.vcl_client_description = dec(r.vcl_client_description ?? r.vcl_client) ?? header.vcl_client_description ?? null;
-                header.client = header.vcl_client_description ?? header.client ?? null;
-
-                header.speed = numOrNull(r.speed);
-                if (header.speed == null) header.speed = numOrNull(r.speed_km);
-                header.fuel = numOrNull(r.fuel) ?? header.fuel ?? null;
-                header.mileage = numOrNull(r.mileage) ?? header.mileage ?? null;
-                header.engine_hours = numOrNull(r.engine_hours) ?? header.engine_hours ?? null;
-
-                header.imei = dec(r.imei) ?? header.imei ?? null;
-                header.sim_number = dec(r.sim_number) ?? header.sim_number ?? null;
-                header.number_of_schemes = numOrNull(r.number_of_schemes) ?? header.number_of_schemes ?? null;
-                header.number_of_parameters = numOrNull(r.number_of_parameters) ?? header.number_of_parameters ?? null;
-            } catch {}
-            return;
-        }
-        if (ds === "UNIT_CONFIG_STATUS") {
-            const r = props?.data?.[0] ?? {};
-            try {
-                const dec = (v) => (v == null ? null : safeDecodeURIComponent(String(v)));
-                header.configuration_status = dec(r.configuration_status ?? r.status) ?? header.configuration_status ?? null;
-                header.configuration_type = dec(r.configuration_type ?? r.type) ?? header.configuration_type ?? null;
-                header.configuration_progress = dec(r.progress) ?? header.configuration_progress ?? null;
-                header.configuration_error = dec(r.error ?? r.error_descr) ?? header.configuration_error ?? null;
-                header.configuration_retries = dec(r.retries) ?? header.configuration_retries ?? null;
-                if (header.progress == null && header.configuration_progress != null) {
-                    header.progress = header.configuration_progress;
-                }
-            } catch {}
-            return;
-        }
-        if (ds === "unit_connection_status") {
-            unitConnEvents++;
-            return;
-        }
-    });
-    // Monitor dispara cmd_id=9 pra gerar a “rajada”
-    await mux.sendAction("send_quick_command", {
-        unit_key: header.unit_key,
-        local_action_id: "5",
-        cmd_id: "9",
-        ack_needed: "0",
-    });
-    await sleep(waitAfterCmdMs);
-    await sleep(windowMs);
-    off();
-    // Module State (regra robusta: NÃO confiar em id fixo, usar module/sub)
-    const ms = await mux.sendAction("get_monitor_module_state", {
-        tag: "loading_screen",
-        filter: "",
-        vehicle_id: String(opts.vehicleId),
-    });
-    const moduleNameById = {
-        "8": "CAN0",
-        "9": "CAN1",
-        "15": "J1708",
-        "19": "KEYPAD_DALLAS_IBUTTON",
-        "20": "KEYPAD_RAMZOR",
+    const toRows = (props) => {
+        if (!props) return [];
+        if (Array.isArray(props.data)) return props.data.filter((x) => x && typeof x === "object");
+        if (props.data && typeof props.data === "object") return [props.data];
+        if (Array.isArray(props.rows)) return props.rows.filter((x) => x && typeof x === "object");
+        if (props.row && typeof props.row === "object") return [props.row];
+        return [];
     };
-    const moduleState = (ms?.data ?? []).map((r) => {
-        const _id = String(r?.id ?? "");
-        const _module = String(r?.module_descr ?? "");
-        const _sub = String(r?.sub_module_descr ?? "");
-        const _name = moduleNameById[_id] || [_module, _sub].filter(Boolean).join("/") || null;
-        return {
-            id: _id,
-            module: _module,
-            sub: _sub,
-            name: _name,
-            module_name: _name,
-            sub_module_name: _sub || null,
-            last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-            active: asBool01(r?.active),
-            was_ok: asBool01(r?.was_ok),
-            ok: asBool01(r?.ok),
-            error: asBool01(r?.error),
-            error_descr: r?.error_descr != null ? String(r.error_descr) : null,
-        };
-    });
-    await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => { });
+
+    const onRefresh = (msg) => {
+        try {
+            const props = (msg?.response?.properties) || {};
+            const ds = String(props.data_source || props.data_set || "").trim();
+            if (ds) refreshCounts[ds] = (refreshCounts[ds] || 0) + 1;
+
+            const rows = toRows(props);
+
+            if (refreshEventsSample.length < 20) {
+                const r0 = rows[0];
+                refreshEventsSample.push({
+                    ts: new Date().toISOString(),
+                    ds: ds || null,
+                    row_count: rows.length,
+                    row_keys: r0 && typeof r0 === "object" ? Object.keys(r0).slice(0, 15) : [],
+                    props_keys: Object.keys(props).slice(0, 15),
+                });
+            }
+
+            if (ds === "UNIT_PARAMETERS") {
+                for (const row of rows) {
+                    const id = row?.id;
+                    if (id == null) continue;
+                    const key = String(id);
+                    const prev = latest.get(key) || {};
+                    const merged = { ...prev, ...row };
+                    const meta = idToName.get(key);
+                    if (meta) {
+                        if (!merged.name) merged.name = meta.name || null;
+                        if (!merged.param_type) merged.param_type = meta.param_type || null;
+                    }
+                    latest.set(key, merged);
+                }
+            } else if (ds === "UNIT_CONFIG_STATUS") {
+                configStatusLast = rows[0] || { ...(configStatusLast || {}), ...props };
+            }
+        } catch (_e) {}
+    };
+
+    mux.onRefresh(onRefresh);
+
+    let header = { vehicle_id: opts.vehicleId };
+    let redisRow = null;
+    let isConnected = null;
+
+    try {
+        const paramsMeta = await mux.requestRows({
+            action_name: "get_monitor_params",
+            req: { action_name: "get_monitor_params", vehicle_id: opts.vehicleId },
+            timeoutMs: 5000,
+        });
+        for (const r of (paramsMeta || [])) {
+            if (r?.id == null) continue;
+            idToName.set(String(r.id), { name: r.name || null, param_type: r.param_type || null });
+        }
+    } catch (_e) {}
+
+    try {
+        const vinfo = await mux.requestRows({
+            action_name: "get_vehicle_info",
+            req: { action_name: "get_vehicle_info", vehicle_id: opts.vehicleId },
+            timeoutMs: 5000,
+        });
+        header = { ...header, ...(vinfo[0] || {}) };
+    } catch (_e) {}
+
+    try {
+        const vredis = await mux.requestRows({
+            action_name: "get_vehicle_data_from_redis",
+            req: { action_name: "get_vehicle_data_from_redis", vehicle_id: opts.vehicleId },
+            timeoutMs: 5000,
+        });
+        redisRow = (vredis[0] || null);
+        isConnected = (redisRow?.is_connected === 1 || redisRow?.is_connected === "1");
+    } catch (_e) {}
+
+    try {
+        await mux.sendAction({
+            action_name: "send_quick_command",
+            req: {
+                action_name: "send_quick_command",
+                command: opts.urlEncode ? encodeURIComponent(opts.commandHex) : opts.commandHex,
+                cmd_id: 9,
+                vehicle_id: opts.vehicleId,
+            },
+        });
+    } catch (_e) {}
+
+    await new Promise((r) => setTimeout(r, waitAfterCmdMs));
+
+    try {
+        await mux.sendAction({ action_name: "get_data_table_refresh", req: { action_name: "get_data_table_refresh", vehicle_id: opts.vehicleId, data_source: "UNIT_PARAMETERS" } });
+        await mux.sendAction({ action_name: "get_data_table_refresh", req: { action_name: "get_data_table_refresh", vehicle_id: opts.vehicleId, data_source: "UNIT_CONFIG_STATUS" } });
+        await mux.sendAction({ action_name: "get_data_table_refresh", req: { action_name: "get_data_table_refresh", vehicle_id: opts.vehicleId, data_source: "UNIT_MESSAGES" } });
+        await mux.sendAction({ action_name: "get_data_table_refresh", req: { action_name: "get_data_table_refresh", vehicle_id: opts.vehicleId, data_source: "unit_connection_status" } });
+    } catch (_e) {}
+
+    await new Promise((r) => setTimeout(r, windowMs));
+
+    try { mux.offRefresh(onRefresh); } catch (_e) {}
+
+    let moduleState = [];
+    try {
+        const mrows = await mux.requestRows({
+            action_name: "get_monitor_module_state",
+            req: { action_name: "get_monitor_module_state", vehicle_id: opts.vehicleId },
+            timeoutMs: 5000,
+        });
+        moduleState = (mrows || []).map((r) => ({
+            id: Number(r.id),
+            module: r.module || null,
+            sub: r.sub || null,
+            active: asBool01(r.active),
+            ok: asBool01(r.ok),
+            error: asBool01(r.error),
+            error_descr: r.error_descr || null,
+            last_update_date: r.last_update_date || null,
+            raw: r,
+        }));
+    } catch (_e) {}
+
+    const pick = (...vals) => {
+        for (const v of vals) {
+            if (v === 0 || v === false) return v;
+            if (v == null) continue;
+            const t = String(v).trim();
+            if (t) return v;
+        }
+        return null;
+    };
+
+    const headerRaw = { ...header };
+    header = {
+        ...header,
+        raw: headerRaw,
+        redis_raw: redisRow || null,
+        config_status_raw: configStatusLast || null,
+
+        inner_id: pick(header.inner_id, header.innerId, header.serial, redisRow?.inner_id, redisRow?.innerId),
+        license_nmbr: pick(header.license_nmbr, header.license_number, header.license, redisRow?.license_nmbr, redisRow?.license_number, redisRow?.license),
+        license_number: pick(header.license_number, header.license_nmbr, header.license, redisRow?.license_number, redisRow?.license_nmbr, redisRow?.license),
+
+        server_time: pick(redisRow?.server_time, redisRow?.serverTime, header.server_time, header.serverTime),
+        communication: pick(header.communication, redisRow?.server_time, redisRow?.serverTime),
+
+        driver_code: pick(header.driver_code, header.driverCode, redisRow?.driver_code, redisRow?.driverCode),
+
+        client: pick(header.client, header.client_name, header.client_description, header.vcl_client_description),
+        model: pick(header.model, header.vcl_model),
+        manufacturer: pick(header.manufacturer, header.vcl_manufacturer),
+
+        progress: pick(header.progress, configStatusLast?.progress, configStatusLast?.configuration_progress),
+        configuration_status: pick(header.configuration_status, configStatusLast?.status, configStatusLast?.configuration_status),
+        configuration_type: pick(header.configuration_type, configStatusLast?.type, configStatusLast?.configuration_type),
+        configuration_progress: pick(header.configuration_progress, configStatusLast?.progress, configStatusLast?.configuration_progress),
+        configuration_error: pick(header.configuration_error, configStatusLast?.error, configStatusLast?.configuration_error),
+        configuration_retries: pick(header.configuration_retries, configStatusLast?.retries, configStatusLast?.configuration_retries),
+
+        gps: pick(header.gps, redisRow?.gps, redisRow?.gps_time),
+        fuel: pick(header.fuel, redisRow?.fuel, redisRow?.fuel_level),
+        speed: pick(header.speed, header.speed_kmh, redisRow?.speed, redisRow?.speed_kmh),
+        engine_hours: pick(header.engine_hours, redisRow?.engine_hours, redisRow?.engineHours),
+        mileage: pick(header.mileage, header.mileage_km, redisRow?.mileage, redisRow?.mileage_km),
+    };
+
     return {
         capturedAt: new Date().toISOString(),
         vehicleId: opts.vehicleId,
         isConnected,
         header,
-        parameters: Array.from(latest.values()),
+        parameters: Array.from(latest.values()).sort((a, b) => Number(a.id || 0) - Number(b.id || 0)),
         moduleState,
-        rawCounts: { unitParametersEvents, unitMessagesEvents, unitConnEvents },
+        rawCounts: {
+            ...refreshCounts,
+            refresh_total: Object.values(refreshCounts).reduce((n, v) => n + Number(v || 0), 0),
+            params_total: latest.size,
+            modules_total: moduleState.length,
+        },
+        debug: {
+            refresh_events_sample: refreshEventsSample,
+            config_status_last: configStatusLast || null,
+        },
     };
 }
 function summarizeCanFromModuleState(moduleState) {

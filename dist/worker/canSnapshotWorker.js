@@ -24,6 +24,7 @@
  */
 
 const fs = require("fs");
+const path = require("path");
 const __DBG_DIR = "/home/questar/monitor-backend/tmp";
 try { fs.mkdirSync(__DBG_DIR, { recursive: true }); } catch(_e) {}
 try { fs.writeFileSync(`${__DBG_DIR}/can_worker_boot.txt`, new Date().toISOString()); } catch(_e) {}
@@ -35,7 +36,7 @@ const BASE = (process.env.JOB_SERVER_BASE_URL || process.env.BASE_URL || process
 const KEY  = (process.env.WORKER_KEY || "").trim();
 
 // OPTC_PROGRESS_SEND_V1
-const CAN_SUMMARY_MAX_PARAMS = Number(process.env.CAN_SUMMARY_MAX_PARAMS || "80");
+const CAN_SUMMARY_MAX_PARAMS = Number(process.env.CAN_SUMMARY_MAX_PARAMS || "220");
 const CAN_SUMMARY_MAX_MS = Number(process.env.CAN_SUMMARY_MAX_MS || "80");
 
 const MONITOR_WS_ORIGIN = String(process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com");
@@ -75,12 +76,12 @@ function __cs_summarizeSnapshot(snap){
            : Array.isArray(snap.module_state) ? snap.module_state
            : [];
 
+  const header = (snap.header && typeof snap.header === "object") ? { ...snap.header } : null;
   const paramsWithValue = params.filter(p => __cs_displayValue(p).trim() !== "").length;
 
-  // mantém só campos pequenos por param (sem blob)
   const pickedParams = params
     .filter(p => __cs_displayValue(p).trim() !== "")
-    .slice(0, CAN_SUMMARY_MAX_MS)
+    .slice(0, CAN_SUMMARY_MAX_PARAMS)
     .map(p => ({
       id: p.id ?? p.param_id ?? p.paramId ?? null,
       name: p.name ?? null,
@@ -92,27 +93,41 @@ function __cs_summarizeSnapshot(snap){
       duplicate_unit: p.duplicate_unit ?? p.duplicateUnit ?? null,
     }));
 
-  // moduleState é pequeno; mantém inteiro (38 itens costuma ser ok)
   const pickedMs = ms.slice(0, 80).map(r => ({
     id: r.id ?? r.module_id ?? r.moduleId ?? null,
+    module: r.module ?? null,
+    sub: r.sub ?? null,
     name: r.name ?? r.module_name ?? r.moduleName ?? null,
     active: r.active ?? null,
     ok: r.ok ?? r.is_ok ?? r.isOk ?? null,
     was_ok: r.was_ok ?? r.wasOk ?? null,
-    message: r.message ?? r.msg ?? null,
+    error: r.error ?? null,
+    message: r.message ?? r.msg ?? r.error_descr ?? null,
   }));
 
-  return {
-    captured_at: new Date().toISOString(),
-    meta: { summary_v: 1 },
+  let moduleKey = 0;
+  try {
+    moduleKey = Number((summarizeCanFromModuleState(ms) || {}).keyCount || 0) || 0;
+  } catch(_e) {}
+
+  const out = {
+    captured_at: snap.captured_at || new Date().toISOString(),
+    meta: { summary_v: 2, ...(snap.meta && typeof snap.meta === "object" ? { windowMs: snap.meta.windowMs } : {}) },
     counts: {
       params_total: params.length,
       params_with_value: paramsWithValue,
       module_total: ms.length,
+      module_state_key: moduleKey,
     },
     parameters: pickedParams,
     moduleState: pickedMs,
   };
+
+  if (header) out.header = header;
+  if (snap.rawCounts && typeof snap.rawCounts === "object") out.rawCounts = snap.rawCounts;
+  if (snap.debug && typeof snap.debug === "object") out.debug = snap.debug;
+
+  return out;
 }
 
 function __cs_pickBestSummary(curr, cand){
@@ -683,6 +698,8 @@ async function pollOnce(){
       let __bestWith = 0;
       
 for(let i=0;i<cycles;i++){
+      let __cycleWith = 0;
+      let __cycleWindowMs = 0;
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
         snapshots.unshift(snap); // newest first
@@ -693,12 +710,15 @@ for(let i=0;i<cycles;i++){
           fs.writeFileSync(__dumpFile, JSON.stringify(snap, null, 2));
         } catch(_e_dump) {}
         console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters)?snap.parameters.length:0);
+        try { console.log("[INFO] cycle-summary", jobId, "c=", (i+1), (__sum && __sum.counts) || null, (__sum && __sum.rawCounts) ? __sum.rawCounts : null); } catch(_e) {}
         // early-stop: usa counts (inclui raw_value) via summarizeSnapshot
         let __sum = null;
         try{ __sum = __cs_summarizeSnapshot(snap) || null; }catch(_e){}
         const __c = (__sum && __sum.counts) ? __sum.counts : null;
         const __total = Number((__c && __c.params_total) || (Array.isArray(snap.parameters)?snap.parameters.length:0) || 0);
         const __with = Number((__c && __c.params_with_value) || 0);
+        __cycleWith = __with;
+        __cycleWindowMs = Number((snap && snap.meta && snap.meta.windowMs) || 0) || 0;
         const hitWith = (earlyStopMinWith > 0) ? (__with >= earlyStopMinWith) : false;
         const hitTotal = (earlyStopMinTotal > 0) ? (__total >= earlyStopMinTotal) : false;
         const __hdr = (__sum && __sum.header) ? __sum.header : null;
