@@ -218,7 +218,7 @@ function _handleCanSnapshotComplete(job, result, jobId) {
             });
             installationsStore.patchInstallation(installationId, { can: __canPatched,
                 can_snapshot_latest: (__snap || null),
-                can_snapshot: (__snap || null), status: "CAN_SNAPSHOT_READY" });
+                can_snapshot: (__snap || null), status: (__snap ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
         }
         catch { }
         try {

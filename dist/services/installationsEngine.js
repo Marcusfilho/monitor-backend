@@ -198,7 +198,7 @@ async function onJobCompleted(job, result) {
         snapshots: mergedSnaps,
         status: (result && result.ok === false) ? "error" : "ready"
       },
-      status: (result && result.ok === false) ? "CAN_SNAPSHOT_ERROR" : "CAN_SNAPSHOT_READY"
+      status: ((job && job.ok === false) || (result && result.ok === false) || !bestSnap) ? "CAN_SNAPSHOT_ERROR" : "CAN_SNAPSHOT_READY"
     };
 
     if (bestSnap) {
