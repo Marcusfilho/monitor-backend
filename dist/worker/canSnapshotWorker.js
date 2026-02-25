@@ -51,7 +51,7 @@ const WS_PASSWORD   = (process.env.WS_PASSWORD   || process.env.MONITOR_PASSWORD
 const VM_WINDOW_MS = Number(process.env.VM_WINDOW_MS || "8000");
 const VM_WAIT_AFTER_CMD_MS = Number(process.env.VM_WAIT_AFTER_CMD_MS || "1000");
 const VM_WS_OPEN_TIMEOUT_MS = Number(process.env.VM_WS_OPEN_TIMEOUT_MS || "15000");
-const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "8");
+const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "180");
 const DEFAULT_CYCLES = Number(process.env.VM_DEFAULT_CYCLES || "3");
 const DEFAULT_INTERVAL_MS = Number(process.env.VM_DEFAULT_INTERVAL_MS || "12000");
 const EARLY_STOP_MIN_TOTAL = Number(process.env.VM_EARLY_STOP_MIN_TOTAL || "6");
@@ -702,8 +702,7 @@ for(let i=0;i<cycles;i++){
       let __cycleWindowMs = 0;
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
-      __lastSnap = snap;
-        snapshots.unshift(snap); // newest first
+              snapshots.unshift(snap); // newest first
         try {
           const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");
           fs.mkdirSync(__dumpDir, { recursive: true });

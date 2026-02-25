@@ -25,7 +25,7 @@ async function migrateIfNeeded() {
         const files = fs_1.default.readdirSync(dir)
             .filter(f => /^\d+_.*\.sql$/i.test(f))
             .sort();
-        const applied = new Set((await client.query("select id from schema_migrations")).rows.map(r => r.id));
+        const applied = new Set((await client.query("select id from schema_migrations")).rows.map((r) => r.id));
         for (const f of files) {
             if (applied.has(f))
                 continue;

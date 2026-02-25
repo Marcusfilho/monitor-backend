@@ -4,41 +4,45 @@ import { createJob, getNextJob, completeJob, getJob, listJobs } from "../jobs/jo
 import { getSessionToken } from "../services/sessionTokenStore";
 
 
-function pickCanSnapshotFromCompleteBody(body: any){
-  const root = body || {};
-  const looks = (o: any) => {
-    if (!o || typeof o !== "object") return false;
-    if (Array.isArray(o.parameters)) return true;
-    if (Array.isArray(o.moduleState)) return true;
-    if (o.counts && typeof o.counts === "object") return true;
-    return false;
-  };
-  const first = (v: any) => Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v;
+function pickCanSnapshotFromCompleteBody(root: any){
+  const first = (v: any) => Array.isArray(v) && v.length ? v[0] : null;
 
-  const cand = [
-    root.snapshot,
-    root.best,
-    root.bestSnapshot,
-    root.best_snapshot,
-    root.can_snapshot_latest,
-    root.canSnapshotLatest,
-    root.snapshot_best,
-    root.can_snapshot_best,
-    first(root.snapshots),
-    first(root.can_snapshot),
-    first(root.canSnapshot),
-    (root.can && first(root.can.snapshots)),
-    (root.result && (root.result.snapshot || root.result.can_snapshot_latest || root.result.canSnapshotLatest ||
-      root.result.best || root.result.bestSnapshot || root.result.best_snapshot || first(root.result.snapshots) ||
-      first(root.result.can_snapshot) || first(root.result.canSnapshot) || (root.result.can && first(root.result.can.snapshots)))),
-    root,
-  ];
+  const candidates = [
+    // root
+    first(root?.snapshots),
+    first(root?.can_snapshots),
+    first(root?.canSnapshots),
+    root?.snapshot,
+    root?.bestSnapshot,
+    root?.best_snapshot,
 
-  for (const c of cand){
-    const v = first(c);
-    if (looks(v)) return v;
-  }
-  return null;
+    // root.meta (IMPORTANT)
+    root?.meta?.snapshot,
+    root?.meta?.bestSnapshot,
+    root?.meta?.best_snapshot,
+    first(root?.meta?.snapshots),
+    first(root?.meta?.can_snapshots),
+    first(root?.meta?.canSnapshots),
+
+    // nested root.result
+    root?.result?.snapshot,
+    first(root?.result?.snapshots),
+    first(root?.result?.can_snapshots),
+    first(root?.result?.canSnapshots),
+    root?.result?.bestSnapshot,
+    root?.result?.best_snapshot,
+
+    // nested root.result.meta
+    root?.result?.meta?.snapshot,
+    root?.result?.meta?.bestSnapshot,
+    root?.result?.meta?.best_snapshot,
+    first(root?.result?.meta?.snapshots),
+    first(root?.result?.meta?.can_snapshots),
+    first(root?.result?.meta?.canSnapshots),
+  ].filter(Boolean);
+
+  const snap = candidates.length ? candidates[0] : null;
+  return (snap && typeof snap === "object") ? snap : null;
 }
 
 // OPTC_UNWRAP_SNAPSHOT_V1: normaliza formatos diferentes de snapshot (progress/complete)

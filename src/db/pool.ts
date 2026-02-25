@@ -1,22 +1,37 @@
 import { Pool } from "pg";
 
-function wantSSL(): boolean {
-  const v = (process.env.PGSSL || process.env.DATABASE_SSL || "").toLowerCase().trim();
-  return v === "1" || v === "true" || v === "yes";
+let _pool: Pool | null = null;
+
+function needsSsl(host: string) {
+  return host.endsWith(".render.com") || host.includes("-postgres.render.com");
 }
 
-export function getDbPool(): Pool {
+/**
+ * Single source of truth for DB connection.
+ * IMPORTANT: Prefer DATABASE_URL connectionString so PGHOST/PG* injected by platforms won't override host.
+ * Logs are SAFE: only host + ssl flag.
+ */
+export function getPool(): Pool {
+  if (_pool) return _pool;
+
   const cs = (process.env.DATABASE_URL || "").trim();
   if (!cs) throw new Error("DATABASE_URL is not set");
 
-  // SSL: por padrão OFF; se precisar, setar PGSSL=1 no Render.
-  const ssl = wantSSL() ? { rejectUnauthorized: false } : undefined;
+  let ssl: any = undefined;
+  try {
+    const host = new URL(cs).hostname;
+    if (needsSsl(host)) ssl = { rejectUnauthorized: false };
+    console.log(`[db] using DATABASE_URL host=${host} ssl=${!!ssl}`);
+  } catch {
+    console.log("[db] using DATABASE_URL (host parse failed) ssl=unknown");
+  }
 
-  return new Pool({
-    connectionString: cs,
-    ssl,
-    max: Number(process.env.PGPOOL_MAX || 5),
-    idleTimeoutMillis: Number(process.env.PGPOOL_IDLE_MS || 30_000),
-    connectionTimeoutMillis: Number(process.env.PGPOOL_CONN_TIMEOUT_MS || 10_000),
-  });
+  _pool = new Pool({ connectionString: cs, ssl });
+  return _pool;
 }
+
+// compat: some modules may import { pool }
+export const pool = getPool();
+
+// Backward-compatible alias (older code imports getDbPool)
+export const getDbPool = getPool;

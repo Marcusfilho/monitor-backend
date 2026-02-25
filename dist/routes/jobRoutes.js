@@ -4,75 +4,123 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
-function pickCanSnapshotFromCompleteBody(body){
-  const root = body || {};
-  const looks = (o) => {
-    if (!o || typeof o !== "object") return false;
-    if (Array.isArray(o.parameters)) return true;
-    if (Array.isArray(o.moduleState)) return true;
-    if (o.counts && typeof o.counts === "object") return true;
-    return false;
-  };
-  const first = (v) => Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v;
-
-  const cand = [
-    root.snapshot,
-    root.best,
-    root.bestSnapshot,
-    root.best_snapshot,
-    root.can_snapshot_latest,
-    root.canSnapshotLatest,
-    root.snapshot_best,
-    root.can_snapshot_best,
-    first(root.snapshots),
-    first(root.can_snapshot),
-    first(root.canSnapshot),
-    (root.can && first(root.can.snapshots)),
-    (root.result && (root.result.snapshot || root.result.can_snapshot_latest || root.result.canSnapshotLatest ||
-      root.result.best || root.result.bestSnapshot || root.result.best_snapshot || first(root.result.snapshots) ||
-      first(root.result.can_snapshot) || first(root.result.canSnapshot) || (root.result.can && first(root.result.can.snapshots)))),
-    root,
-  ];
-
-  for (const c of cand){
-    const v = first(c);
-    if (looks(v)) return v;
-  }
-  return null;
+function pickCanSnapshotFromCompleteBody(root) {
+    const first = (v) => Array.isArray(v) && v.length ? v[0] : null;
+    const candidates = [
+        // root
+        first(root?.snapshots),
+        first(root?.can_snapshots),
+        first(root?.canSnapshots),
+        root?.snapshot,
+        root?.bestSnapshot,
+        root?.best_snapshot,
+        // root.meta (IMPORTANT)
+        root?.meta?.snapshot,
+        root?.meta?.bestSnapshot,
+        root?.meta?.best_snapshot,
+        first(root?.meta?.snapshots),
+        first(root?.meta?.can_snapshots),
+        first(root?.meta?.canSnapshots),
+        // nested root.result
+        root?.result?.snapshot,
+        first(root?.result?.snapshots),
+        first(root?.result?.can_snapshots),
+        first(root?.result?.canSnapshots),
+        root?.result?.bestSnapshot,
+        root?.result?.best_snapshot,
+        // nested root.result.meta
+        root?.result?.meta?.snapshot,
+        root?.result?.meta?.bestSnapshot,
+        root?.result?.meta?.best_snapshot,
+        first(root?.result?.meta?.snapshots),
+        first(root?.result?.meta?.can_snapshots),
+        first(root?.result?.meta?.canSnapshots),
+    ].filter(Boolean);
+    const snap = candidates.length ? candidates[0] : null;
+    return (snap && typeof snap === "object") ? snap : null;
 }
-
 // OPTC_UNWRAP_SNAPSHOT_V1: normaliza formatos diferentes de snapshot (progress/complete)
-function unwrapSnapshot(x){
-  if(!x) return null;
-  const lastOf = (v) => Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v;
-  let cur = lastOf(x);
-  for(let i=0;i<5;i++){
-    if(!cur || typeof cur !== "object") break;
-    if(Array.isArray(cur)) { cur = lastOf(cur); continue; }
-    if(cur.snapshot) { cur = cur.snapshot; continue; }
-    if(cur.data) { cur = cur.data; continue; }
-    if(cur.payload) { cur = cur.payload; continue; }
-    if(cur.result) { cur = cur.result; continue; }
-    break;
-  }
-  const looks = (v) => !!(v && typeof v === "object" && (v.counts || Array.isArray(v.parameters) || Array.isArray(v.moduleState)));
-  let snap = looks(cur) ? cur : null;
-  if(!snap) snap = pickCanSnapshotFromCompleteBody(cur) || pickCanSnapshotFromCompleteBody(x) || null;
-  if(snap && typeof snap === "object"){
-    if(!snap.captured_at && !snap.capturedAt) snap.captured_at = new Date().toISOString();
-  }
-  return snap;
+function unwrapSnapshot(x) {
+    if (!x)
+        return null;
+    const lastOf = (v) => Array.isArray(v) ? (v.length ? v[v.length - 1] : null) : v;
+    let cur = lastOf(x);
+    for (let i = 0; i < 5; i++) {
+        if (!cur || typeof cur !== "object")
+            break;
+        if (Array.isArray(cur)) {
+            cur = lastOf(cur);
+            continue;
+        }
+        if (cur.snapshot) {
+            cur = cur.snapshot;
+            continue;
+        }
+        if (cur.data) {
+            cur = cur.data;
+            continue;
+        }
+        if (cur.payload) {
+            cur = cur.payload;
+            continue;
+        }
+        if (cur.result) {
+            cur = cur.result;
+            continue;
+        }
+        break;
+    }
+    const looks = (v) => !!(v && typeof v === "object" && (v.counts || Array.isArray(v.parameters) || Array.isArray(v.moduleState)));
+    let snap = looks(cur) ? cur : null;
+    if (!snap)
+        snap = pickCanSnapshotFromCompleteBody(cur) || pickCanSnapshotFromCompleteBody(x) || null;
+    if (snap && typeof snap === "object") {
+        if (!snap.captured_at && !snap.capturedAt)
+            snap.captured_at = new Date().toISOString();
+    }
+    return snap;
 }
-
 const router = (0, express_1.Router)();
 // === PIPELINE_AUTO_SB_V1 (encadear Monitor após HTML5 sem workaround) ===
 // Nota: services/* vivem em dist/ (JS). Em dev (ts-node), esse require pode falhar — por isso é best-effort.
-const installationsStore = (() => { try {
-    return require("../services/installationsStore");
-}
-catch {
+function __pickInstallStore(mod) {
+    try {
+        const cand = [mod, mod && mod.default, mod && mod.installationsStore, mod && mod.store, mod && mod.installations];
+        for (const c of cand) {
+            if (!c || typeof c !== "object")
+                continue;
+            const gi = c.getInstallation || c.get || null;
+            const pi = c.patchInstallation || c.updateInstallation || c.setInstallation || c.patch || null;
+            if (typeof gi === "function" && typeof pi === "function") {
+                if (!c.patchInstallation && c.updateInstallation) {
+                    try {
+                        c.patchInstallation = c.updateInstallation;
+                    }
+                    catch { }
+                }
+                return c;
+            }
+        }
+    }
+    catch { }
     return null;
-} })();
+}
+const installationsStore = (() => {
+    const paths = ["../services/installationsStore", "../services/installationsEngine"];
+    for (const p of paths) {
+        try {
+            const mod = require(p);
+            const store = __pickInstallStore(mod);
+            if (store) {
+                console.log("[jobs] installationsStore OK via", p);
+                return store;
+            }
+        }
+        catch { }
+    }
+    console.log("[jobs] installationsStore INDISPONÍVEL — persist CAN snapshot DESLIGADO");
+    return null;
+})();
 const catalogs = (() => { try {
     return require("../services/catalogs");
 }
@@ -127,51 +175,11 @@ function _alreadyHasSb(installationId) {
     }
 }
 function _handleCanSnapshotComplete(job, result, jobId) {
-  // OPTC_STORE_RESOLVE (dist)
-  var __pickStore = function(mod){
     try {
-      var cand = [mod, mod && mod.default, mod && mod.installationsStore, mod && mod.store, mod && mod.installations];
-      for (var i=0;i<cand.length;i++){
-        var c = cand[i];
-        if (!c || typeof c !== "object") continue;
-        var gi = c.getInstallation || c.get || null;
-        var pi = c.patchInstallation || c.updateInstallation || c.setInstallation || c.patch || null;
-        if (typeof gi === "function" && typeof pi === "function"){
-          if (!c.patchInstallation && c.updateInstallation) {
-            try { c.patchInstallation = c.updateInstallation; } catch(_e){}
-          }
-          return c;
-        }
-      }
-    } catch(_e){}
-    return null;
-  };
-
-  var __resolveStore = function(){
-    var paths = ["../services/installationsStore", "../services/installationsEngine"];
-    for (var i=0;i<paths.length;i++){
-      try {
-        var mod = require(paths[i]);
-        var st = __pickStore(mod);
-        if (st) {
-          console.log("[jobs] installationsStore OK via", paths[i]);
-          return st;
-        }
-      } catch(_e){}
-    }
-    console.log("[jobs] installationsStore INDISPONÍVEL — persist CAN snapshot DESLIGADO");
-    return null;
-  };
-
-  var installationsStore = __resolveStore();
-  if (!installationsStore || typeof installationsStore.getInstallation !== "function" || typeof installationsStore.patchInstallation !== "function") {
-    console.log("[jobs] CAN snapshot: sem store/get+patch, skip persist");
-    return;
-  }
-
-    try {
-        if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation)
+        if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation) {
+            console.log("[jobs] CAN snapshot: sem store/get+patch, skip persist");
             return;
+        }
         if (!job || String(job.type || "") !== "monitor_can_snapshot")
             return;
         const installationId = _getInstallationId(job);
@@ -209,8 +217,8 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                 last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
             });
             installationsStore.patchInstallation(installationId, { can: __canPatched,
-    can_snapshot_latest: (__snap || null),
-    can_snapshot: (__snap || null), status: "CAN_SNAPSHOT_READY" });
+                can_snapshot_latest: (__snap || null),
+                can_snapshot: (__snap || null), status: "CAN_SNAPSHOT_READY" });
         }
         catch { }
         try {
@@ -362,13 +370,15 @@ router.post("/:id/complete", (req, res) => {
         (req.body?.ok === true) ||
         (result?.ok === true);
     const finalStatus = okFlag ? "completed" : "error";
-
     // OPTC_COMPLETE_BODY_SNAPSHOT_FALLBACK_V1: se o worker mandar snapshot fora de result, copia para dentro
     try {
         const rootSnap = pickCanSnapshotFromCompleteBody(req.body);
         if (rootSnap && result && typeof result === "object") {
-            if (!result.snapshot) result.snapshot = rootSnap;
-            if (!Array.isArray(result.snapshots)) result.snapshots = [rootSnap];
+            const rAny = result;
+            if (!rAny.snapshot)
+                rAny.snapshot = rootSnap;
+            if (!Array.isArray(rAny.snapshots))
+                rAny.snapshots = [rootSnap];
         }
     }
     catch (_e) { }

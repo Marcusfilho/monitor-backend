@@ -26,7 +26,7 @@ export async function migrateIfNeeded(): Promise<void> {
       .sort();
 
     const applied = new Set<string>(
-      (await client.query<MigRow>("select id from schema_migrations")).rows.map(r => r.id)
+      (await client.query<MigRow>("select id from schema_migrations")).rows.map((r: MigRow) => r.id)
     );
 
     for (const f of files) {

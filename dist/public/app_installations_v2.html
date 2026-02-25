@@ -216,6 +216,7 @@
       pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
       pick(inst, [["can_snapshot"],["canSnapshot"]]),
       lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
+      lastOf(pick(inst, [["can","snapshots"],["can","can_snapshots"],["can","canSnapshots"]])),
       lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
       pick(inst, [["monitor","can_snapshot"],["monitor","canSnapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
       pick(inst, [["can"],["monitor_snapshot"],["monitorSnapshot"]])
