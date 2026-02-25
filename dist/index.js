@@ -109,10 +109,13 @@ app.use("/api/worker", workerRoutes_1.workerRoutes);
 app.use("/api/worker", workerSessionTokenRoutes_1.default);
 async function main() {
     await (0, sessionTokenStore_1.initSessionTokenStore)();
-    // Em dev, deixa subir sem DB (pra testar CORS e front).
-    // Em prod, mantém fail-fast.
+    // DB pode ser desligado na fase de testes (Render Postgres free expirado/suspenso)
     const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
-    if (!process.env.DATABASE_URL) {
+    const dbDisabled = ["1", "true", "yes", "on"].includes(String(process.env.DB_DISABLED || "").trim().toLowerCase());
+    if (dbDisabled) {
+        console.warn("[boot] DB_DISABLED=1; skipping DB/migrations (file-based installationsStore remains active)");
+    }
+    else if (!process.env.DATABASE_URL) {
         if (isProd)
             throw new Error("DATABASE_URL is not set");
         console.warn("[dev] DATABASE_URL is not set; skipping migrations");

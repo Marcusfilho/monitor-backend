@@ -5,7 +5,14 @@ import { getDbPool } from "./pool";
 type MigRow = { id: string };
 
 export async function migrateIfNeeded(): Promise<void> {
-  const pool = getDbPool();
+  
+  const dbDisabled = ["1","true","yes","on"].includes(String(process.env.DB_DISABLED || "").trim().toLowerCase());
+  if (dbDisabled) {
+    console.warn("[db] DB_DISABLED=1; skipping migrations");
+    return;
+  }
+
+const pool = getDbPool();
   const client = await pool.connect();
   try {
     await client.query(`

@@ -8,6 +8,11 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const pool_1 = require("./pool");
 async function migrateIfNeeded() {
+    const dbDisabled = ["1", "true", "yes", "on"].includes(String(process.env.DB_DISABLED || "").trim().toLowerCase());
+    if (dbDisabled) {
+        console.warn("[db] DB_DISABLED=1; skipping migrations");
+        return;
+    }
     const pool = (0, pool_1.getDbPool)();
     const client = await pool.connect();
     try {
