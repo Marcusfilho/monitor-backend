@@ -211,6 +211,8 @@ function _handleCanSnapshotComplete(job, result, jobId) {
         try {
             const __snap = pickCanSnapshotFromCompleteBody(result);
             const __summary = (__snap && __snap.counts) ? __snap.counts : null;
+            const __hasData = !!(__snap && ((__snap.counts && (((__snap.counts.params_total || 0) + (__snap.counts.module_total || 0) + (__snap.counts.paramsTotal || 0) + (__snap.counts.moduleTotal || 0)) > 0)) ||
+                ((Array.isArray(__snap.parameters) && __snap.parameters.length) || (Array.isArray(__snap.module_state) && __snap.module_state.length) || (Array.isArray(__snap.moduleState) && __snap.moduleState.length)))); /*__READYFIX_V2__*/
             const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {
                 snapshots: __snap ? [__snap] : ((can && can.snapshots) ? can.snapshots : []),
                 summary: __summary || ((can && can.summary) ? can.summary : null),
@@ -218,7 +220,7 @@ function _handleCanSnapshotComplete(job, result, jobId) {
             });
             installationsStore.patchInstallation(installationId, { can: __canPatched,
                 can_snapshot_latest: (__snap || null),
-                can_snapshot: (__snap || null), status: (__snap ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
+                can_snapshot: (__hasData ? __snap : null), status: (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
         }
         catch { }
         try {
@@ -360,16 +362,18 @@ router.post("/:id/complete", (req, res) => {
     if (!status)
         return res.status(400).json({ error: "Field 'status' is required" });
     const rawStatus = String(status || "").toLowerCase();
-    // worker pode mandar status=success; também aceitamos done/completed/complete.
-    // além disso, se result.ok === true, consideramos completed.
+    // worker pode mandar status=success/done.
+    // IMPORTANTE: para jobs CAN, status pode ser apenas um "envelope".
+    // Regra: completed/complete só é OK se NÃO houver ok=false explícito.
+    const isCompletedWord = (rawStatus === "completed" || rawStatus === "complete");
     const okFlag = rawStatus === "ok" ||
         rawStatus === "success" ||
         rawStatus === "done" ||
-        rawStatus === "completed" ||
-        rawStatus === "complete" ||
         (req.body?.ok === true) ||
-        (result?.ok === true);
+        (result?.ok === true) ||
+        (isCompletedWord && (req.body?.ok !== false) && (result?.ok !== false) && (String(result?.status || "").toLowerCase() !== "error"));
     const finalStatus = okFlag ? "completed" : "error";
+    /*__JOBS_COMPLETE_V3__*/
     // OPTC_COMPLETE_BODY_SNAPSHOT_FALLBACK_V1: se o worker mandar snapshot fora de result, copia para dentro
     try {
         const rootSnap = pickCanSnapshotFromCompleteBody(req.body);
@@ -385,10 +389,15 @@ router.post("/:id/complete", (req, res) => {
     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);
     if (!job)
         return res.status(404).json({ error: "Job not found" });
-    // dispara encadeamento para Monitor (SB) após HTML5
+    // CAN snapshot: sempre atualizar instalação (READY/ERROR), mesmo se job falhar
+    try {
+        if (job?.type === "monitor_can_snapshot")
+            _handleCanSnapshotComplete(job, result, id);
+    }
+    catch { }
+    // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
     if (finalStatus === "completed") {
         _enqueueSchemeBuilderAfterHtml5(job, result);
-        _handleCanSnapshotComplete(job, result, id);
     }
     return res.json({ job });
 });

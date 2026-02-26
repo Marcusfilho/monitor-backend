@@ -716,7 +716,7 @@ for(let i=0;i<cycles;i++){
       let __cycleWindowMs = 0;
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
-      __lastSnap = snap;
+      // __lastSnap removed (was causing ReferenceError) /*__FIX_LASTSNAP__*/
         snapshots.unshift(snap); // newest first
         try {
           const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");

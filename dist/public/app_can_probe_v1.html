@@ -486,7 +486,11 @@
 
   function renderProbeScreen(inst, snap, x){
     if (!probeScreenEl) return;
-    const rows = (x && x.params) || [];
+    const rows0 = (x && x.params) || [];
+    const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};
+    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));
+    const rows = rows0.concat(hdrRows);
+    /*__PROBE_HDRROWS_V1__*/
     const msRows = (x && x.ms) || [];
     const comm = commModules(msRows);
     const header = getHeaderLite(inst, snap, rows);
@@ -809,7 +813,29 @@ const hasSummary = !!(snap && snap.summary);
         const hasParams = !!(snap && Array.isArray(snap.parameters) && snap.parameters.length);
         const hasModule = !!(snap && Array.isArray(snap.moduleState) && snap.moduleState.length);
         const statusReady = String(inst.status || "") === "CAN_SNAPSHOT_READY";
-        if (statusReady || hasSummary || hasList || hasCounts || hasParams || hasModule){
+        const statusErr = String(inst.status || "") === "CAN_SNAPSHOT_ERROR";
+        if (statusErr) {
+          const lastJob = (Array.isArray(inst.jobs) && inst.jobs.length) ? inst.jobs[inst.jobs.length - 1] : null;
+          const meta = lastJob && lastJob.meta ? lastJob.meta : null;
+          const errs = (meta && Array.isArray(meta.errors) && meta.errors.length) ? meta.errors
+                    : (meta && meta.summary && Array.isArray(meta.summary.errors) && meta.summary.errors.length) ? meta.summary.errors
+                    : (inst.can && inst.can.summary && Array.isArray(inst.can.summary.errors) && inst.can.summary.errors.length) ? inst.can.summary.errors
+                    : null;
+          const msg = (meta && (meta.message || meta.error || meta.reason)) ? (meta.message || meta.error || meta.reason)
+                    : (errs && errs[0]) ? errs[0]
+                    : 'Snapshot falhou';
+          setStatus(`CAN falhou ❌ (${String(msg).slice(0,120)}) — use Request snapshot novamente`);
+          return r;
+        }
+        /*__PROBE_STOP_ON_ERROR__*/
+
+        
+        const readyByData = (hasCounts || hasModule || hasList);
+        if (statusReady && !readyByData) {
+          setStatus(`Snapshot vazio ⚠️ (READY mas sem dados). Clique "Request snapshot" novamente.`);
+        }
+        /*__PROBE_READY_BY_DATA__*/
+if ((statusReady && readyByData) || hasSummary || hasList || hasCounts || hasParams || hasModule){
           const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;
           const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;
           setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);

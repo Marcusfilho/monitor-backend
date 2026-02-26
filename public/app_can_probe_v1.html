@@ -486,7 +486,11 @@
 
   function renderProbeScreen(inst, snap, x){
     if (!probeScreenEl) return;
-    const rows = (x && x.params) || [];
+    const rows0 = (x && x.params) || [];
+    const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};
+    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));
+    const rows = rows0.concat(hdrRows);
+    /*__PROBE_HDRROWS_V1__*/
     const msRows = (x && x.ms) || [];
     const comm = commModules(msRows);
     const header = getHeaderLite(inst, snap, rows);
