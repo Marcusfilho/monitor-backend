@@ -51,7 +51,7 @@ const WS_PASSWORD   = (process.env.WS_PASSWORD   || process.env.MONITOR_PASSWORD
 const VM_WINDOW_MS = Number(process.env.VM_WINDOW_MS || "8000");
 const VM_WAIT_AFTER_CMD_MS = Number(process.env.VM_WAIT_AFTER_CMD_MS || "1000");
 const VM_WS_OPEN_TIMEOUT_MS = Number(process.env.VM_WS_OPEN_TIMEOUT_MS || "15000");
-const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "180");
+const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "8");
 const DEFAULT_CYCLES = Number(process.env.VM_DEFAULT_CYCLES || "3");
 const DEFAULT_INTERVAL_MS = Number(process.env.VM_DEFAULT_INTERVAL_MS || "12000");
 const EARLY_STOP_MIN_TOTAL = Number(process.env.VM_EARLY_STOP_MIN_TOTAL || "6");
@@ -309,12 +309,14 @@ function __cs_buildSmallResult(result){
 
   return {
     ok: (result && result.ok === false) ? false : true,
-    reason: (result && (result.reason || result.error)) || null,
+    reason: (result && (result.reason || result.error || result.message || result.status)) || null,
     installation_id: (result && (result.installation_id || result.installationId)) || null,
     vehicle_id: (result && (result.vehicle_id || result.vehicleId)) || null,
     snapshot: snap,
     snapshots: snap ? [snap] : [],
+    meta: (meta && typeof meta === "object") ? { summary: (meta.summary !== undefined ? meta.summary : null), errors: Array.isArray((meta.summary||{}).errors) ? (meta.summary||{}).errors : null } : null,
   };
+  /*__COMPLETE_META_V2__*/
 }
 
 
@@ -324,14 +326,26 @@ function __cs_completeBody(result){
   const snap = payloadResult.snapshot || ((payloadResult.snapshots && payloadResult.snapshots[0]) || null);
 
   const payload = {
-    status: "completed",
+    status: (payloadResult && payloadResult.ok === false) ? "error" : "ok",
     workerId: WORKER_ID,
     result: payloadResult,
 
     // aliases para o backend/probe (1 item apenas)
     can_snapshot_latest: snap,
     can_snapshot: snap ? [snap] : [],
-    meta: { kind: "can_snapshot_summary_v1", counts: (snap && snap.counts) ? snap.counts : null },
+    meta: {
+      kind: "can_snapshot_summary_v2",
+      ok: (payloadResult && payloadResult.ok === false) ? false : true,
+      counts: (snap && snap.counts) ? snap.counts : null,
+      summary: (payloadResult && payloadResult.meta && payloadResult.meta.summary !== undefined) ? payloadResult.meta.summary
+              : ((result && result.meta && result.meta.summary !== undefined) ? result.meta.summary : null),
+      errors: (payloadResult && payloadResult.meta && Array.isArray(payloadResult.meta.errors)) ? payloadResult.meta.errors
+             : ((result && result.meta && result.meta.summary && Array.isArray(result.meta.summary.errors)) ? result.meta.summary.errors : null),
+      message: (payloadResult && payloadResult.reason) ? String(payloadResult.reason)
+               : (result && (result.message || result.error || result.reason)) ? String(result.message || result.error || result.reason) : null
+    },
+    /*__COMPLETE_META_V2__*/
+
   };
 
   let body = JSON.stringify(payload);
@@ -702,7 +716,8 @@ for(let i=0;i<cycles;i++){
       let __cycleWindowMs = 0;
       try{
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
-              snapshots.unshift(snap); // newest first
+      __lastSnap = snap;
+        snapshots.unshift(snap); // newest first
         try {
           const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");
           fs.mkdirSync(__dumpDir, { recursive: true });

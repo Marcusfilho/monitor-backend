@@ -350,18 +350,20 @@ router.post("/:id/complete", (req: Request, res: Response) => {
 
   const rawStatus = String(status || "").toLowerCase();
 
-// worker pode mandar status=success; também aceitamos done/completed/complete.
-// além disso, se result.ok === true, consideramos completed.
-const okFlag =
-  rawStatus === "ok" ||
-  rawStatus === "success" ||
-  rawStatus === "done" ||
-  rawStatus === "completed" ||
-  rawStatus === "complete" ||
-  ((req.body as any)?.ok === true) ||
-  ((result as any)?.ok === true);
+// worker pode mandar status=success/done.
+ // IMPORTANTE: para jobs CAN, status pode ser apenas um "envelope".
+ // Regra: completed/complete só é OK se NÃO houver ok=false explícito.
+ const isCompletedWord = (rawStatus === "completed" || rawStatus === "complete");
+ const okFlag =
+   rawStatus === "ok" ||
+   rawStatus === "success" ||
+   rawStatus === "done" ||
+   ((req.body as any)?.ok === true) ||
+   ((result as any)?.ok === true) ||
+   (isCompletedWord && ((req.body as any)?.ok !== false) && ((result as any)?.ok !== false) && (String((result as any)?.status||"").toLowerCase() !== "error"));
 
-const finalStatus = okFlag ? "completed" : "error";
+ const finalStatus = okFlag ? "completed" : "error";
+ /*__JOBS_COMPLETE_V3__*/
 
 // OPTC_COMPLETE_BODY_SNAPSHOT_FALLBACK_V1: se o worker mandar snapshot fora de result, copia para dentro
 try {
@@ -374,11 +376,12 @@ try {
 } catch(_e) {}
   const job = completeJob(id, finalStatus, result, workerId);
   if (!job) return res.status(404).json({ error: "Job not found" });
+  // CAN snapshot: sempre atualizar instalação (READY/ERROR), mesmo se job falhar
+  try { if ((job as any)?.type === "monitor_can_snapshot") _handleCanSnapshotComplete(job, result, id); } catch {}
 
-  // dispara encadeamento para Monitor (SB) após HTML5
+  // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
   if (finalStatus === "completed") {
     _enqueueSchemeBuilderAfterHtml5(job, result);
-    _handleCanSnapshotComplete(job, result, id);
   }
 
   return res.json({ job });
