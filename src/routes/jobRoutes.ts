@@ -194,7 +194,12 @@ function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
       const __snap = pickCanSnapshotFromCompleteBody(result);
       const __summary = (__snap && __snap.counts) ? __snap.counts : null;
 
-      const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {
+      
+    const __hasData = !!(__snap && (
+      (__snap.counts && (((__snap.counts.params_total||0)+(__snap.counts.module_total||0)+(__snap.counts.paramsTotal||0)+(__snap.counts.moduleTotal||0))>0)) ||
+      ((Array.isArray(__snap.parameters)&&__snap.parameters.length) || (Array.isArray(__snap.module_state)&&__snap.module_state.length) || (Array.isArray(__snap.moduleState)&&__snap.moduleState.length))
+    )); /*__READYFIX_V2__*/
+const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {
         snapshots: __snap ? [__snap] : ((can && can.snapshots) ? can.snapshots : []),
         summary: __summary || ((can && can.summary) ? can.summary : null),
         last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
@@ -202,7 +207,7 @@ function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
 
       installationsStore.patchInstallation(installationId, { can: __canPatched,
     can_snapshot_latest: (__snap || null),
-    can_snapshot: (__snap || null), status: "CAN_SNAPSHOT_READY" });
+    can_snapshot: (__hasData ? __snap : null), status: (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
     } catch {}
 
     try {

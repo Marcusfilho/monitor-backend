@@ -809,7 +809,13 @@ const hasSummary = !!(snap && snap.summary);
         const hasParams = !!(snap && Array.isArray(snap.parameters) && snap.parameters.length);
         const hasModule = !!(snap && Array.isArray(snap.moduleState) && snap.moduleState.length);
         const statusReady = String(inst.status || "") === "CAN_SNAPSHOT_READY";
-        if (statusReady || hasSummary || hasList || hasCounts || hasParams || hasModule){
+        
+        const readyByData = (hasCounts || hasModule || hasList);
+        if (statusReady && !readyByData) {
+          setStatus(`Snapshot vazio ⚠️ (READY mas sem dados). Clique "Request snapshot" novamente.`);
+        }
+        /*__PROBE_READY_BY_DATA__*/
+if ((statusReady && readyByData) || hasSummary || hasList || hasCounts || hasParams || hasModule){
           const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;
           const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;
           setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);
