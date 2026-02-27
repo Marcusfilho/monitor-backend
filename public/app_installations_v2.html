@@ -524,5 +524,155 @@
 })();
 </script>
 
+
+<script>
+/* __PROBE_ENRICH_V3__ */
+(function () {
+  if (window.__PROBE_ENRICH_V3_LOADED__) return;
+  window.__PROBE_ENRICH_V3_LOADED__ = true;
+
+  const ORIG_FETCH = window.fetch ? window.fetch.bind(window) : null;
+  if (!ORIG_FETCH) return;
+
+  const MAX_AGE_SEC = 120; // acima disso, mostra STALE
+
+  function isObj(x){ return x && typeof x === "object"; }
+
+  function deepFind(root, keyRegex, maxDepth=10) {
+    const seen = new Set();
+    function walk(x, depth) {
+      if (!isObj(x) || seen.has(x) || depth > maxDepth) return null;
+      seen.add(x);
+      if (Array.isArray(x)) {
+        for (const it of x) { const r = walk(it, depth+1); if (r != null) return r; }
+        return null;
+      }
+      for (const k of Object.keys(x)) {
+        if (keyRegex.test(String(k))) return x[k];
+      }
+      for (const k of Object.keys(x)) { const r = walk(x[k], depth+1); if (r != null) return r; }
+      return null;
+    }
+    return walk(root, 0);
+  }
+
+  function setField(name, value) {
+    const ids = [name, name + "_", "v_" + name, "val_" + name, "card_" + name];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = value; return true; }
+    }
+    const el2 = document.querySelector('[data-field="'+name+'"]');
+    if (el2) { el2.textContent = value; return true; }
+    return false;
+  }
+
+  function pickSnapshot(instJson) {
+    const inst = instJson.installation || instJson;
+    const can = inst.can || {};
+    const snaps = can.snapshots || [];
+    if (Array.isArray(snaps) && snaps.length) return snaps[snaps.length - 1];
+    return inst.can_snapshot_latest || inst.can_snapshot || null;
+  }
+
+  function parseTsAny(snap) {
+    // tenta achar o timestamp "mais recente" de várias fontes
+    const hdr = snap && (snap.header || {});
+    const raw = (hdr && (hdr.raw || hdr.header_raw)) || hdr || {};
+    const capturedAt = snap && snap.captured_at;
+
+    const unixTime = deepFind(raw, /unixTime/i);
+    const serverTime = deepFind(raw, /serverTime/i);
+    const date = deepFind(raw, /^date$/i);
+
+    const candidates = [];
+    if (typeof unixTime === "number" && isFinite(unixTime)) candidates.push(unixTime);
+    if (typeof unixTime === "string" && unixTime.trim() && !isNaN(Number(unixTime))) candidates.push(Number(unixTime));
+
+    function tryParseIso(x){
+      if (typeof x !== "string") return;
+      const t = Date.parse(x);
+      if (!isNaN(t)) candidates.push(t);
+    }
+    tryParseIso(serverTime);
+    tryParseIso(date);
+    tryParseIso(capturedAt);
+
+    if (!candidates.length) return null;
+    return Math.max.apply(null, candidates);
+  }
+
+  async function loadClientMap() {
+    // arquivo estático que vamos gerar no passo 2
+    if (window.__CLIENTS_BY_ID__) return window.__CLIENTS_BY_ID__;
+    try {
+      const r = await ORIG_FETCH("/catalog_clients.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("no clients map");
+      const j = await r.json();
+      const m = j && (j.clients_by_id || j.byId || j);
+      if (m && typeof m === "object") {
+        window.__CLIENTS_BY_ID__ = m;
+        return m;
+      }
+    } catch (e) {}
+    window.__CLIENTS_BY_ID__ = {};
+    return window.__CLIENTS_BY_ID__;
+  }
+
+  async function enrichAndApply(instJson) {
+    const inst = instJson.installation || instJson;
+    const snap = pickSnapshot(instJson);
+    if (!snap) return;
+
+    const hdr = snap.header || {};
+    const raw = (hdr.raw || hdr.header_raw || hdr);
+
+    // IGNITION (farol)
+    const ign = deepFind(raw, /^ignition$/i);
+    if (ign === 0 || ign === "0") setField("ignition", "💤0");
+    else if (ign === 1 || ign === "1") setField("ignition", "💡1");
+    else setField("ignition", "--");
+
+    // COMMUNICATION = timestamp + age
+    const ts = parseTsAny(snap);
+    if (ts != null) {
+      const ageSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+      const iso = new Date(ts).toISOString().replace(".000Z","Z");
+      const tag = (ageSec > MAX_AGE_SEC) ? `STALE age=${ageSec}s` : `age=${ageSec}s`;
+      setField("communication", `${iso} | ${tag}`);
+    } else {
+      setField("communication", "--");
+    }
+
+    // CLIENT NAME (via mapping)
+    const clientId = hdr.client_id || inst.client_id || inst.payload?.target_client_id || null;
+    const map = await loadClientMap();
+    if (clientId != null) {
+      const nm = map[String(clientId)] || map[Number(clientId)] || null;
+      if (nm) setField("client", `${nm} (${clientId})`);
+      else setField("client", String(clientId));
+    }
+
+    // MODEL (já estava aparecendo em algum lugar do raw)
+    const manufacturer = deepFind(raw, /manufacturer/i);
+    const model = deepFind(raw, /\bmodel\b/i);
+    const modelText = [manufacturer, model].filter(Boolean).join(" ").trim();
+    if (modelText) setField("model", modelText);
+  }
+
+  window.fetch = async function (...args) {
+    const url = String(args[0] || "");
+    const resp = await ORIG_FETCH(...args);
+    try {
+      if (url.includes("/api/installations/") && resp && resp.clone) {
+        const clone = resp.clone();
+        clone.json().then(enrichAndApply).catch(() => {});
+      }
+    } catch (e) {}
+    return resp;
+  };
+})();
+</script>
+
 </body>
 </html>
