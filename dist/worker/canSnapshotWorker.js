@@ -1,4 +1,23 @@
 "use strict";
+
+// __PARAMINDEX_DIAG_V1__
+function __collectParamIndex(raw) {
+  const seen = new Set();
+  (function walk(x){
+    if (!x) return;
+    if (Array.isArray(x)) return x.forEach(walk);
+    if (typeof x === "object") {
+      for (const k of Object.keys(x)) {
+        if (k === "paramIndex") {
+          const v = x[k];
+          if (typeof v === "string" || typeof v === "number") seen.add(String(v));
+        }
+        walk(x[k]);
+      }
+    }
+  })(raw);
+  return { unique: seen.size, sample: Array.from(seen).slice(0, 80) };
+}
 /**
  * monitor-can-snapshot-worker (REAL)
  * - Consome jobs do tipo monitor_can_snapshot
@@ -77,6 +96,14 @@ function __cs_summarizeSnapshot(snap){
            : [];
 
   const header = (snap.header && typeof snap.header === "object") ? { ...snap.header } : null;
+  // __PARAMINDEX_DIAG_V1__
+  try {
+    snap.diag = snap.diag || {};
+    const _raw = (snap.header && (snap.header.raw || snap.header.header_raw)) || (snap.header || null);
+    snap.diag.paramIndex = __collectParamIndex(_raw);
+    console.log(`[diag] paramIndex unique=${snap.diag.paramIndex.unique} sample=${snap.diag.paramIndex.sample.slice(0,12).join(",")}`);
+  } catch (e) {}
+
   const paramsWithValue = params.filter(p => __cs_displayValue(p).trim() !== "").length;
 
   const pickedParams = params
@@ -351,7 +378,7 @@ function __cs_completeBody(result){
   let body = JSON.stringify(payload);
   console.log("[INFO] complete body_bytes=", body.length, "hasSnap=", !!snap, "counts=", (snap && snap.counts) ? snap.counts : null);
 
-  if (body.length > 1048576 && snap){
+if (false && (body.length > 1048576 && snap)) {
     // fallback ultra-compacto
     const p2 = Object.assign({}, snap);
     if (Array.isArray(p2.parameters)) p2.parameters = p2.parameters.slice(0,5);
@@ -685,11 +712,29 @@ async function pollOnce(){
   const installationId = p.installationId || p.installation_id || p.installation || null;
   const vehicleId = Number(p.vehicleId || p.vehicle_id || p.VEHICLE_ID || 0);
 
-  const cycles = clampInt(p.cycles, 1, MAX_CYCLES, DEFAULT_CYCLES);
-  const intervalMs = clampInt(p.interval_ms, 2000, 60000, DEFAULT_INTERVAL_MS);
+  let cycles = clampInt(p.cycles, 1, MAX_CYCLES, DEFAULT_CYCLES);
+  let intervalMs = clampInt(p.interval_ms, 2000, 60000, DEFAULT_INTERVAL_MS);
   const earlyStopMinTotal = clampInt(p.early_stop_min_total, 0, 999999, EARLY_STOP_MIN_TOTAL);
   const earlyStopMinWith = clampInt(p.early_stop_min_with, 0, 999999, EARLY_STOP_MIN_WITH);
 
+
+  // __CAN_MULTI_REFRESH_V3__
+  const MR_ENABLED = String(process.env.CAN_MULTI_REFRESH_ENABLED || "1") !== "0";
+  const MR_CYCLES = Number(process.env.CAN_MULTI_REFRESH_CYCLES || 5);                 // 5 repetições
+  const MR_INTERVAL_MS = Number(process.env.CAN_MULTI_REFRESH_INTERVAL_MS || 1000);   // 1s
+  const MR_STOP_AT_PARAMS = Number(process.env.CAN_MULTI_REFRESH_STOP_AT_PARAMS || 120); // para cedo se já tem bastante
+  const MR_NO_DATA_CUTOFF = Number(process.env.CAN_MULTI_REFRESH_NO_DATA_CUTOFF || 2);   // corta cedo em veículo morto
+
+  if (MR_ENABLED) {
+    if (typeof cycles === "number" && isFinite(cycles)) cycles = Math.max(cycles, MR_CYCLES);
+    if (typeof intervalMs === "number" && isFinite(intervalMs)) intervalMs = Math.min(intervalMs, MR_INTERVAL_MS);
+
+    // deixa o coletor rodar os ciclos (não parar cedo por threshold antigo)
+    if (typeof earlyStopTotal !== "undefined") earlyStopTotal = 9999;
+    if (typeof earlyStopWith  !== "undefined") earlyStopWith  = 9999;
+
+    console.log(`[INFO] multi-refresh V3 enabled cycles=${cycles} intervalMs=${intervalMs} stopAtParams=${MR_STOP_AT_PARAMS}`);
+  }
   console.log("[INFO] job", jobId, "vehicleId=", vehicleId, "cycles=", cycles, "intervalMs=", intervalMs, "earlyStopTotal=", earlyStopMinTotal, "earlyStopWith=", earlyStopMinWith);
 
   const errors = [];
@@ -726,6 +771,35 @@ for(let i=0;i<cycles;i++){
         } catch(_e_dump) {}
         console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters)?snap.parameters.length:0);
         try { console.log("[INFO] cycle-summary", jobId, "c=", (i+1), (__sum && __sum.counts) || null, (__sum && __sum.rawCounts) ? __sum.rawCounts : null); } catch(_e) {}
+
+    // __CAN_MULTI_REFRESH_V3__ guards
+    const __msg = Number((rawCounts && rawCounts.unit_messages_events) || (counts && counts.unit_messages_events) || 0);
+    const __conn = Number((rawCounts && rawCounts.unit_conn_events) || (counts && counts.unit_conn_events) || 0);
+
+    // 1) já está bom: para cedo
+    if (MR_ENABLED && pTot >= MR_STOP_AT_PARAMS) {
+      console.log(`[INFO] multi-refresh V3 early-stop: pTot=${pTot} >= stopAt=${MR_STOP_AT_PARAMS}`);
+      break;
+    }
+
+    // 2) veículo “morto”: não insiste em 5 ciclos
+    if (MR_ENABLED && cycle >= MR_NO_DATA_CUTOFF && pTot === 0 && __msg === 0 && __conn === 0) {
+      console.log(`[INFO] multi-refresh V3 no-data cutoff: cycle=${cycle} pTot=0 msg=0 conn=0`);
+      break;
+    }
+
+    // listen-window retry: se após ~5s ainda estiver incompleto, espera e coleta mais (máx 1 retry)
+    if (!__didListenRetry && __CAN_LISTEN_RETRY_MAX > 1 && cycle === __minCyclesBeforeRetry && pTot < __CAN_LISTEN_MIN_PARAMS) {
+      __didListenRetry = true;
+      const extra = Math.min(__minCycles, (__CAN_LISTEN_MAX_CYCLES - cycles));
+      if (extra > 0) {
+        console.log(`[INFO] listen-window retry: pTot=${pTot} < min=${__CAN_LISTEN_MIN_PARAMS}; sleep ${__CAN_LISTEN_RETRY_BACKOFF_MS}ms; extend cycles +${extra} -> ${cycles + extra}`);
+        await sleep(__CAN_LISTEN_RETRY_BACKOFF_MS);
+        cycles = Math.min(__CAN_LISTEN_MAX_CYCLES, cycles + extra);
+      } else {
+        console.log(`[INFO] listen-window retry skipped (cap): cycles=${cycles}`);
+      }
+    }
         // early-stop: usa counts (inclui raw_value) via summarizeSnapshot
         let __sum = null;
         try{ __sum = __cs_summarizeSnapshot(snap) || null; }catch(_e){}
