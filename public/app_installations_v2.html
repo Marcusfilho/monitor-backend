@@ -403,5 +403,126 @@
     loadInstallation(last).catch(()=>{});
   }
 </script>
+
+<script>
+/* __PROBE_ENRICH_V1__ */
+(function () {
+  if (window.__PROBE_ENRICH_V1_LOADED__) return;
+  window.__PROBE_ENRICH_V1_LOADED__ = true;
+
+  const ORIG_FETCH = window.fetch ? window.fetch.bind(window) : null;
+  if (!ORIG_FETCH) return;
+
+  function isObj(x){ return x && typeof x === "object"; }
+
+  function deepFindKeyValue(root, keyRegex, maxDepth=8) {
+    const seen = new Set();
+    function walk(x, depth) {
+      if (!isObj(x) || seen.has(x) || depth > maxDepth) return null;
+      seen.add(x);
+      if (Array.isArray(x)) {
+        for (const it of x) {
+          const r = walk(it, depth+1);
+          if (r != null) return r;
+        }
+        return null;
+      }
+      for (const k of Object.keys(x)) {
+        if (keyRegex.test(String(k))) {
+          const v = x[k];
+          if (typeof v === "string" || typeof v === "number") return v;
+        }
+      }
+      for (const k of Object.keys(x)) {
+        const r = walk(x[k], depth+1);
+        if (r != null) return r;
+      }
+      return null;
+    }
+    return walk(root, 0);
+  }
+
+  function pickSnapshot(inst) {
+    const can = (inst && (inst.can || inst.installation?.can)) || {};
+    const snaps = can.snapshots || [];
+    if (Array.isArray(snaps) && snaps.length) return snaps[snaps.length - 1];
+
+    // fallback: can_snapshot_latest/can_snapshot
+    return inst.can_snapshot_latest || inst.can_snapshot ||
+           inst.installation?.can_snapshot_latest || inst.installation?.can_snapshot || null;
+  }
+
+  function getCounts(snap) {
+    // em alguns builds, raw_events virou rawCounts (dict). Aceitamos tudo aqui.
+    const c = snap?.raw_counts || snap?.rawCounts || snap?.raw_events || snap?.rawEvents || snap?.raw_events_counts || null;
+    return (c && typeof c === "object") ? c : {};
+  }
+
+  function setField(name, value) {
+    const ids = [
+      name, name + "_", "v_" + name, "val_" + name, "kv_" + name, "card_" + name
+    ];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = value; return true; }
+    }
+    // fallback: data-field
+    const el2 = document.querySelector('[data-field="'+name+'"]');
+    if (el2) { el2.textContent = value; return true; }
+    return false;
+  }
+
+  function enrichAndApply(instJson) {
+    const inst = instJson.installation || instJson;
+    const snap = pickSnapshot(inst);
+    if (!snap) return;
+
+    const hdr = snap.header || {};
+    const hdrRaw = hdr.raw || hdr.header_raw || hdr;
+
+    // model/manufacturer (do header.raw)
+    const manufacturer = deepFindKeyValue(hdrRaw, /manufacturer/i);
+    // evita pegar "module" por engano: procura model mas não "module"
+    const model = deepFindKeyValue(hdrRaw, /\bmodel\b/i) || deepFindKeyValue(hdrRaw, /model_name|vehicle_model/i);
+    const modelText = [manufacturer, model].filter(Boolean).join(" ").trim();
+    if (modelText) setField("model", modelText);
+
+    // communication (derivado por counts)
+    const counts = getCounts(snap);
+    const msg = Number(counts.unit_messages_events || counts.unitMessagesEvents || 0);
+    const conn = Number(counts.unit_conn_events || counts.unitConnEvents || 0);
+    let comm = "--";
+    if (msg > 0 || conn > 0) comm = `ONLINE (msg:${msg} conn:${conn})`;
+    setField("communication", comm);
+
+    // cliente: por enquanto mantém o que já existe no UI (normalmente client_id já aparece)
+    // (depois a gente enriquece com nome via catálogo)
+    // Só garante que, se existir um campo "client" de valor, ele seja mostrado:
+    const clientId = hdr.client_id || inst.client_id || inst.payload?.target_client_id || null;
+    if (clientId != null) setField("client", String(clientId));
+
+    // log leve pra debug
+    if (!window.__PROBE_ENRICH_V1_LOGGED__) {
+      window.__PROBE_ENRICH_V1_LOGGED__ = true;
+      console.log("[probe enrich] applied", { modelText, comm, clientId, counts });
+    }
+  }
+
+  window.fetch = async function (...args) {
+    const url = String(args[0] || "");
+    const resp = await ORIG_FETCH(...args);
+    try {
+      // pega apenas chamadas de installations
+      if (url.includes("/api/installations/") && resp && resp.clone) {
+        const clone = resp.clone();
+        // tenta JSON sem quebrar o fluxo
+        clone.json().then(enrichAndApply).catch(() => {});
+      }
+    } catch (e) {}
+    return resp;
+  };
+})();
+</script>
+
 </body>
 </html>

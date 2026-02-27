@@ -1,0 +1,159 @@
+[1mdiff --git a/app/app_can_probe_v1.html b/app/app_can_probe_v1.html[m
+[1mindex d42ac2b..11bd11a 100644[m
+[1m--- a/app/app_can_probe_v1.html[m
+[1m+++ b/app/app_can_probe_v1.html[m
+[36m@@ -486,7 +486,11 @@[m
+ [m
+   function renderProbeScreen(inst, snap, x){[m
+     if (!probeScreenEl) return;[m
+[31m-    const rows = (x && x.params) || [];[m
+[32m+[m[32m    const rows0 = (x && x.params) || [];[m
+[32m+[m[32m    const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};[m
+[32m+[m[32m    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));[m
+[32m+[m[32m    const rows = rows0.concat(hdrRows);[m
+[32m+[m[32m    /*__PROBE_HDRROWS_V1__*/[m
+     const msRows = (x && x.ms) || [];[m
+     const comm = commModules(msRows);[m
+     const header = getHeaderLite(inst, snap, rows);[m
+[1mdiff --git a/dist/public/app_can_probe_v1.html b/dist/public/app_can_probe_v1.html[m
+[1mindex cec6d14..11bd11a 100644[m
+[1m--- a/dist/public/app_can_probe_v1.html[m
+[1m+++ b/dist/public/app_can_probe_v1.html[m
+[36m@@ -486,7 +486,11 @@[m
+ [m
+   function renderProbeScreen(inst, snap, x){[m
+     if (!probeScreenEl) return;[m
+[31m-    const rows = (x && x.params) || [];[m
+[32m+[m[32m    const rows0 = (x && x.params) || [];[m
+[32m+[m[32m    const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};[m
+[32m+[m[32m    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));[m
+[32m+[m[32m    const rows = rows0.concat(hdrRows);[m
+[32m+[m[32m    /*__PROBE_HDRROWS_V1__*/[m
+     const msRows = (x && x.ms) || [];[m
+     const comm = commModules(msRows);[m
+     const header = getHeaderLite(inst, snap, rows);[m
+[36m@@ -809,7 +813,29 @@[m [mconst hasSummary = !!(snap && snap.summary);[m
+         const hasParams = !!(snap && Array.isArray(snap.parameters) && snap.parameters.length);[m
+         const hasModule = !!(snap && Array.isArray(snap.moduleState) && snap.moduleState.length);[m
+         const statusReady = String(inst.status || "") === "CAN_SNAPSHOT_READY";[m
+[31m-        if (statusReady || hasSummary || hasList || hasCounts || hasParams || hasModule){[m
+[32m+[m[32m        const statusErr = String(inst.status || "") === "CAN_SNAPSHOT_ERROR";[m
+[32m+[m[32m        if (statusErr) {[m
+[32m+[m[32m          const lastJob = (Array.isArray(inst.jobs) && inst.jobs.length) ? inst.jobs[inst.jobs.length - 1] : null;[m
+[32m+[m[32m          const meta = lastJob && lastJob.meta ? lastJob.meta : null;[m
+[32m+[m[32m          const errs = (meta && Array.isArray(meta.errors) && meta.errors.length) ? meta.errors[m
+[32m+[m[32m                    : (meta && meta.summary && Array.isArray(meta.summary.errors) && meta.summary.errors.length) ? meta.summary.errors[m
+[32m+[m[32m                    : (inst.can && inst.can.summary && Array.isArray(inst.can.summary.errors) && inst.can.summary.errors.length) ? inst.can.summary.errors[m
+[32m+[m[32m                    : null;[m
+[32m+[m[32m          const msg = (meta && (meta.message || meta.error || meta.reason)) ? (meta.message || meta.error || meta.reason)[m
+[32m+[m[32m                    : (errs && errs[0]) ? errs[0][m
+[32m+[m[32m                    : 'Snapshot falhou';[m
+[32m+[m[32m          setStatus(`CAN falhou ❌ (${String(msg).slice(0,120)}) — use Request snapshot novamente`);[m
+[32m+[m[32m          return r;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        /*__PROBE_STOP_ON_ERROR__*/[m
+[32m+[m
+[32m+[m[41m        [m
+[32m+[m[32m        const readyByData = (hasCounts || hasModule || hasList);[m
+[32m+[m[32m        if (statusReady && !readyByData) {[m
+[32m+[m[32m          setStatus(`Snapshot vazio ⚠️ (READY mas sem dados). Clique "Request snapshot" novamente.`);[m
+[32m+[m[32m        }[m
+[32m+[m[32m        /*__PROBE_READY_BY_DATA__*/[m
+[32m+[m[32mif ((statusReady && readyByData) || hasSummary || hasList || hasCounts || hasParams || hasModule){[m
+           const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;[m
+           const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;[m
+           setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);[m
+[1mdiff --git a/dist/routes/jobRoutes.js b/dist/routes/jobRoutes.js[m
+[1mindex 45e2f7d..1ec5a77 100644[m
+[1m--- a/dist/routes/jobRoutes.js[m
+[1m+++ b/dist/routes/jobRoutes.js[m
+[36m@@ -211,6 +211,8 @@[m [mfunction _handleCanSnapshotComplete(job, result, jobId) {[m
+         try {[m
+             const __snap = pickCanSnapshotFromCompleteBody(result);[m
+             const __summary = (__snap && __snap.counts) ? __snap.counts : null;[m
+[32m+[m[32m            const __hasData = !!(__snap && ((__snap.counts && (((__snap.counts.params_total || 0) + (__snap.counts.module_total || 0) + (__snap.counts.paramsTotal || 0) + (__snap.counts.moduleTotal || 0)) > 0)) ||[m
+[32m+[m[32m                ((Array.isArray(__snap.parameters) && __snap.parameters.length) || (Array.isArray(__snap.module_state) && __snap.module_state.length) || (Array.isArray(__snap.moduleState) && __snap.moduleState.length)))); /*__READYFIX_V2__*/[m
+             const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : {}, {[m
+                 snapshots: __snap ? [__snap] : ((can && can.snapshots) ? can.snapshots : []),[m
+                 summary: __summary || ((can && can.summary) ? can.summary : null),[m
+[36m@@ -218,7 +220,7 @@[m [mfunction _handleCanSnapshotComplete(job, result, jobId) {[m
+             });[m
+             installationsStore.patchInstallation(installationId, { can: __canPatched,[m
+                 can_snapshot_latest: (__snap || null),[m
+[31m-                can_snapshot: (__snap || null), status: (__snap ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });[m
+[32m+[m[32m                can_snapshot: (__hasData ? __snap : null), status: (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });[m
+         }[m
+         catch { }[m
+         try {[m
+[36m@@ -360,16 +362,18 @@[m [mrouter.post("/:id/complete", (req, res) => {[m
+     if (!status)[m
+         return res.status(400).json({ error: "Field 'status' is required" });[m
+     const rawStatus = String(status || "").toLowerCase();[m
+[31m-    // worker pode mandar status=success; também aceitamos done/completed/complete.[m
+[31m-    // além disso, se result.ok === true, consideramos completed.[m
+[32m+[m[32m    // worker pode mandar status=success/done.[m
+[32m+[m[32m    // IMPORTANTE: para jobs CAN, status pode ser apenas um "envelope".[m
+[32m+[m[32m    // Regra: completed/complete só é OK se NÃO houver ok=false explícito.[m
+[32m+[m[32m    const isCompletedWord = (rawStatus === "completed" || rawStatus === "complete");[m
+     const okFlag = rawStatus === "ok" ||[m
+         rawStatus === "success" ||[m
+         rawStatus === "done" ||[m
+[31m-        rawStatus === "completed" ||[m
+[31m-        rawStatus === "complete" ||[m
+         (req.body?.ok === true) ||[m
+[31m-        (result?.ok === true);[m
+[32m+[m[32m        (result?.ok === true) ||[m
+[32m+[m[32m        (isCompletedWord && (req.body?.ok !== false) && (result?.ok !== false) && (String(result?.status || "").toLowerCase() !== "error"));[m
+     const finalStatus = okFlag ? "completed" : "error";[m
+[32m+[m[32m    /*__JOBS_COMPLETE_V3__*/[m
+     // OPTC_COMPLETE_BODY_SNAPSHOT_FALLBACK_V1: se o worker mandar snapshot fora de result, copia para dentro[m
+     try {[m
+         const rootSnap = pickCanSnapshotFromCompleteBody(req.body);[m
+[36m@@ -385,10 +389,15 @@[m [mrouter.post("/:id/complete", (req, res) => {[m
+     const job = (0, jobStore_1.completeJob)(id, finalStatus, result, workerId);[m
+     if (!job)[m
+         return res.status(404).json({ error: "Job not found" });[m
+[31m-    // dispara encadeamento para Monitor (SB) após HTML5[m
+[32m+[m[32m    // CAN snapshot: sempre atualizar instalação (READY/ERROR), mesmo se job falhar[m
+[32m+[m[32m    try {[m
+[32m+[m[32m        if (job?.type === "monitor_can_snapshot")[m
+[32m+[m[32m            _handleCanSnapshotComplete(job, result, id);[m
+[32m+[m[32m    }[m
+[32m+[m[32m    catch { }[m
+[32m+[m[32m    // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso[m
+     if (finalStatus === "completed") {[m
+         _enqueueSchemeBuilderAfterHtml5(job, result);[m
+[31m-        _handleCanSnapshotComplete(job, result, id);[m
+     }[m
+     return res.json({ job });[m
+ });[m
+[1mdiff --git a/dist/worker/canSnapshotWorker.js b/dist/worker/canSnapshotWorker.js[m
+[1mindex 91cc7d1..526b73f 100644[m
+[1m--- a/dist/worker/canSnapshotWorker.js[m
+[1m+++ b/dist/worker/canSnapshotWorker.js[m
+[36m@@ -716,7 +716,7 @@[m [mfor(let i=0;i<cycles;i++){[m
+       let __cycleWindowMs = 0;[m
+       try{[m
+         const snap = await takeSnapshotOnce(sessionToken, vehicleId);[m
+[31m-      __lastSnap = snap;[m
+[32m+[m[32m      // __lastSnap removed (was causing ReferenceError) /*__FIX_LASTSNAP__*/[m
+         snapshots.unshift(snap); // newest first[m
+         try {[m
+           const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");[m
+[1mdiff --git a/public/app_can_probe_v1.html b/public/app_can_probe_v1.html[m
+[1mindex d42ac2b..11bd11a 100644[m
+[1m--- a/public/app_can_probe_v1.html[m
+[1m+++ b/public/app_can_probe_v1.html[m
+[36m@@ -486,7 +486,11 @@[m
+ [m
+   function renderProbeScreen(inst, snap, x){[m
+     if (!probeScreenEl) return;[m
+[31m-    const rows = (x && x.params) || [];[m
+[32m+[m[32m    const rows0 = (x && x.params) || [];[m
+[32m+[m[32m    const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};[m
+[32m+[m[32m    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));[m
+[32m+[m[32m    const rows = rows0.concat(hdrRows);[m
+[32m+[m[32m    /*__PROBE_HDRROWS_V1__*/[m
+     const msRows = (x && x.ms) || [];[m
+     const comm = commModules(msRows);[m
+     const header = getHeaderLite(inst, snap, rows);[m

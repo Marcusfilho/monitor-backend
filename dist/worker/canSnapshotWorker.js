@@ -351,7 +351,7 @@ function __cs_completeBody(result){
   let body = JSON.stringify(payload);
   console.log("[INFO] complete body_bytes=", body.length, "hasSnap=", !!snap, "counts=", (snap && snap.counts) ? snap.counts : null);
 
-  if (body.length > 90000 && snap){
+  if (body.length > 1048576 && snap){
     // fallback ultra-compacto
     const p2 = Object.assign({}, snap);
     if (Array.isArray(p2.parameters)) p2.parameters = p2.parameters.slice(0,5);
