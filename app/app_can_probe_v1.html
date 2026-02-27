@@ -308,8 +308,71 @@
     }
     return null;
   }
-  function rowModuleName(r){
-    return String(r?.name ?? r?.module_name ?? r?.moduleName ?? "").trim();
+  
+  /* __PROBE_FIX_FIDELITY_V1__ */
+  function deepPick(obj, keyPred, maxDepth=8){
+    const seen = new Set();
+    function walk(x, d){
+      if (!x || typeof x !== "object" || d > maxDepth) return null;
+      if (seen.has(x)) return null;
+      seen.add(x);
+      if (Array.isArray(x)){
+        for (const it of x){
+          const r = walk(it, d+1);
+          if (r != null) return r;
+        }
+        return null;
+      }
+      for (const k of Object.keys(x)){
+        if (keyPred(String(k))){
+          const v = x[k];
+          if (v != null && String(v).trim() !== "") return v;
+        }
+      }
+      for (const k of Object.keys(x)){
+        const r = walk(x[k], d+1);
+        if (r != null) return r;
+      }
+      return null;
+    }
+    return walk(obj, 0);
+  }
+
+  function moduleKey(r){
+    const m = String(r?.module ?? "").trim().toUpperCase();
+    const s = String(r?.sub ?? "").trim().toUpperCase();
+    return { m, s };
+  }
+
+  function findModuleByModuleSub(msRows, moduleName, subHints){
+    const rows = Array.isArray(msRows) ? msRows : [];
+    const m0 = String(moduleName || "").trim().toUpperCase();
+    const hints = (subHints||[]).map(x => String(x).trim().toUpperCase()).filter(Boolean);
+    return rows.find(r => {
+      const {m,s} = moduleKey(r);
+      if (!m) return false;
+      if (m !== m0) return false;
+      if (!hints.length) return true;
+      return hints.some(h => s.includes(h));
+    }) || null;
+  }
+
+  function effectiveOk(row){
+    if (!row) return null;
+    const ok = toBool01(row.ok);
+    if (ok != null) return ok;
+    const was = toBool01(row.was_ok);
+    if (was != null) return was;
+    return null;
+  }
+
+function rowModuleName(r){
+    const n = String(r?.name ?? r?.module_name ?? r?.moduleName ?? "").trim();
+    if (n) return n;
+    const m = String(r?.module ?? r?.module_descr ?? "").trim();
+    const sub = String(r?.sub ?? r?.sub_module_descr ?? "").trim();
+    if (m && sub) return `${m}/${sub}`;
+    return m || sub || "";
   }
   function rowModuleId(r){
     const v = r?.id ?? r?.module_id ?? r?.moduleId ?? null;
@@ -428,30 +491,37 @@
   }
 
   function moduleChip(label, row){
-    const ok = row ? (toBool01(row.ok) ?? toBool01(row.active) ?? toBool01(row.was_ok)) : null;
+    const ok = effectiveOk(row);
     const dot = ok === true ? "okDot" : ok === false ? "badDot" : "unkDot";
     const text = row ? `${label}:${ok===true?"OK":ok===false?"FAIL":"?"}` : `${label}:—`;
     return `<span class="pill"><span class="${dot}"></span>${esc(text)}</span>`;
   }
 
   function commModules(msRows){
-    const can0 = findModule(msRows, [8], ["can0"]);
-    const can1 = findModule(msRows, [9], ["can1"]);
-    const j1708 = findModule(msRows, [15], ["j1708"]);
-    const dallas = findModule(msRows, [19], ["dallas", "ibutton"]);
-    const ramzor = findModule(msRows, [20], ["ramzor"]);
-    const detail = [can0, can1, j1708].map(r => {
+    // Preferir module/sub (mais fiel ao Monitor). Fallback para IDs antigos.
+    const can0 = findModuleByModuleSub(msRows, "CAN", ["CAN0"]) || findModule(msRows, [8], ["can0"]);
+    const can1 = findModuleByModuleSub(msRows, "CAN", ["CAN1"]) || findModule(msRows, [9], ["can1"]);
+    const j1708 = findModuleByModuleSub(msRows, "J1708", []) || findModule(msRows, [14,15], ["j1708"]);
+    // KEYPAD sub costuma identificar DALLAS/RAMZOR
+    const dallas = findModuleByModuleSub(msRows, "KEYPAD", ["DALLAS", "IBUTTON"]) || findModule(msRows, [19], ["dallas", "ibutton"]);
+    const ramzor = findModuleByModuleSub(msRows, "KEYPAD", ["RAMZOR"]) || findModule(msRows, [20], ["ramzor"]);
+
+    const detail = [can0, can1, j1708, dallas, ramzor].map(r => {
       if (!r) return "—";
       const id = rowModuleId(r);
-      const ok = (toBool01(r?.ok) ?? toBool01(r?.active) ?? toBool01(r?.was_ok));
-      return `id ${id}:${ok===true?"OK":ok===false?"FAIL":"?"}`;
+      const ok = effectiveOk(r);
+      const m = String(r?.module ?? "").trim();
+      const sub = String(r?.sub ?? "").trim();
+      return `id ${id}:${ok===true?"OK":ok===false?"FAIL":"?"} ${m}/${sub}`;
     }).join(" | ");
     return { can0, can1, j1708, dallas, ramzor, detail };
   }
 
   function getHeaderLite(inst, snap, rows){
     const h = pick(snap || {}, [["header"],["headerLite"],["meta","header"],["summary","header"]]) || {};
+    const hr = (h && typeof h === "object" && h.raw && typeof h.raw === "object") ? h.raw : null;
 
+    // params (se existirem)
     const ignP = getParamDisplay(rows, PROBE_PARAM_ALIASES.ignition);
     const progressP = getParamDisplay(rows, PROBE_PARAM_ALIASES.progress);
     const driverP = getParamDisplay(rows, PROBE_PARAM_ALIASES.driver_code);
@@ -461,15 +531,22 @@
     const modelP = getParamDisplay(rows, PROBE_PARAM_ALIASES.model);
     const serverTimeP = getParamDisplay(rows, PROBE_PARAM_ALIASES.server_time);
 
+    // deep picks do header.raw
+    const drvRaw = hr ? deepPick(hr, (k)=>/driver(_code|code|id)/i.test(k)) : null;
+    const ignRaw = hr ? deepPick(hr, (k)=>/^ignition$/i.test(k) || /ignition_status/i.test(k)) : null;
+    const commRaw = hr ? deepPick(hr, (k)=>/server_time|communication|gps|gprs|last/i.test(k)) : null;
+    const modelRaw = hr ? deepPick(hr, (k)=>/model|manufacturer|vcl_model/i.test(k)) : null;
+    const clientRaw = hr ? deepPick(hr, (k)=>/client(_name|name|descr|description)|vcl_client/i.test(k)) : null;
+
     return {
-      ignition: firstNonEmpty([h.ignition, h.ignition_status, ignP.text]),
-      communication: firstNonEmpty([h.server_time, h.serverTime, snap?.server_time, serverTimeP.text, snap?.captured_at]),
+      ignition: firstNonEmpty([h.ignition, h.ignition_status, ignRaw, ignP.text]),
+      communication: firstNonEmpty([h.server_time, h.serverTime, commRaw, snap?.server_time, serverTimeP.text, snap?.captured_at]),
       progress: firstNonEmpty([progressP.text, h.progress, h.configuration_progress, inst?.status]),
-      driver_code: firstNonEmpty([driverP.text, h.driver_code, h.driverCode]),
-      license_number: firstNonEmpty([licP.text, h.license_nmbr, h.license_number]),
-      serial: firstNonEmpty([serialP.text, h.inner_id, h.serial]),
-      client: firstNonEmpty([clientP.text, h.vcl_client_description, h.client, h.client_name]),
-      model: firstNonEmpty([modelP.text, h.vcl_model, h.model])
+      driver_code: firstNonEmpty([h.driver_code, h.driverCode, drvRaw, driverP.text]),
+      license_number: firstNonEmpty([h.license_nmbr, h.license_number, licP.text]),
+      serial: firstNonEmpty([h.inner_id, h.serial, serialP.text]),
+      client: firstNonEmpty([h.vcl_client_description, h.client, h.client_name, clientRaw, clientP.text]),
+      model: firstNonEmpty([h.vcl_model, h.model, modelRaw, modelP.text])
     };
   }
 
@@ -486,25 +563,27 @@
 
   function renderProbeScreen(inst, snap, x){
     if (!probeScreenEl) return;
-    const rows0 = (x && x.params) || [];
+    const paramsOnly = (x && x.params) || [];
     const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};
+    const hdrRaw = (hdr && typeof hdr === "object" && hdr.raw && typeof hdr.raw === "object") ? hdr.raw : null;
     const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));
-    const rows = rows0.concat(hdrRows);
+    const hdrRawRows = hdrRaw ? Object.keys(hdrRaw).map(k => ({ id: "hdrraw:"+k, name: k, value: hdrRaw[k], raw_value: hdrRaw[k] })) : [];
+    const rowsWithHdr = paramsOnly.concat(hdrRows, hdrRawRows);
     /*__PROBE_HDRROWS_V1__*/
     const msRows = (x && x.ms) || [];
     const comm = commModules(msRows);
-    const header = getHeaderLite(inst, snap, rows);
+    const header = getHeaderLite(inst, snap, rowsWithHdr);
 
     // CAN params por ID (mostrar raw_value)
-    const fuelTotal   = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_total_used, ["engine_total_fuel_used"]);
-    const fuelLvl     = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_level, ["fuel_level_1"]);
-    const fuelRate    = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_rate, ["engine_fuel_rate"]);
-    const oilPressure = getParamRawByIds(rows, PROBE_PARAM_IDS.oil_pressure, ["engine_oil_pressure"]);
-    const oilTemp     = getParamRawByIds(rows, PROBE_PARAM_IDS.oil_temp, ["engine_oil_temperature_1"]);
-    const coolantTemp = getParamRawByIds(rows, PROBE_PARAM_IDS.coolant_temp, ["engine_coolant_temperature"]);
-    const fuelTemp    = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_temp, ["engine_fuel_temperature_1"]);
-    const odometer    = getParamRawByIds(rows, PROBE_PARAM_IDS.odometer, ["sys_param_vehicle_distance"]);
-    const windshield  = getParamRawByIds(rows, PROBE_PARAM_IDS.windshield, ["arm_analog_input_3"]);
+    const fuelTotal   = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.fuel_total_used, ["engine_total_fuel_used"]);
+    const fuelLvl     = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.fuel_level, ["fuel_level_1"]);
+    const fuelRate    = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.fuel_rate, ["engine_fuel_rate"]);
+    const oilPressure = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.oil_pressure, ["engine_oil_pressure"]);
+    const oilTemp     = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.oil_temp, ["engine_oil_temperature_1"]);
+    const coolantTemp = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.coolant_temp, ["engine_coolant_temperature"]);
+    const fuelTemp    = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.fuel_temp, ["engine_fuel_temperature_1"]);
+    const odometer    = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.odometer, ["sys_param_vehicle_distance"]);
+    const windshield  = getParamRawByIds(paramsOnly, PROBE_PARAM_IDS.windshield, ["arm_analog_input_3"]);
 
     probeScreenEl.innerHTML = `
       <div class="probeRow">
