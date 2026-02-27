@@ -794,7 +794,9 @@ outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
     await pollCan(id);
   }
 
-  async function pollCan(id, { tries=180, sleepMs=2000 } = {}){
+  async function pollCan(id, { tries=120, sleepMs=700 } = {}){
+    const t0 = Date.now();
+    /* __PROBE_POLL_FAST_V1__ */
     for (let i=0; i<tries; i++){
       const r = await api(`/api/installations/${encodeURIComponent(id)}`);
       if (r.status === 200 && r.data){
@@ -845,8 +847,9 @@ if ((statusReady && readyByData) || hasSummary || hasList || hasCounts || hasPar
         outEl.textContent = pretty({ poll: { attempt: i+1, tries }, error: r });
       }
 
-      setStatus(`aguardando CAN... (${i+1}/${tries})`);
-      await new Promise(res => setTimeout(res, sleepMs));
+      setStatus(`aguardando CAN... (${i+1}/${tries}) t=${Math.round((Date.now()-t0)/1000)}s`);
+      const delay = (i < 15) ? 500 : (i < 45) ? 900 : 1500;
+      await new Promise(res => setTimeout(res, delay));
     }
     setStatus("timeout aguardando CAN — use Carregar");
     return null;
