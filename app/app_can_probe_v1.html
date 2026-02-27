@@ -271,7 +271,17 @@
     serial: ["inner_id", "serial"],
     client: ["vcl_client_description", "client_description", "client"],
     model: ["vcl_model", "model"]
-  };
+  
+    engine_total_fuel_used: ['00000031', '000000C5', '00002719'],
+    fuel_level_1: ['00000032', '000000C3', '0000879F', '00002717'],
+    engine_fuel_rate: ['0000003C', '00002718'],
+    engine_oil_pressure: ['00000024', '0000010D', '00002723'],
+    engine_oil_temperature_1: ['0000168E', '0000271E'],
+    engine_coolant_temperature: ['0000002F', '0000010E', '0000271F'],
+    engine_fuel_temperature_1: ['0000002E', '0000010F'],
+    sys_param_vehicle_distance: ['00002714'],
+    arm_analog_input_3: ['0000AF8C', '0000D419', '0000D41A'],
+    rpm: ['000000AD', '00000AD', '0000003A', '00002715'],};
 
   // IDs preferenciais (mais confiável que nome)
   const PROBE_PARAM_IDS = {
@@ -289,7 +299,26 @@
   function normKey(s){
     return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
   }
-  function toBool01(v){
+  /* __PROBE_REFINOS_V2__ */
+function strictOkTriple(row){
+  // REGRA: verde apenas se active=true, ok=true e was_ok=true
+  if (!row) return false;
+  const a = toBool01(row.active);
+  const o = toBool01(row.ok);
+  const w = toBool01(row.was_ok);
+  return (a===true && o===true && w===true);
+}
+
+function pickErr(row){
+  if (!row) return null;
+  const cand = [row.message,row.error,row.err,row.error_code,row.errorCode,row.code,row.status_msg,row.statusMsg];
+  for (const v of cand){
+    if (v!=null && String(v).trim()!="") return String(v).trim();
+  }
+  return null;
+}
+
+function toBool01(v){
     if (v === true || v === false) return v;
     const s = String(v == null ? "" : v).trim().toLowerCase();
     if (["1","true","yes","y","ok","on","active"].includes(s)) return true;
@@ -491,13 +520,16 @@ function rowModuleName(r){
   }
 
   function moduleChip(label, row){
-    const ok = effectiveOk(row);
-    const dot = ok === true ? "okDot" : ok === false ? "badDot" : "unkDot";
-    const text = row ? `${label}:${ok===true?"OK":ok===false?"FAIL":"?"}` : `${label}:—`;
-    return `<span class="pill"><span class="${dot}"></span>${esc(text)}</span>`;
-  }
+  const ok = strictOkTriple(row);
+  const dot = ok ? "okDot" : "badDot";
+  const err = pickErr(row);
+  const text = row ? `${label}:${ok?"OK":"FAIL"}` : `${label}:—`;
+  const title = err ? ` title="${esc(err)}"` : "";
+  const warn = err ? " ⚠" : "";
+  return `<span class="pill"${title}><span class="${dot}"></span>${esc(text)}${warn}</span>`;
+}
 
-  function commModules(msRows){
+function commModulesfunction commModules(msRows){
     // Preferir module/sub (mais fiel ao Monitor). Fallback para IDs antigos.
     const can0 = findModuleByModuleSub(msRows, "CAN", ["CAN0"]) || findModule(msRows, [8], ["can0"]);
     const can1 = findModuleByModuleSub(msRows, "CAN", ["CAN1"]) || findModule(msRows, [9], ["can1"]);
@@ -514,7 +546,19 @@ function rowModuleName(r){
       const sub = String(r?.sub ?? "").trim();
       return `id ${id}:${ok===true?"OK":ok===false?"FAIL":"?"} ${m}/${sub}`;
     }).join(" | ");
-    return { can0, can1, j1708, dallas, ramzor, detail };
+    const fmt = (r)=>{
+  if(!r) return '—';
+  const id = rowModuleId(r);
+  const a = toBool01(r.active);
+  const o = toBool01(r.ok);
+  const w = toBool01(r.was_ok);
+  const e = pickErr(r);
+  const m = String(r?.module ?? '').trim();
+  const sub = String(r?.sub ?? '').trim();
+  return `id ${id} a=${a} ok=${o} was_ok=${w} ${m}/${sub}${e?(' err='+e):''}`;
+};
+detail = [fmt(can0),fmt(can1),fmt(j1708),fmt(dallas),fmt(ramzor)].join(' | ');
+return { can0, can1, j1708, dallas, ramzor, detail };
   }
 
   function getHeaderLite(inst, snap, rows){
@@ -539,7 +583,14 @@ function rowModuleName(r){
     const clientRaw = hr ? deepPick(hr, (k)=>/client(_name|name|descr|description)|vcl_client/i.test(k)) : null;
 
     return {
-      ignition: firstNonEmpty([h.ignition, h.ignition_status, ignRaw, ignP.text]),
+      ignition: (function(){
+        const v = firstNonEmpty([ignRaw, h.ignition, h.ignition_status, ignP.text]);
+        if (v===0||v==='0') return '0';
+        if (v===1||v==='1') return '1';
+        if (v===true) return '1';
+        if (v===false) return '0';
+        return '--';
+      })(),
       communication: firstNonEmpty([h.server_time, h.serverTime, commRaw, snap?.server_time, serverTimeP.text, snap?.captured_at]),
       progress: firstNonEmpty([progressP.text, h.progress, h.configuration_progress, inst?.status]),
       driver_code: firstNonEmpty([h.driver_code, h.driverCode, drvRaw, driverP.text]),
