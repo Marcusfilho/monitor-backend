@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -19,62 +18,40 @@
     header a{color:#cfe6ff;text-decoration:none;border:1px solid var(--line);padding:6px 10px;border-radius:10px;background:#0b1118}
     .wrap{padding:16px 18px}
     .grid{display:grid;grid-template-columns: 420px 1fr; gap:14px; align-items:start}
-    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-    .card h2{margin:0 0 10px 0;font-size:13px;color:#cfe6ff}
-    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
-    input, textarea{
-      width:100%;padding:10px 12px;border-radius:12px;border:1px solid #273245;background:#0b1118;color:var(--text);outline:none;
-      font-family:var(--sans);font-size:13px
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 14px 12px}
+    h2{margin:0 0 10px;font-size:14px}
+    label{display:block;margin:10px 0 6px;font-size:12px;color:var(--muted)}
+    input{
+      width:100%;padding:10px 11px;border-radius:12px;border:1px solid #273245;background:#0b1118;color:var(--text);
+      font-family:var(--mono);font-size:12px;outline:none
     }
-    textarea{min-height:70px;resize:vertical}
     button{
-      cursor:pointer;border:1px solid #2a3a52;background:#122033;color:#e8eef2;border-radius:12px;padding:10px 12px;font-weight:650;
+      cursor:pointer;border-radius:12px;border:1px solid #273245;background:#1c8cff;color:#061422;
+      padding:10px 12px;font-weight:700;font-size:12px
     }
-    button:hover{border-color:#3b5478}
-    button.secondary{background:#0b1118}
-    .btnrow{display:flex;gap:10px;flex-wrap:wrap}
+    button:disabled{opacity:.55;cursor:not-allowed}
     .hint{font-size:12px;color:var(--muted);line-height:1.4;margin-top:10px}
-    .status{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px}
-    pre{
-      margin:0; padding:12px; border-radius:14px; border:1px solid #273245;
-      background:#000; color:#e8eef2; font-family:var(--mono); font-size:12px; line-height:1.35;
-      overflow:auto; max-height: 74vh;
-    }
-  
-    /* === CAN Snapshot UI (raw_value) === */
-    .kv{font-size:12px;color:var(--muted);margin:8px 0 10px;display:flex;gap:10px;flex-wrap:wrap}
+    .kv{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .pill{border:1px solid #273245;background:#0b1118;padding:4px 8px;border-radius:999px}
     .tableWrap{border:1px solid #273245;border-radius:14px;overflow:auto;max-height:32vh;background:#000}
     table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
-    th,td{padding:7px 10px;border-bottom:1px solid #1f2a38;vertical-align:top}
-    th{position:sticky;top:0;background:#0b1118;color:#cfe6ff}
-    tr:hover td{background:#0b1118}
-    details summary{cursor:pointer;color:#cfe6ff;font-size:12px;margin:10px 0}
-  
+    th,td{border-bottom:1px solid #151f2d;padding:7px 8px;vertical-align:top}
+    th{position:sticky;top:0;background:#070b10;color:#cfe6ff;text-align:left}
+    pre{
+      margin:0; padding:12px; border-radius:14px; border:1px solid #273245;
+      background:#000; color:#e8eef2; font-family:var(--mono); font-size:12px; line-height:1.35;
+      overflow:auto; max-height:34vh;
+    }
+    details{margin-top:10px}
+    summary{cursor:pointer;color:#cfe6ff;font-size:12px}
 
-    /* === Probe screen (validação CAN) === */
     .probeScreen{
       background:#000;border:1px solid #273245;border-radius:20px;padding:10px; margin:8px 0 12px;
       font-family:var(--mono); color:#f4f7fb;
     }
     .probeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-    .probeBox{
-      border:1px solid #25b5ff; border-radius:10px; padding:6px 8px; min-height:42px;
-      display:flex; align-items:center; justify-content:center; text-align:center;
-      background:#02070b;
-      font-size:11px; line-height:1.25;
-    }
-    .probeBox b{color:#fff; font-weight:700}
-    .probeBig{
-      border:1px solid #25b5ff; border-radius:26px; padding:14px 16px; background:#02070b;
-      min-height:260px;
-    }
-    .probeSectionTitle{color:#fff;font-weight:700;margin:8px 0 4px 0;font-size:12px}
-    .probeItem{margin:2px 0; color:#dfeaf7; font-size:11px}
-    .probeItem .k{display:inline-block; min-width:132px; color:#dfeaf7}
-    .probeItem .v{color:#fff; font-style:italic}
-    .probeItem.miss .v{color:#9aaabd}
-    .probeLegend{font-size:11px;color:#93a4b8;margin:8px 0 0}
+    .probeBox{border:1px solid #1b2738;border-radius:14px;padding:10px;min-height:54px}
+    .probeBox b{display:block;margin-bottom:6px;color:#cfe6ff}
     .okDot,.badDot,.unkDot{
       display:inline-block; width:8px; height:8px; border-radius:999px; margin-right:6px; vertical-align:middle;
     }
@@ -82,11 +59,36 @@
     .badDot{background:#ff6161}
     .unkDot{background:#93a4b8}
 
-</style>
+    .probeConsole{border:1px solid #1b2738;border-radius:14px;padding:10px}
+    .probeSection{margin:10px 0 12px}
+    .probeTitle{color:#cfe6ff;margin-bottom:6px;font-weight:700}
+    .probeItem{display:flex;gap:10px;align-items:baseline}
+    .probeItem .k{color:#cfe6ff;min-width:190px}
+    .probeItem .v{color:#e8eef2}
+    .probeItem.miss .v{color:#93a4b8}
+
+    .status{display:flex; align-items:center; gap:10px; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--muted)}
+    .statusDot{width:10px;height:10px;border-radius:999px;background:#93a4b8;opacity:.6}
+    .statusText{flex:1}
+    .progressTiny{height:6px;border-radius:999px;background:#0b1118;border:1px solid #273245;overflow:hidden; display:none; width:140px}
+    .progressTiny .bar{height:100%;width:40%;background:#1c8cff;transform:translateX(-120%);animation:probeIndet 1.1s linear infinite}
+    @keyframes probeIndet{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+    @keyframes probePulse{0%{transform:scale(.85)}50%{transform:scale(1.15)}100%{transform:scale(.85)}}
+
+    .status[data-state="idle"] .progressTiny{display:none}
+    .status[data-state="running"] .statusDot{background:#1c8cff;opacity:1;animation:probePulse 1s ease-in-out infinite}
+    .status[data-state="running"] .progressTiny{display:block}
+    .status[data-state="ok"] .statusDot{background:#36d66b;opacity:1}
+    .status[data-state="warn"] .statusDot{background:#ffb020;opacity:1;animation:probePulse 1.2s ease-in-out infinite}
+    .status[data-state="error"] .statusDot{background:#ff6161;opacity:1}
+
+    .muted{color:var(--muted)}
+    .mono{font-family:var(--mono)}
+  </style>
 </head>
 <body>
 <header>
-  <h1>CAN Probe <span style="opacity:.8;font-size:12px">— cria instalação CAN_PROBE e puxa snapshot</span></h1>
+  <h1>CAN Probe <span style="opacity:.8;font-size:12px">— 1 botão (create + request + autopoll)</span></h1>
   <div class="nav">
     <a href="/app/app_installations_v2.html">Voltar (v2)</a>
     <a href="/app/app_installations_v1.html">v1</a>
@@ -96,45 +98,32 @@
 <div class="wrap">
   <div class="grid">
     <div class="card">
-      <h2>1) Criar “instalação probe” (sem HTML5/SB)</h2>
+      <h2>CAN Probe</h2>
 
       <label>vehicle_id (real, online)</label>
-      <input id="vehicle_id" placeholder="ex.: 1940478" />
+      <input id="vehicle_id" placeholder="ex.: 1904040" inputmode="numeric" />
 
-      <label>target_client_id (opcional)</label>
-      <input id="target_client_id" placeholder="ex.: 218572" />
-
-      <label>vehicleSettingId (opcional)</label>
-      <input id="vehicleSettingId" placeholder="ex.: 5592" />
-
-      <label>comments (opcional)</label>
-      <textarea id="comments" placeholder="ex.: CAN PROBE..."></textarea>
-
-      <div class="btnrow" style="margin-top:12px">
-        <button id="btnCreate">Criar CAN_PROBE</button>
-        <button class="secondary" id="btnReq">Request snapshot</button>
-        <button class="secondary" id="btnLoad">Carregar</button>
-        <button class="secondary" id="btnApprove">Aprovar CAN</button>
+      <div style="margin-top:12px">
+        <button id="btnRun">Rodar probe</button>
       </div>
-
-      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
-
-      <h2>2) Ou inspecionar um installation_id existente</h2>
-      <label>installation_id</label>
-      <input id="installation_id" placeholder="inst_..." />
 
       <div class="hint">
-        <div>• Esse probe depende do backend aceitar <b>service=CAN_PROBE</b> sem enfileirar job HTML5.</div>
-        <div>• Depois você usa <b>Request snapshot</b> e vai recarregando até aparecer CAN.</div>
+        <div>• Fluxo: cria <b>CAN_PROBE</b> → request snapshot → autopoll até preencher CAN.</div>
+        <div>• installation_id atual: <b id="installationView">—</b></div>
       </div>
 
-      <div class="status" id="status">status: pronto</div>
+      <div class="status" id="status" data-state="idle">
+        <span class="statusDot"></span>
+        <span class="statusText" id="statusText">pronto</span>
+        <div class="progressTiny" aria-hidden="true"><div class="bar"></div></div>
+      </div>
     </div>
 
     <div class="card">
       <h2>CAN Probe (validação)</h2>
+
       <div class="kv" id="canSummary">
-        <span class="pill">snapshot: —</span>
+        <span class="pill" id="pillSnap">snapshot: —</span>
         <span class="pill" id="pillParams">params: 0</span>
         <span class="pill" id="pillParamsWith">com valor: 0</span>
         <span class="pill" id="pillMs">module: 0</span>
@@ -148,7 +137,7 @@
         <label style="margin-top:8px">Filtro (Parameters)</label>
         <input id="canFilter" placeholder="filtrar por name / id / type..." />
 
-        <div class="muted" style="font-size:12px;color:var(--muted);margin:10px 0 6px">Parameters</div>
+        <div class="muted" style="font-size:12px;margin:10px 0 6px">Parameters</div>
         <div class="tableWrap">
           <table>
             <thead>
@@ -158,7 +147,7 @@
           </table>
         </div>
 
-        <div class="muted" style="font-size:12px;color:var(--muted);margin:12px 0 6px">Module State</div>
+        <div class="muted" style="font-size:12px;margin:12px 0 6px">Module State</div>
         <div class="tableWrap">
           <table>
             <thead>
@@ -178,34 +167,118 @@
 </div>
 
 <script>
+(() => {
   const qs = (id) => document.getElementById(id);
+
   const outEl = qs("out");
   const statusEl = qs("status");
+  const statusTextEl = qs("statusText");
+  const instViewEl = qs("installationView");
+  const btnRunEl = qs("btnRun");
+  const vehEl = qs("vehicle_id");
+
+  const pillSnapEl = qs("pillSnap");
+  const pillParamsEl = qs("pillParams");
+  const pillParamsWithEl = qs("pillParamsWith");
+  const pillMsEl = qs("pillMs");
+
+  const probeScreenEl = qs("probeScreen");
+  const canFilterEl = qs("canFilter");
+  const paramsBodyEl = qs("tblParamsBody");
+  const msBodyEl = qs("tblMsBody");
+
+  const LS_LAST_INST = "can_probe_last_installation_id";
+
   let LAST_INST = null;
+  let LAST_INST_ID = null;
+  let RUN_SEQ = 0;
+  let __LAST_CAN = { params: [], ms: [] };
 
-  function setStatus(msg){ statusEl.textContent = "status: " + msg; }
-  function pretty(obj){ try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); } }
-
-  async function api(path, { method="GET", json=null } = {}){
-    const res = await fetch(path, {
-      method,
-      headers: json ? { "content-type":"application/json" } : {},
-      body: json ? JSON.stringify(json) : undefined
-    });
-    const text = await res.text().catch(()=>"");
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    return { status: res.status, data };
+  function setStatus(text, state = "idle") {
+    if (statusTextEl) statusTextEl.textContent = text;
+    if (statusEl) statusEl.dataset.state = state;
   }
 
-  function instIdOf(inst){
+  function setBusy(isBusy) {
+    if (btnRunEl) btnRunEl.disabled = !!isBusy;
+    if (vehEl) vehEl.disabled = !!isBusy;
+  }
+
+  function resetUiForNewRun(runId) {
+    // Reset determinístico (evita stale UI / dados do probe anterior)
+    LAST_INST = null;
+    LAST_INST_ID = null;
+    __LAST_CAN = { params: [], ms: [] };
+
+    if (instViewEl) instViewEl.textContent = "—";
+    if (dbgCreateEl) dbgCreateEl.textContent = "—";
+    if (dbgReqEl) dbgReqEl.textContent = "—";
+    if (dbgGetEl) dbgGetEl.textContent = "—";
+
+    if (pillSnapEl) pillSnapEl.textContent = "snapshot: —";
+    if (pillParamsEl) pillParamsEl.textContent = "params: 0";
+    if (pillParamsWithEl) pillParamsWithEl.textContent = "com valor: 0";
+    if (pillMsEl) pillMsEl.textContent = "module: 0";
+
+    if (probeScreenEl) probeScreenEl.textContent = "aguardando snapshot...";
+    if (paramsBodyEl) paramsBodyEl.innerHTML = "";
+    if (msBodyEl) msBodyEl.innerHTML = "";
+    if (outEl) outEl.textContent = "{}";
+
+    if (canFilterEl) canFilterEl.value = "";
+  }
+
+
+  function pretty(obj) {
+    try { return JSON.stringify(obj, null, 2); } catch { return String(obj); }
+  }
+
+  async function api(path, { method = "GET", json = null } = {}) {
+    const res = await fetch(path, {
+      method,
+      headers: json ? { "content-type": "application/json" } : {},
+      body: json ? JSON.stringify(json) : undefined,
+      cache: "no-store"
+    });
+    const text = await res.text().catch(() => "");
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    return { status: res.status, data, text };
+  }
+
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function normKey(s) {
+    return String(s ?? "")
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function firstNonEmpty(arr, fallback = "—") {
+    for (const v of arr) {
+      if (v === undefined || v === null) continue;
+      const s = String(v).trim();
+      if (s === "" || s === "—") continue;
+      return s;
+    }
+    return fallback;
+  }
+
+  function instIdOf(inst) {
     return inst?.installation_id || inst?.id || inst?.installationId || null;
   }
 
-  function pick(obj, paths){
-    for (const p of paths){
-      let cur = obj; let ok = true;
-      for (const k of p){
+  function pick(obj, paths) {
+    for (const p of paths) {
+      let cur = obj;
+      let ok = true;
+      for (const k of p) {
         if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
         else { ok = false; break; }
       }
@@ -214,9 +287,13 @@
     return null;
   }
 
-  function unwrapSnapshot(s){
+  function lastOf(v) {
+    return (Array.isArray(v) && v.length) ? v[v.length - 1] : v;
+  }
+
+  function unwrapSnapshot(s) {
     let cur = s;
-    for (let i=0;i<4;i++){
+    for (let i = 0; i < 6; i++) {
       if (!cur || typeof cur !== "object") break;
       if (cur.snapshot) cur = cur.snapshot;
       else if (cur.data) cur = cur.data;
@@ -226,64 +303,260 @@
     return cur;
   }
 
-  function lastOf(v){
-    if (Array.isArray(v) && v.length) return v[v.length-1];
-    return v;
-  }
-
-  function extractCanSnapshot(inst){
+  function extractCanSnapshot(inst) {
     const candidates = [
-      lastOf(pick(inst, [["can","snapshots"],["can","snapShots"]])),
-      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
-      pick(inst, [["can_snapshot_latest"],["canSnapshotLatest"],["last_can_snapshot"],["lastCanSnapshot"]]),
-      pick(inst, [["can_snapshot"],["canSnapshot"]]),
-      lastOf(pick(inst, [["can_snapshots"],["canSnapshots"]])),
-      lastOf(pick(inst, [["snapshots","can"],["snapshots","can_snapshots"],["snapshots","canSnapshots"]])),
-      pick(inst, [["monitor","can_snapshot"],["monitor","snapshot"],["monitorSnapshot"]]),
-      pick(inst, [["can"],["monitor_snapshot"]])
-    ].filter((v)=>{ if(!v) return false; if (Array.isArray(v) && !v.length) return false; return true; });
+      lastOf(pick(inst, [["can", "snapshots"], ["can", "snapShots"]])),
+      lastOf(pick(inst, [["can_snapshots"], ["canSnapshots"]])),
+      pick(inst, [["can_snapshot_latest"], ["canSnapshotLatest"], ["last_can_snapshot"], ["lastCanSnapshot"]]),
+      pick(inst, [["can_snapshot"], ["canSnapshot"]]),
+      lastOf(pick(inst, [["snapshots", "can"], ["snapshots", "can_snapshots"], ["snapshots", "canSnapshots"]])),
+      pick(inst, [["monitor", "can_snapshot"], ["monitor", "snapshot"], ["monitorSnapshot"]])
+    ].filter((v) => {
+      if (!v) return false;
+      if (Array.isArray(v) && !v.length) return false;
+      return true;
+    });
+
     if (!candidates.length) return null;
-    const c0 = candidates[0];
-  const v0 = Array.isArray(c0) ? lastOf(c0) : c0;
-  return unwrapSnapshot(v0);
+    return unwrapSnapshot(lastOf(candidates[0]));
   }
 
+  // -------------------- HEX + DEC --------------------
+  function looksHexLike(s) {
+    if (s == null) return false;
+    const t0 = String(s).trim();
+    if (!t0) return false;
+    let t = t0.toLowerCase();
+    if (t.startsWith("0x")) t = t.slice(2);
+    if (!/^[0-9a-f]+$/i.test(t)) return false;
 
-  // === CAN Snapshot render (raw_value) ===
-  const canFilterEl = qs("canFilter");
-  const paramsBodyEl = qs("tblParamsBody");
-  const msBodyEl = qs("tblMsBody");
-  const pillParamsEl = qs("pillParams");
-  const pillParamsWithEl = qs("pillParamsWith");
-  const pillMsEl = qs("pillMs");
-  const probeScreenEl = qs("probeScreen");
+    const hasLetters = /[a-f]/i.test(t);
+    const hasLeadingZero = t.length >= 4 && t[0] === "0";
+    const typicalLen = (t.length >= 8);
+    return hasLetters || hasLeadingZero || typicalLen || t0.toLowerCase().startsWith("0x");
+  }
 
-  let __LAST_CAN = { params: [], ms: [] };
+  function fmtHexDec(s) {
+    const t0 = String(s ?? "").trim();
+    if (!t0 || t0 === "—") return "—";
+    if (!looksHexLike(t0)) return t0;
+    let hex = t0.toLowerCase();
+    if (hex.startsWith("0x")) hex = hex.slice(2);
+    try {
+      const dec = BigInt("0x" + hex).toString(10);
+      return `${t0} (${dec})`;
+    } catch {
+      return t0;
+    }
+  }
 
+  function fmtAny(s) {
+    const t = String(s ?? "").trim();
+    if (!t) return "";
+    return looksHexLike(t) ? fmtHexDec(t) : t;
+  }
 
-  // Configurável: adicione/remova aliases conforme sua validação CAN evoluir
-  const PROBE_PARAM_ALIASES = {
-    ignition: ["ignition", "ignition_status", "sys_param_ignition"],
-    server_time: ["server_time"],
-    progress: ["progress"],
-    driver_code: ["driver_code", "driver id", "driver_id"],
-    license_number: ["license_nmbr", "license_number", "license"],
-    serial: ["inner_id", "serial"],
-    client: ["vcl_client_description", "client_description", "client"],
-    model: ["vcl_model", "model"]
-  
-    engine_total_fuel_used: ['00000031', '000000C5', '00002719'],
-    fuel_level_1: ['00000032', '000000C3', '0000879F', '00002717'],
-    engine_fuel_rate: ['0000003C', '00002718'],
-    engine_oil_pressure: ['00000024', '0000010D', '00002723'],
-    engine_oil_temperature_1: ['0000168E', '0000271E'],
-    engine_coolant_temperature: ['0000002F', '0000010E', '0000271F'],
-    engine_fuel_temperature_1: ['0000002E', '0000010F'],
-    sys_param_vehicle_distance: ['00002714'],
-    arm_analog_input_3: ['0000AF8C', '0000D419', '0000D41A'],
-    rpm: ['000000AD', '00000AD', '0000003A', '00002715'],};
+  // -------------------- rows normalize --------------------
+  function rowParamName(p) { return p?.name ?? p?.param_name ?? p?.parameter?.name ?? ""; }
+  function rowParamType(p) { return p?.param_type ?? p?.type ?? p?.parameter?.type ?? ""; }
+  function rowParamId(p) {
+    const v = p?.parameter_id ?? p?.id ?? p?.param_id ?? p?.paramId ?? p?.index ?? null;
+    return (v == null) ? null : String(v);
+  }
+  function rowParamLastUpdate(p) { return p?.last_update ?? p?.lastUpdate ?? p?.ts ?? ""; }
+  function rowParamSource(p) { return p?.source ?? p?.data_source ?? p?.dataSource ?? ""; }
+  function rowParamValue(p) { return p?.value ?? p?.val ?? p?.param_value ?? p?.parameter_value ?? null; }
+  function rowParamRaw(p) { return p?.raw_value ?? p?.rawValue ?? p?.raw ?? p?.parameter_raw_value ?? null; }
 
-  // IDs preferenciais (mais confiável que nome)
+  function extractRowsFromSnapshot(snap) {
+    const s = unwrapSnapshot(snap);
+    if (!s || typeof s !== "object") return { params: [], ms: [] };
+
+    const params = (
+      pick(s, [["parameters"], ["params"], ["parameters_tab", "rows"], ["parametersTab", "rows"]]) ||
+      pick(s, [["tabs", "parameters", "rows"], ["tabs", "parameters"]]) ||
+      []
+    );
+    const moduleState = (
+      pick(s, [["moduleState"], ["module_state"], ["moduleStateTab", "rows"], ["module_state_tab", "rows"]]) ||
+      pick(s, [["tabs", "module_state", "rows"], ["tabs", "moduleState", "rows"]]) ||
+      []
+    );
+
+    return {
+      params: Array.isArray(params) ? params : [],
+      ms: Array.isArray(moduleState) ? moduleState : []
+    };
+  }
+
+  // -------------------- module state rules (3 trues) --------------------
+  function toBool01(v) {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v === 1 || v === "1") return true;
+    if (v === 0 || v === "0") return false;
+    const s = String(v ?? "").trim().toLowerCase();
+    if (s === "true" || s === "yes" || s === "ok") return true;
+    if (s === "false" || s === "no" || s === "fail") return false;
+    return null;
+  }
+
+  function strictOkTriple(row) {
+    if (!row) return false;
+    const a = toBool01(row.active);
+    const o = toBool01(row.ok);
+    const w = toBool01(row.was_ok);
+    return (a === true && o === true && w === true);
+  }
+
+  function pickErr(row) {
+    if (!row) return null;
+    const cand = [row.message, row.error, row.err, row.error_code, row.errorCode, row.code, row.status_msg, row.statusMsg];
+    for (const v of cand) {
+      if (v != null && String(v).trim() !== "") return String(v).trim();
+    }
+    return null;
+  }
+
+  function rowModuleId(r) {
+    const v = r?.id ?? r?.module_id ?? r?.moduleId ?? r?.index ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function rowModuleName(r) { return r?.name ?? r?.module_name ?? r?.moduleName ?? ""; }
+
+  function findModule(msRows, ids, names) {
+    const rows = Array.isArray(msRows) ? msRows : [];
+    const idsSet = new Set((ids || []).map(Number).filter(Number.isFinite));
+    const nameKeys = (names || []).map(normKey).filter(Boolean);
+
+    return rows.find(r => {
+      const id = rowModuleId(r);
+      const nk = normKey(rowModuleName(r));
+      if (id != null && idsSet.has(id)) return true;
+      if (nk && nameKeys.some(k => nk.includes(k))) return true;
+      return false;
+    }) || null;
+  }
+
+  function shortErr(s, max = 26) {
+    const t = String(s ?? "").trim();
+    if (!t) return "";
+    if (t.length <= max) return t;
+    return t.slice(0, max - 1) + "…";
+  }
+
+  function moduleChip(label, row) {
+    if (!row) {
+      return `<span class="pill"><span class="unkDot"></span>${esc(label)}:N/A</span>`;
+    }
+
+    const ok = strictOkTriple(row);
+    const dot = ok ? "okDot" : "badDot";
+
+    // Sempre exibir message quando existir (sem esconder). Tooltip inclui name/id/message.
+    const errFull = safeDecode(pickErr(row)) || "";
+    const nameFull = safeDecode(rowModuleName(row)) || "";
+    const id = rowModuleId(row);
+
+    const base = `${label}:${ok ? "OK" : "FAIL"}`;
+    const shownErr = errFull ? ` • ${shortErr(errFull, 40)}` : "";
+
+    const titleParts = [];
+    if (nameFull) titleParts.push(`name=${nameFull}`);
+    if (id != null) titleParts.push(`id=${id}`);
+    if (errFull) titleParts.push(`message=${errFull}`);
+    const title = titleParts.length ? ` title="${esc(titleParts.join(" • "))}"` : "";
+
+    return `<span class="pill"${title}><span class="${dot}"></span>${esc(base)}${esc(shownErr)}</span>`;
+  }
+
+    function findModuleByName(msRows, nameRes) {
+    const rows = Array.isArray(msRows) ? msRows : [];
+    const res = (nameRes || []).filter(Boolean);
+
+    // Verdade: escolher por NOME do módulo (snapshot). Sem suposição de ID fixo.
+    for (const r of rows) {
+      const nameRaw = safeDecode(rowModuleName(r));
+      if (!nameRaw) continue;
+      for (const re0 of res) {
+        try {
+          if (re0.test(nameRaw)) return r;
+        } catch {}
+      }
+    }
+    return null;
+  }
+
+function commModules(msRows) {
+    return {
+      // Verdade: selecionar por NOME do módulo vindo no snapshot (mesmo que aparece no Debug)
+      // Sem suposição ID fixo -> acessório.
+      can0:   findModuleByName(msRows, [/\bcan\s*0\b/i]),
+      can1:   findModuleByName(msRows, [/\bcan\s*1\b/i]),
+      j1708:  findModuleByName(msRows, [/\bj\s*1708\b/i, /\bj1708\b/i]),
+      dallas: findModuleByName(msRows, [/(dallas|ibutton|i[\s\-]*button)/i]),
+      ramzor: findModuleByName(msRows, [/\bramzor\b/i])
+    };
+  }
+// -------------------- header lite --------------------
+  function extractHeaderObj(snap) {
+    const s = unwrapSnapshot(snap);
+    if (!s || typeof s !== "object") return {};
+    const h = pick(s, [["header", "raw"], ["headerLite", "raw"], ["meta", "header", "raw"], ["summary", "header", "raw"]]) ||
+              pick(s, [["header"], ["headerLite"], ["meta", "header"], ["summary", "header"]]) ||
+              {};
+    return (h && typeof h === "object") ? h : {};
+  }
+
+  function toIgnitionBool(v) {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v === 1 || v === "1") return true;
+    if (v === 0 || v === "0") return false;
+
+    const s = String(v ?? "").trim();
+    if (!s) return null;
+
+    if (looksHexLike(s)) {
+      try {
+        let hex = s.toLowerCase();
+        if (hex.startsWith("0x")) hex = hex.slice(2);
+        const n = BigInt("0x" + hex);
+        return n > 0n;
+      } catch {}
+    }
+
+    const n = Number(s);
+    if (Number.isFinite(n)) return n > 0;
+    return null;
+  }
+
+  function ignitionLamp(raw) {
+    const on = toIgnitionBool(raw);
+    const dot = on === true ? "okDot" : on === false ? "badDot" : "unkDot";
+    const t = (raw == null || String(raw).trim() === "") ? "—" : String(raw);
+    const shown = looksHexLike(t) ? fmtHexDec(t) : t;
+    return `<span class="${dot}"></span>${esc(shown)}`;
+  }
+
+  function getHeaderLite(inst, snap) {
+    const h = extractHeaderObj(snap);
+    const vehicle = inst?.vehicle || inst?.vhcl || inst?.data?.vehicle || null;
+
+    return {
+      ignitionRaw: firstNonEmpty([h.ignition, h.ignition_status, h.sys_param_ignition], "—"),
+      communication: firstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—"),
+      progress: firstNonEmpty([h.progress, h.configuration_progress, h.configurationProgress, inst?.status], "—"),
+      driver_code: firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—"),
+      license_number: firstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—"),
+      serial: firstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—"),
+      client: firstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—"),
+      model: firstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—")
+    };
+  }
+
+  // -------------------- probe lines (param IDs) --------------------
   const PROBE_PARAM_IDS = {
     fuel_total_used: ["00000031", "000000C5"],
     fuel_level: ["00000032", "000000C3"],
@@ -296,286 +569,136 @@
     windshield: ["0000AF8C", "0000D419", "0000D41A"]
   };
 
-  function normKey(s){
-    return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
-  }
-  /* __PROBE_REFINOS_V2__ */
-function strictOkTriple(row){
-  // REGRA: verde apenas se active=true, ok=true e was_ok=true
-  if (!row) return false;
-  const a = toBool01(row.active);
-  const o = toBool01(row.ok);
-  const w = toBool01(row.was_ok);
-  return (a===true && o===true && w===true);
-}
-
-function pickErr(row){
-  if (!row) return null;
-  const cand = [row.message,row.error,row.err,row.error_code,row.errorCode,row.code,row.status_msg,row.statusMsg];
-  for (const v of cand){
-    if (v!=null && String(v).trim()!="") return String(v).trim();
-  }
-  return null;
-}
-
-function toBool01(v){
-    if (v === true || v === false) return v;
-    const s = String(v == null ? "" : v).trim().toLowerCase();
-    if (["1","true","yes","y","ok","on","active"].includes(s)) return true;
-    if (["0","false","no","n","off","inactive"].includes(s)) return false;
-    return null;
-  }
-  function toIgnitionBool(v){
-    const b = toBool01(v);
-    if (b != null) return b;
-    const s = String(v == null ? "" : v).trim();
-    if (!s) return null;
-    if (/^[0-9]+$/.test(s)) return Number(s) !== 0;
-    if (/^[0-9a-fA-F]+$/.test(s)) {
-      const n16 = parseInt(s, 16);
-      if (Number.isFinite(n16)) return n16 !== 0;
-    }
-    return null;
-  }
-  function rowModuleName(r){
-    return String(r?.name ?? r?.module_name ?? r?.moduleName ?? "").trim();
-  }
-  function rowModuleId(r){
-    const v = r?.id ?? r?.module_id ?? r?.moduleId ?? null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  function firstNonEmpty(values){
-    for (const v of values){
-      if (v == null) continue;
-      const s = String(v).trim();
-      if (s) return s;
-    }
-    return "—";
-  }
-  function rawParamValue(p){
-    return firstNonEmpty([
-      p?.raw_value,
-      p?.rawValue,
-      p?.raw?.value,
-      p?.raw,
-      p?.value,
-      p?.val,
-      p?.formatted_value,
-      p?.formattedValue
-    ]);
-  }
-
-  function normIdVariants(v){
-    const out = new Set();
-    if (v == null) return out;
-    let s = String(v).trim().toUpperCase();
-    if (!s) return out;
-    s = s.replace(/^0X/, "");
-    out.add(s);
-
-    if (/^[0-9A-F]+$/.test(s)) {
-      // Interpretando como HEX (caso comum no Monitor)
-      const n16 = parseInt(s, 16);
-      if (Number.isFinite(n16)) out.add(n16.toString(16).toUpperCase().padStart(8, "0"));
-      // Se só dígitos, também tenta decimal (alguns payloads podem vir assim)
-      if (/^[0-9]+$/.test(s)) {
-        const n10 = parseInt(s, 10);
-        if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
-      }
-    } else if (/^[0-9]+$/.test(s)) {
-      const n10 = parseInt(s, 10);
-      if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
-    }
-    return out;
-  }
-
-  function findParamByAliases(rows, aliases){
-    const list = Array.isArray(rows) ? rows : [];
-    const wants = (aliases || []).map(normKey).filter(Boolean);
-    if (!wants.length) return null;
-
-    let best = null;
-    let bestScore = -1;
-    for (const p of list){
-      const nk = normKey(p?.name ?? "");
-      if (!nk) continue;
-      for (const w of wants){
-        let score = -1;
-        if (nk === w) score = 100;
-        else if (nk.includes(w)) score = 70;
-        else if (w.includes(nk) && nk.length >= 6) score = 60;
-        if (score > bestScore){ bestScore = score; best = p; }
-      }
-    }
-    return best;
-  }
-
-  function findParamByIds(rows, ids){
-    const list = Array.isArray(rows) ? rows : [];
-    const want = new Set();
-    (ids || []).forEach(id => {
-      for (const v of normIdVariants(id)) want.add(v);
-    });
-    if (!want.size) return null;
-
-    for (const p of list){
-      const pid = p?.id ?? p?.param_id ?? p?.parameter_id ?? p?.parameter?.id ?? p?.param?.id ?? p?.index;
-      const vars = normIdVariants(pid);
-      for (const v of vars){
-        if (want.has(v)) return p;
-      }
-    }
-    return null;
-  }
-
-  function getParamDisplay(rows, aliases){
-    const p = findParamByAliases(rows, aliases);
-    if (!p) return { ok:false, text:"—", row:null };
-    const txt = firstNonEmpty([displayValue(p), rawParamValue(p)]);
-    return { ok: txt !== "—", text: txt, row: p };
-  }
-
-  function getParamRawByIds(rows, ids, fallbackAliases){
-    const p = findParamByIds(rows, ids) || findParamByAliases(rows, fallbackAliases || []);
-    if (!p) return { ok:false, text:"—", row:null };
-    const txt = rawParamValue(p);
-    return { ok: txt !== "—", text: txt, row: p };
-  }
-
-  function findModule(msRows, ids, names){
-    const rows = Array.isArray(msRows) ? msRows : [];
-    const idsSet = new Set((ids||[]).map(Number).filter(Number.isFinite));
-    const nameKeys = (names||[]).map(normKey).filter(Boolean);
-    return rows.find(r => {
-      const id = rowModuleId(r);
-      const nk = normKey(rowModuleName(r));
-      if (id != null && idsSet.has(id)) return true;
-      if (nk && nameKeys.some(k => nk.includes(k))) return true;
-      return false;
+  function findParamByIds(rows, ids) {
+    const want = new Set((ids || []).map(String).map(s => s.toLowerCase()));
+    return (rows || []).find(p => {
+      const id = rowParamId(p);
+      return id != null && want.has(String(id).toLowerCase());
     }) || null;
   }
 
-  function moduleChip(label, row){
-  const ok = strictOkTriple(row);
-  const dot = ok ? "okDot" : "badDot";
-  const err = pickErr(row);
-  const text = row ? `${label}:${ok?"OK":"FAIL"}` : `${label}:—`;
-  const title = err ? ` title="${esc(err)}"` : "";
-  const warn = err ? " ⚠" : "";
-  return `<span class="pill"${title}><span class="${dot}"></span>${esc(text)}${warn}</span>`;
-}
-
-function commModulesfunction commModules(msRows){
-    const can0 = findModule(msRows, [8], ["can0"]);
-    const can1 = findModule(msRows, [9], ["can1"]);
-    const j1708 = findModule(msRows, [15], ["j1708"]);
-    const dallas = findModule(msRows, [19], ["dallas", "ibutton"]);
-    const ramzor = findModule(msRows, [20], ["ramzor"]);
-    const detail = [can0, can1, j1708].map(r => {
-      if (!r) return "—";
-      const id = rowModuleId(r);
-      const ok = (toBool01(r?.ok) ?? toBool01(r?.active) ?? toBool01(r?.was_ok));
-      return `id ${id}:${ok===true?"OK":ok===false?"FAIL":"?"}`;
-    }).join(" | ");
-    const fmt = (r)=>{
-  if(!r) return '—';
-  const id = rowModuleId(r);
-  const a = toBool01(r.active);
-  const o = toBool01(r.ok);
-  const w = toBool01(r.was_ok);
-  const e = pickErr(r);
-  const m = String(r?.module ?? '').trim();
-  const sub = String(r?.sub ?? '').trim();
-  return `id ${id} a=${a} ok=${o} was_ok=${w} ${m}/${sub}${e?(' err='+e):''}`;
-};
-detail = [fmt(can0),fmt(can1),fmt(j1708),fmt(dallas),fmt(ramzor)].join(' | ');
-return { can0, can1, j1708, dallas, ramzor, detail };
+  function rawParamValue(p) {
+    const rv = rowParamRaw(p);
+    if (rv != null && String(rv).trim() !== "" && String(rv).trim() !== "—") return String(rv).trim();
+    const v = rowParamValue(p);
+    if (v != null && String(v).trim() !== "" && String(v).trim() !== "—") return String(v).trim();
+    return "—";
   }
 
-  function getHeaderLite(inst, snap, rows){
-    const h = pick(snap || {}, [["header"],["headerLite"],["meta","header"],["summary","header"]]) || {};
-
-    const ignP = getParamDisplay(rows, PROBE_PARAM_ALIASES.ignition);
-    const progressP = getParamDisplay(rows, PROBE_PARAM_ALIASES.progress);
-    const driverP = getParamDisplay(rows, PROBE_PARAM_ALIASES.driver_code);
-    const licP = getParamDisplay(rows, PROBE_PARAM_ALIASES.license_number);
-    const serialP = getParamDisplay(rows, PROBE_PARAM_ALIASES.serial);
-    const clientP = getParamDisplay(rows, PROBE_PARAM_ALIASES.client);
-    const modelP = getParamDisplay(rows, PROBE_PARAM_ALIASES.model);
-    const serverTimeP = getParamDisplay(rows, PROBE_PARAM_ALIASES.server_time);
-
-    return {
-      ignition: (function(){
-        const v = firstNonEmpty([ignRaw, h.ignition, h.ignition_status, ignP.text]);
-        if (v===0||v==='0') return '0';
-        if (v===1||v==='1') return '1';
-        if (v===true) return '1';
-        if (v===false) return '0';
-        return '--';
-      })(),
-      communication: firstNonEmpty([h.server_time, h.serverTime, snap?.server_time, serverTimeP.text, snap?.captured_at]),
-      progress: firstNonEmpty([progressP.text, h.progress, h.configuration_progress, inst?.status]),
-      driver_code: firstNonEmpty([driverP.text, h.driver_code, h.driverCode]),
-      license_number: firstNonEmpty([licP.text, h.license_nmbr, h.license_number]),
-      serial: firstNonEmpty([serialP.text, h.inner_id, h.serial]),
-      client: firstNonEmpty([clientP.text, h.vcl_client_description, h.client, h.client_name]),
-      model: firstNonEmpty([modelP.text, h.vcl_model, h.model])
-    };
+  function getParamRawByIds(rows, ids) {
+    const p = findParamByIds(rows, ids);
+    if (!p) return { ok: false, text: "—" };
+    const txt = rawParamValue(p);
+    return { ok: txt !== "—", text: txt };
   }
 
-  function probeLine(label, param){
+  function probeLine(label, param) {
     const cls = (param && param.ok) ? "probeItem" : "probeItem miss";
-    return `<div class="${cls}"><span class="k">${esc(label)}:</span> <span class="v">[${esc(param ? param.text : "—")}]</span></div>`;
+    const val = param ? param.text : "—";
+    const shown = (val !== "—") ? fmtHexDec(val) : "—";
+    return `<div class="${cls}"><span class="k">${esc(label)}:</span> <span class="v">[${esc(shown)}]</span></div>`;
   }
 
-  function ignitionLamp(value){
-    const on = toIgnitionBool(value);
-    const dot = on === true ? "okDot" : on === false ? "badDot" : "unkDot";
-    return `<span class="${dot}"></span>${esc(String(value ?? "—"))}`;
+  // -------------------- UI render --------------------
+  function displayValueCell(p) {
+    const v = rowParamValue(p);
+    const rv = rowParamRaw(p);
+    const vS = (v == null) ? "" : String(v).trim();
+    const rvS = (rv == null) ? "" : String(rv).trim();
+
+    if (rvS && rvS !== "—") {
+      const rawShown = fmtHexDec(rvS);
+      if (vS && vS !== "—" && vS !== rvS) {
+        return `${esc(fmtAny(vS))}<div class="muted" style="font-size:11px;margin-top:2px">raw: ${esc(rawShown)}</div>`;
+      }
+      return esc(rawShown);
+    }
+    if (vS && vS !== "—") return esc(fmtAny(vS));
+    return "";
   }
 
-  function renderProbeScreen(inst, snap, x){
+  function renderParamsTable(params, filter) {
+    if (!paramsBodyEl) return;
+    const f = normKey(filter || "");
+    const rows = (params || []).filter(p => {
+      if (!f) return true;
+      const hay = normKey([rowParamName(p), rowParamType(p), rowParamId(p)].join(" "));
+      return hay.includes(f);
+    });
+
+    paramsBodyEl.innerHTML = rows.slice(0, 600).map(p => {
+      const name = esc(rowParamName(p));
+      const type = esc(rowParamType(p));
+      const lastU = esc(firstNonEmpty([rowParamLastUpdate(p)], ""));
+      const src = esc(firstNonEmpty([rowParamSource(p)], ""));
+      const valCell = displayValueCell(p);
+      return `<tr><td>${name}</td><td>${type}</td><td>${valCell}</td><td>${lastU}</td><td>${src}</td></tr>`;
+    }).join("");
+
+    if (rows.length > 600) {
+      paramsBodyEl.innerHTML += `<tr><td colspan="5" class="muted" style="font-size:11px;padding:8px">(${rows.length} linhas; exibindo 600)</td></tr>`;
+    }
+  }
+
+  function renderMsTable(msRows) {
+    if (!msBodyEl) return;
+    const rows = Array.isArray(msRows) ? msRows : [];
+    msBodyEl.innerHTML = rows.map(r => {
+      const id = rowModuleId(r);
+      const name = esc(rowModuleName(r));
+      const a = toBool01(r.active);
+      const o = toBool01(r.ok);
+      const w = toBool01(r.was_ok);
+      const err = esc(firstNonEmpty([pickErr(r)], ""));
+      return `<tr>
+        <td>${id == null ? "" : esc(String(id))}</td>
+        <td>${name}</td>
+        <td>${a === null ? "" : esc(String(a))}</td>
+        <td>${o === null ? "" : esc(String(o))}</td>
+        <td>${w === null ? "" : esc(String(w))}</td>
+        <td>${err}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderProbeScreen(inst, snap, x) {
     if (!probeScreenEl) return;
-    const rows0 = (x && x.params) || [];
-    const hdr = (snap && snap.header && typeof snap.header === "object") ? snap.header : {};
-    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:"+k, name: k, value: hdr[k], raw_value: hdr[k] }));
-    const rows = rows0.concat(hdrRows);
-    /*__PROBE_HDRROWS_V1__*/
-    const msRows = (x && x.ms) || [];
-    const comm = commModules(msRows);
-    const header = getHeaderLite(inst, snap, rows);
 
-    // CAN params por ID (mostrar raw_value)
-    const fuelTotal   = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_total_used, ["engine_total_fuel_used"]);
-    const fuelLvl     = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_level, ["fuel_level_1"]);
-    const fuelRate    = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_rate, ["engine_fuel_rate"]);
-    const oilPressure = getParamRawByIds(rows, PROBE_PARAM_IDS.oil_pressure, ["engine_oil_pressure"]);
-    const oilTemp     = getParamRawByIds(rows, PROBE_PARAM_IDS.oil_temp, ["engine_oil_temperature_1"]);
-    const coolantTemp = getParamRawByIds(rows, PROBE_PARAM_IDS.coolant_temp, ["engine_coolant_temperature"]);
-    const fuelTemp    = getParamRawByIds(rows, PROBE_PARAM_IDS.fuel_temp, ["engine_fuel_temperature_1"]);
-    const odometer    = getParamRawByIds(rows, PROBE_PARAM_IDS.odometer, ["sys_param_vehicle_distance"]);
-    const windshield  = getParamRawByIds(rows, PROBE_PARAM_IDS.windshield, ["arm_analog_input_3"]);
+    const params = (x && x.params) || [];
+    const msRows = (x && x.ms) || [];
+
+    const header = getHeaderLite(inst, snap);
+    const comm = commModules(msRows);
+
+    const fuelTotal   = getParamRawByIds(params, PROBE_PARAM_IDS.fuel_total_used);
+    const fuelLvl     = getParamRawByIds(params, PROBE_PARAM_IDS.fuel_level);
+    const fuelRate    = getParamRawByIds(params, PROBE_PARAM_IDS.fuel_rate);
+    const oilPressure = getParamRawByIds(params, PROBE_PARAM_IDS.oil_pressure);
+    const oilTemp     = getParamRawByIds(params, PROBE_PARAM_IDS.oil_temp);
+    const coolantTemp = getParamRawByIds(params, PROBE_PARAM_IDS.coolant_temp);
+    const fuelTemp    = getParamRawByIds(params, PROBE_PARAM_IDS.fuel_temp);
+    const odometer    = getParamRawByIds(params, PROBE_PARAM_IDS.odometer);
+    const windshield  = getParamRawByIds(params, PROBE_PARAM_IDS.windshield);
 
     probeScreenEl.innerHTML = `
       <div class="probeRow">
-        <div class="probeBox"><b>ignition</b><br>${ignitionLamp(header.ignition)}</div>
-        <div class="probeBox"><b>communication</b><br>${esc(header.communication)}</div>
+        <div class="probeBox"><b>ignition</b>${ignitionLamp(header.ignitionRaw)}</div>
+        <div class="probeBox"><b>communication</b>${esc(header.communication)}</div>
       </div>
       <div class="probeRow">
-        <div class="probeBox"><b>progress</b><br>${esc(header.progress)}</div>
-        <div class="probeBox"><b>driver code</b><br>${esc(header.driver_code)}</div>
+        <div class="probeBox"><b>progress</b>${esc(header.progress)}</div>
+        <div class="probeBox"><b>driver code</b>${esc(header.driver_code)}</div>
       </div>
       <div class="probeRow">
-        <div class="probeBox"><b>[license number]</b> ${esc(header.license_number)}</div>
-        <div class="probeBox"><b>serial</b> ${esc(header.serial)}</div>
+        <div class="probeBox"><b>license number</b>${esc(header.license_number)}</div>
+        <div class="probeBox"><b>serial</b>${esc(header.serial)}</div>
       </div>
       <div class="probeRow">
-        <div class="probeBox"><b>client</b> ${esc(header.client)}</div>
-        <div class="probeBox"><b>model</b> ${esc(header.model)}</div>
+        <div class="probeBox"><b>client</b>${esc(header.client)}</div>
+        <div class="probeBox"><b>model</b>${esc(header.model)}</div>
       </div>
 
-      <div class="kv" style="margin:4px 0 8px">
+      <div class="kv" style="margin:6px 0 10px">
         ${moduleChip("CAN0", comm.can0)}
         ${moduleChip("CAN1", comm.can1)}
         ${moduleChip("J1708", comm.j1708)}
@@ -583,664 +706,232 @@ return { can0, can1, j1708, dallas, ramzor, detail };
         ${moduleChip("Ramzor", comm.ramzor)}
       </div>
 
-      <div class="probeBig">
-        <div class="probeSectionTitle">FUEL</div>
-        ${probeLine("engine_total_fuel_used", fuelTotal)}
-        ${probeLine("fuel_level_1", fuelLvl)}
-        ${probeLine("engine_fuel_rate", fuelRate)}
+      <div class="probeConsole">
+        <div class="probeSection">
+          <div class="probeTitle">FUEL</div>
+          ${probeLine("engine_total_fuel_used", fuelTotal)}
+          ${probeLine("fuel_level_1", fuelLvl)}
+          ${probeLine("engine_fuel_rate", fuelRate)}
+        </div>
 
-        <div class="probeSectionTitle">PRESSURE</div>
-        ${probeLine("engine_oil_pressure", oilPressure)}
+        <div class="probeSection">
+          <div class="probeTitle">PRESSURE</div>
+          ${probeLine("engine_oil_pressure", oilPressure)}
+        </div>
 
-        <div class="probeSectionTitle">TEMPERATURE</div>
-        ${probeLine("engine_oil_temperature_1", oilTemp)}
-        ${probeLine("engine_coolant_temperature", coolantTemp)}
-        ${probeLine("engine_fuel_temperature_1", fuelTemp)}
+        <div class="probeSection">
+          <div class="probeTitle">TEMPERATURE</div>
+          ${probeLine("engine_oil_temperature_1", oilTemp)}
+          ${probeLine("engine_coolant_temperature", coolantTemp)}
+          ${probeLine("engine_fuel_temperature_1", fuelTemp)}
+        </div>
 
-        <div class="probeSectionTitle">ODOMETER</div>
-        ${probeLine("sys_param_vehicle_distance", odometer)}
+        <div class="probeSection">
+          <div class="probeTitle">ODOMETER</div>
+          ${probeLine("sys_param_vehicle_distance", odometer)}
+        </div>
 
-        <div class="probeSectionTitle">WINDSHIELD</div>
-        ${probeLine("arm_analog_input_3", windshield)}
-
-        <div class="probeLegend">${esc(comm.detail)}</div>
+        <div class="probeSection">
+          <div class="probeTitle">WINDSHIELD</div>
+          ${probeLine("arm_analog_input_3", windshield)}
+        </div>
       </div>
     `;
   }
 
-
-  // PROBE_HELPERS_RESTORED_V1
-  function esc(v){
-    const s = (v == null) ? "—" : String(v);
-    return s.replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
-  }
-
-  function rowParamId(p){
-    return p?.id ?? p?.param_id ?? p?.parameter_id ?? p?.parameter?.id ?? p?.param?.id ?? p?.index ?? null;
-  }
-
-  function displayValue(p){
-    const v = firstNonEmpty([p?.value, p?.val, p?.param_value, p?.parameter_value]);
-    if (v !== "—") return String(v);
-    const rv = firstNonEmpty([p?.raw_value, p?.rawValue, p?.raw, p?.parameter_raw_value]);
-    if (rv !== "—") return String(rv);
-    return "";
-  }
-
-  function extractRowsFromSnapshot(snap){
-    const s = snap || {};
-    const pickArr = (cands) => {
-      for (const x of cands){
-        if (Array.isArray(x)) return x;
-        if (x && Array.isArray(x.rows)) return x.rows;
-        if (x && Array.isArray(x.items)) return x.items;
-        if (x && Array.isArray(x.data)) return x.data;
-      }
-      return [];
-    };
-
-    const params = pickArr([
-      s.parameters, s.params,
-      s?.data?.parameters, s?.data?.params,
-      s?.snapshot?.parameters, s?.snapshot?.params,
-      s?.payload?.parameters, s?.payload?.params
-    ]);
-
-    const ms = pickArr([
-      s.moduleState, s.module_state, s.modules,
-      s?.data?.moduleState, s?.data?.module_state, s?.data?.modules,
-      s?.snapshot?.moduleState, s?.snapshot?.module_state, s?.snapshot?.modules,
-      s?.payload?.moduleState, s?.payload?.module_state, s?.payload?.modules
-    ]);
-
-    return { params, ms };
-  }
-
-  function renderParamsTable(rows, filterText){
-    if (!paramsBodyEl) return;
-    const q = String(filterText || "").trim().toLowerCase();
-    const list = Array.isArray(rows) ? rows : [];
-
-    const filtered = !q ? list : list.filter(p => {
-      const idTxt = normIdVariants(rowParamId(p)).join(" ");
-      const hay = [
-        p?.name, p?.type, p?.source, p?.last_update, p?.lastUpdate,
-        p?.value, p?.raw_value, idTxt
-      ].map(v => String(v ?? "").toLowerCase()).join(" | ");
-      return hay.includes(q);
-    });
-
-    if (!filtered.length){
-      paramsBodyEl.innerHTML = `<tr><td colspan="5" class="muted">sem parâmetros</td></tr>`;
-      return;
-    }
-
-    paramsBodyEl.innerHTML = filtered.map(p => {
-      const name = p?.name ?? "—";
-      const type = p?.type ?? p?.param_type ?? "—";
-      const idTxt = normIdVariants(rowParamId(p))[0] || "";
-      const valueTxt = displayValue(p) || "—";
-      const rawTxt = firstNonEmpty([p?.raw_value, p?.rawValue, p?.raw]);
-      const shown = (rawTxt !== "—" && valueTxt !== rawTxt) ? `${valueTxt} / ${rawTxt}` : valueTxt;
-      const last = firstNonEmpty([p?.last_update, p?.lastUpdate, p?.updated_at, p?.ts]);
-      const source = firstNonEmpty([p?.source, p?.src]);
-      const nameHtml = idTxt ? `${esc(name)} <span class="muted" style="font-size:11px">[#${esc(idTxt)}]</span>` : esc(name);
-
-      return `<tr>
-        <td>${nameHtml}</td>
-        <td>${esc(type)}</td>
-        <td>${esc(shown)}</td>
-        <td>${esc(last)}</td>
-        <td>${esc(source)}</td>
-      </tr>`;
-    }).join("");
-  }
-
-  function renderMsTable(msRows){
-    if (!msBodyEl) return;
-    const list = Array.isArray(msRows) ? msRows : [];
-
-    if (!list.length){
-      msBodyEl.innerHTML = `<tr><td colspan="6" class="muted">sem module state</td></tr>`;
-      return;
-    }
-
-    msBodyEl.innerHTML = list.map(r => {
-      const id = rowModuleId(r);
-      const name = rowModuleName(r) || "—";
-      const active = firstNonEmpty([r?.active]);
-      const ok = firstNonEmpty([r?.ok]);
-      const wasOk = firstNonEmpty([r?.was_ok, r?.wasOk]);
-      const msg = firstNonEmpty([r?.message, r?.msg, r?.error]);
-
-      return `<tr>
-        <td>${esc(id == null ? "—" : id)}</td>
-        <td>${esc(name)}</td>
-        <td>${esc(active)}</td>
-        <td>${esc(ok)}</td>
-        <td>${esc(wasOk)}</td>
-        <td>${esc(msg)}</td>
-      </tr>`;
-    }).join("");
-  }
-
-  function renderCanSnapshot(snap){
+  function renderCanSnapshot(snap) {
     const x = extractRowsFromSnapshot(snap);
     __LAST_CAN = x;
 
-    const withValue = x.params.filter(p => displayValue(p).trim() !== "").length;
+    const withValue = x.params.filter(p => {
+      const v = rowParamValue(p);
+      const rv = rowParamRaw(p);
+      return (v != null && String(v).trim() !== "" && String(v).trim() !== "—") ||
+             (rv != null && String(rv).trim() !== "" && String(rv).trim() !== "—");
+    }).length;
 
-    pillParamsEl.textContent = `params: ${x.params.length}`;
-    pillParamsWithEl.textContent = `com valor: ${withValue}`;
-    pillMsEl.textContent = `module: ${x.ms.length}`;
+    if (pillParamsEl) pillParamsEl.textContent = `params: ${x.params.length}`;
+    if (pillParamsWithEl) pillParamsWithEl.textContent = `com valor: ${withValue}`;
+    if (pillMsEl) pillMsEl.textContent = `module: ${x.ms.length}`;
 
-    try { renderProbeScreen(LAST_INST, snap, x); } catch(_e) {
-      console.error("[CAN_PROBE] renderProbeScreen error", _e);
-      if (probeScreenEl) probeScreenEl.textContent = "erro ao renderizar probe (veja console)";
+    try { renderProbeScreen(LAST_INST, snap, x); } catch (e) {
+      console.error("[CAN_PROBE] renderProbeScreen error", e);
+      if (probeScreenEl) probeScreenEl.textContent = "erro ao renderizar (veja console)";
     }
-    renderParamsTable(x.params, (canFilterEl && canFilterEl.value) ? canFilterEl.value : "");
+
+    renderParamsTable(x.params, canFilterEl ? canFilterEl.value : "");
     renderMsTable(x.ms);
   }
 
-  if (canFilterEl){
+  if (canFilterEl) {
     canFilterEl.addEventListener("input", () => {
       renderParamsTable(__LAST_CAN.params, canFilterEl.value);
     });
   }
 
-
-  async function loadInstallation(id){
-    setStatus("carregando...");
+  async function loadInstallation(id, runId = null) {
     const r = await api(`/api/installations/${encodeURIComponent(id)}`);
-    if (r.status === 200 && r.data){
-      const inst = r.data;
-      LAST_INST = inst;
-      const snap = extractCanSnapshot(inst);
-      
-      
-          renderCanSnapshot(snap);
-outEl.textContent = pretty({ installation: inst, can_snapshot: snap });
-      qs("installation_id").value = instIdOf(inst) || id;
-      localStorage.setItem("can_probe_last_installation_id", instIdOf(inst) || id);
+    if (runId != null && runId !== RUN_SEQ) return null;
+    if (r.status !== 200 || !r.data) return null;
 
-      const st = (inst && inst.status) ? String(inst.status) : "ok";
-      setStatus(st);
-    } else {
-      outEl.textContent = pretty(r);
-      if (r.status === 404){
-        // id antigo no localStorage costuma causar confusão
-        try { localStorage.removeItem("can_probe_last_installation_id"); } catch(_){}
-        setStatus("installation_id não encontrado (limpei o cache local)");
-      } else {
-        setStatus("erro ao carregar");
-      }
+    const inst = r.data;
+    LAST_INST = inst;
+    LAST_INST_ID = instIdOf(inst) || id;
+    if (instViewEl) instViewEl.textContent = LAST_INST_ID || "—";
+    localStorage.setItem(LS_LAST_INST, LAST_INST_ID || "");
+
+    const snap = extractCanSnapshot(inst);
+    if (snap) renderCanSnapshot(snap);
+
+    const snapKey = snap ? firstNonEmpty([snap.captured_at, snap.server_time, snap.serverTime], "ok") : "—";
+    if (pillSnapEl) pillSnapEl.textContent = `snapshot: ${snapKey}`;
+
+    if (outEl) {
+      outEl.textContent = pretty({
+        installation: {
+          installation_id: instIdOf(inst),
+          status: inst.status || null,
+          jobs_tail: Array.isArray(inst.jobs) ? inst.jobs.slice(-3) : null
+        },
+        can_snapshot: snap ? { keys: Object.keys(snap).slice(0, 50) } : null
+      });
     }
+
+    return { inst, snap };
+  }
+
+  async function requestSnapshot(id, vehicleId, runId) {
+    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, {
+      method: "POST",
+      json: { vehicle_id: vehicleId }
+    });
+    if (runId !== RUN_SEQ) return null;
     return r;
   }
 
-  async function createProbe(){
-    const vehicleId = qs("vehicle_id").value.trim();
-    if (!vehicleId) return setStatus("informe vehicle_id");
-    setStatus("criando CAN_PROBE...");
-    const payload = {
-      service: "CAN_PROBE",
-      vehicle_id: vehicleId,
-      vehicleId: vehicleId,
-      target_client_id: qs("target_client_id").value.trim() || null,
-      vehicleSettingId: qs("vehicleSettingId").value.trim() || null,
-      comments: qs("comments").value || null,
-      installationDate: new Date().toISOString()
-    };
-    const r = await api("/api/installations", { method:"POST", json: payload });
-    outEl.textContent = pretty(r);
-    if (r.status === 201 && r.data){
-      const id = instIdOf(r.data);
-      if (id){
-        qs("installation_id").value = id;
-        setStatus("criado — carregando...");
-        await loadInstallation(id);
-      } else {
-        setStatus("criado (sem id no retorno)");
-      }
-    } else {
-      setStatus("erro ao criar");
-    }
-  }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  async function requestSnapshot(){
-    const id = qs("installation_id").value.trim();
-    if (!id) return setStatus("informe installation_id");
+  async function pollCan(id, runId, { tries = 180 } = {}) {
+    for (let i = 0; i < tries; i++) {
+      if (runId !== RUN_SEQ) return null;
 
-    // resolve vehicle_id: input -> last loaded installation -> payload
-    let vehicle_id = Number(qs("vehicle_id").value.trim());
-    if (!Number.isFinite(vehicle_id) || vehicle_id <= 0){
-      const v = pick(LAST_INST, [
-        ["resolved","vehicle_id"],
-        ["payload","vehicle_id"],
-        ["payload","vehicleId"],
-        ["vehicle_id"],
-        ["vehicleId"]
-      ]);
-      vehicle_id = (v != null) ? Number(v) : NaN;
-    }
-    if (!Number.isFinite(vehicle_id) || vehicle_id <= 0){
-      return setStatus("informe vehicle_id (input ou payload/resolved)");
-    }
+      const got = await loadInstallation(id, runId);
+      if (runId !== RUN_SEQ) return null;
 
-    setStatus("request snapshot...");
-    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, {
-      method:"POST",
-      json:{ vehicle_id }
-    });
+      if (got && got.inst) {
+        const inst = got.inst;
+        const snap = got.snap;
 
-    // mostra resposta do POST (útil p/ headers/erros)
-    outEl.textContent = pretty({ request: r });
+        const status = String(inst.status || "");
+        const statusReady = (status === "CAN_SNAPSHOT_READY");
+        const statusErr = (status === "CAN_SNAPSHOT_ERROR");
 
-    if (r.status >= 400){
-      setStatus("erro no request snapshot");
-      return;
-    }
+        const x = extractRowsFromSnapshot(snap);
+        const hasData = (x.params.length > 0) || (x.ms.length > 0);
 
-    // polling: esperar backend preencher can.summary/snapshots
-    await pollCan(id);
-  }
-
-  async function pollCan(id, { tries=120, sleepMs=700 } = {}){
-    const t0 = Date.now();
-    /* __PROBE_POLL_FAST_V1__ */
-    for (let i=0; i<tries; i++){
-      const r = await api(`/api/installations/${encodeURIComponent(id)}`);
-      if (r.status === 200 && r.data){
-        const inst = r.data;
-        LAST_INST = inst;
-        const snap = extractCanSnapshot(inst);
-        try { renderCanSnapshot(snap); } catch(_e) {}
-        outEl.textContent = pretty({
-          poll: { attempt: i+1, tries, inst_status: inst.status || null },
-          inst: { installation_id: instIdOf(inst), status: inst.status || null, jobs: (inst.jobs||[]).slice(-3) },
-          snap_counts: (snap && snap.counts) ? snap.counts : null
-        });
-const hasSummary = !!(snap && snap.summary);
-        const hasList = !!(snap && Array.isArray(snap.snapshots) && snap.snapshots.length);
-        const hasCounts = !!(snap && snap.counts && ((snap.counts.params_total||0)>0 || (snap.counts.module_total||0)>0));
-        const hasParams = !!(snap && Array.isArray(snap.parameters) && snap.parameters.length);
-        const hasModule = !!(snap && Array.isArray(snap.moduleState) && snap.moduleState.length);
-        const statusReady = String(inst.status || "") === "CAN_SNAPSHOT_READY";
-        const statusErr = String(inst.status || "") === "CAN_SNAPSHOT_ERROR";
         if (statusErr) {
           const lastJob = (Array.isArray(inst.jobs) && inst.jobs.length) ? inst.jobs[inst.jobs.length - 1] : null;
-          const meta = lastJob && lastJob.meta ? lastJob.meta : null;
-          const errs = (meta && Array.isArray(meta.errors) && meta.errors.length) ? meta.errors
-                    : (meta && meta.summary && Array.isArray(meta.summary.errors) && meta.summary.errors.length) ? meta.summary.errors
-                    : (inst.can && inst.can.summary && Array.isArray(inst.can.summary.errors) && inst.can.summary.errors.length) ? inst.can.summary.errors
-                    : null;
-          const msg = (meta && (meta.message || meta.error || meta.reason)) ? (meta.message || meta.error || meta.reason)
-                    : (errs && errs[0]) ? errs[0]
-                    : 'Snapshot falhou';
-          setStatus(`CAN falhou ❌ (${String(msg).slice(0,120)}) — use Request snapshot novamente`);
-          return r;
+          const meta = lastJob?.meta || null;
+          const msg = firstNonEmpty([meta?.message, meta?.error, meta?.reason], "Snapshot falhou");
+          setStatus(`CAN falhou ❌ (${String(msg).slice(0, 120)})`, "error");
+          return inst;
         }
-        /*__PROBE_STOP_ON_ERROR__*/
 
-        
-        const readyByData = (hasCounts || hasModule || hasList);
-        if (statusReady && !readyByData) {
-          setStatus(`Snapshot vazio ⚠️ (READY mas sem dados). Clique "Request snapshot" novamente.`);
+        if (statusReady && hasData) {
+          setStatus(`CAN pronto ✅ (params=${x.params.length}, modules=${x.ms.length})`, "ok");
+          return inst;
         }
-        /*__PROBE_READY_BY_DATA__*/
-if ((statusReady && readyByData) || hasSummary || hasList || hasCounts || hasParams || hasModule){
-          const p = (snap && snap.counts && (snap.counts.params_total||snap.counts.paramsTotal)) || (snap && snap.parameters && snap.parameters.length) || 0;
-          const m = (snap && snap.counts && (snap.counts.module_total||snap.counts.moduleTotal)) || (snap && snap.moduleState && snap.moduleState.length) || 0;
-          setStatus(`CAN pronto ✅ (params=${p}, modules=${m})`);
-          return r;
-        }
+
+        if (hasData) setStatus(`capturando... (params=${x.params.length}, modules=${x.ms.length})`, "running");
+        else setStatus(`aguardando CAN... (${i + 1}/${tries})`, "running");
       } else {
-        outEl.textContent = pretty({ poll: { attempt: i+1, tries }, error: r });
+        setStatus(`aguardando instalação... (${i + 1}/${tries})`, "running");
       }
 
-      setStatus(`aguardando CAN... (${i+1}/${tries}) t=${Math.round((Date.now()-t0)/1000)}s`);
-      const delay = (i < 15) ? 500 : (i < 45) ? 900 : 1500;
-      await new Promise(res => setTimeout(res, delay));
+      let wait = 700;
+      if (i >= 12) wait = 2000;
+      if (i >= 60) wait = 3000;
+      await sleep(wait);
     }
-    setStatus("timeout aguardando CAN — use Carregar");
+
+    setStatus("timeout aguardando CAN — tente novamente", "warn");
     return null;
   }
 
-async function approveCan(){
-    const id = qs("installation_id").value.trim();
-    if (!id) return setStatus("informe installation_id");
-    setStatus("aprovando CAN...");
-    const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/approve-can`, { method:"POST", json:{} });
-    outEl.textContent = pretty(r);
-    await loadInstallation(id);
-  }
-
-  qs("btnCreate").addEventListener("click", createProbe);
-  qs("btnReq").addEventListener("click", requestSnapshot);
-  qs("btnLoad").addEventListener("click", () => loadInstallation(qs("installation_id").value.trim()));
-  qs("btnApprove").addEventListener("click", approveCan);
-
-  const last = localStorage.getItem("can_probe_last_installation_id");
-  if (last){
-    qs("installation_id").value = last;
-    loadInstallation(last).catch(()=>{});
-  }
-</script>
-
-<script>
-/* __PROBE_ENRICH_V1__ */
-(function () {
-  if (window.__PROBE_ENRICH_V1_LOADED__) return;
-  window.__PROBE_ENRICH_V1_LOADED__ = true;
-
-  const ORIG_FETCH = window.fetch ? window.fetch.bind(window) : null;
-  if (!ORIG_FETCH) return;
-
-  function isObj(x){ return x && typeof x === "object"; }
-
-  function deepFindKeyValue(root, keyRegex, maxDepth=8) {
-    const seen = new Set();
-    function walk(x, depth) {
-      if (!isObj(x) || seen.has(x) || depth > maxDepth) return null;
-      seen.add(x);
-      if (Array.isArray(x)) {
-        for (const it of x) {
-          const r = walk(it, depth+1);
-          if (r != null) return r;
-        }
-        return null;
-      }
-      for (const k of Object.keys(x)) {
-        if (keyRegex.test(String(k))) {
-          const v = x[k];
-          if (typeof v === "string" || typeof v === "number") return v;
-        }
-      }
-      for (const k of Object.keys(x)) {
-        const r = walk(x[k], depth+1);
-        if (r != null) return r;
-      }
-      return null;
-    }
-    return walk(root, 0);
-  }
-
-  function pickSnapshot(inst) {
-    const can = (inst && (inst.can || inst.installation?.can)) || {};
-    const snaps = can.snapshots || [];
-    if (Array.isArray(snaps) && snaps.length) return snaps[snaps.length - 1];
-
-    // fallback: can_snapshot_latest/can_snapshot
-    return inst.can_snapshot_latest || inst.can_snapshot ||
-           inst.installation?.can_snapshot_latest || inst.installation?.can_snapshot || null;
-  }
-
-  function getCounts(snap) {
-    // em alguns builds, raw_events virou rawCounts (dict). Aceitamos tudo aqui.
-    const c = snap?.raw_counts || snap?.rawCounts || snap?.raw_events || snap?.rawEvents || snap?.raw_events_counts || null;
-    return (c && typeof c === "object") ? c : {};
-  }
-
-  function setField(name, value) {
-    const ids = [
-      name, name + "_", "v_" + name, "val_" + name, "kv_" + name, "card_" + name
-    ];
-    for (const id of ids) {
-      const el = document.getElementById(id);
-      if (el) { el.textContent = value; return true; }
-    }
-    // fallback: data-field
-    const el2 = document.querySelector('[data-field="'+name+'"]');
-    if (el2) { el2.textContent = value; return true; }
-    return false;
-  }
-
-  function enrichAndApply(instJson) {
-    const inst = instJson.installation || instJson;
-    const snap = pickSnapshot(inst);
-    if (!snap) return;
-
-    const hdr = snap.header || {};
-    const hdrRaw = hdr.raw || hdr.header_raw || hdr;
-
-    // model/manufacturer (do header.raw)
-    const manufacturer = deepFindKeyValue(hdrRaw, /manufacturer/i);
-    // evita pegar "module" por engano: procura model mas não "module"
-    const model = deepFindKeyValue(hdrRaw, /\bmodel\b/i) || deepFindKeyValue(hdrRaw, /model_name|vehicle_model/i);
-    const modelText = [manufacturer, model].filter(Boolean).join(" ").trim();
-    if (modelText) setField("model", modelText);
-
-    // communication (derivado por counts)
-    const counts = getCounts(snap);
-    const msg = Number(counts.unit_messages_events || counts.unitMessagesEvents || 0);
-    const conn = Number(counts.unit_conn_events || counts.unitConnEvents || 0);
-    let comm = "--";
-    if (msg > 0 || conn > 0) comm = `ONLINE (msg:${msg} conn:${conn})`;
-    setField("communication", comm);
-
-    // cliente: por enquanto mantém o que já existe no UI (normalmente client_id já aparece)
-    // (depois a gente enriquece com nome via catálogo)
-    // Só garante que, se existir um campo "client" de valor, ele seja mostrado:
-    const clientId = hdr.client_id || inst.client_id || inst.payload?.target_client_id || null;
-    if (clientId != null) setField("client", String(clientId));
-
-    // log leve pra debug
-    if (!window.__PROBE_ENRICH_V1_LOGGED__) {
-      window.__PROBE_ENRICH_V1_LOGGED__ = true;
-      console.log("[probe enrich] applied", { modelText, comm, clientId, counts });
-    }
-  }
-
-  window.fetch = async function (...args) {
-    const url = String(args[0] || "");
-    const resp = await ORIG_FETCH(...args);
-    try {
-      // pega apenas chamadas de installations
-      if (url.includes("/api/installations/") && resp && resp.clone) {
-        const clone = resp.clone();
-        // tenta JSON sem quebrar o fluxo
-        clone.json().then(enrichAndApply).catch(() => {});
-      }
-    } catch (e) {}
-    return resp;
-  };
-})();
-</script>
-
-
-<script>
-/* __PROBE_ENRICH_V3__ */
-(function () {
-  if (window.__PROBE_ENRICH_V3_LOADED__) return;
-  window.__PROBE_ENRICH_V3_LOADED__ = true;
-
-  const ORIG_FETCH = window.fetch ? window.fetch.bind(window) : null;
-  if (!ORIG_FETCH) return;
-
-  const MAX_AGE_SEC = 120; // acima disso, mostra STALE
-
-  function isObj(x){ return x && typeof x === "object"; }
-
-  function deepFind(root, keyRegex, maxDepth=10) {
-    const seen = new Set();
-    function walk(x, depth) {
-      if (!isObj(x) || seen.has(x) || depth > maxDepth) return null;
-      seen.add(x);
-      if (Array.isArray(x)) {
-        for (const it of x) { const r = walk(it, depth+1); if (r != null) return r; }
-        return null;
-      }
-      for (const k of Object.keys(x)) {
-        if (keyRegex.test(String(k))) return x[k];
-      }
-      for (const k of Object.keys(x)) { const r = walk(x[k], depth+1); if (r != null) return r; }
-      return null;
-    }
-    return walk(root, 0);
-  }
-
-  function setField(name, value) {
-    const ids = [name, name + "_", "v_" + name, "val_" + name, "card_" + name];
-    for (const id of ids) {
-      const el = document.getElementById(id);
-      if (el) { el.textContent = value; return true; }
-    }
-    const el2 = document.querySelector('[data-field="'+name+'"]');
-    if (el2) { el2.textContent = value; return true; }
-    return false;
-  }
-
-  function pickSnapshot(instJson) {
-    const inst = instJson.installation || instJson;
-    const can = inst.can || {};
-    const snaps = can.snapshots || [];
-    if (Array.isArray(snaps) && snaps.length) return snaps[snaps.length - 1];
-    return inst.can_snapshot_latest || inst.can_snapshot || null;
-  }
-
-  function parseTsAny(snap) {
-    // tenta achar o timestamp "mais recente" de várias fontes
-    const hdr = snap && (snap.header || {});
-    const raw = (hdr && (hdr.raw || hdr.header_raw)) || hdr || {};
-    const capturedAt = snap && snap.captured_at;
-
-    const unixTime = deepFind(raw, /unixTime/i);
-    const serverTime = deepFind(raw, /serverTime/i);
-    const date = deepFind(raw, /^date$/i);
-
-    const candidates = [];
-    if (typeof unixTime === "number" && isFinite(unixTime)) candidates.push(unixTime);
-    if (typeof unixTime === "string" && unixTime.trim() && !isNaN(Number(unixTime))) candidates.push(Number(unixTime));
-
-    function tryParseIso(x){
-      if (typeof x !== "string") return;
-      const t = Date.parse(x);
-      if (!isNaN(t)) candidates.push(t);
-    }
-    tryParseIso(serverTime);
-    tryParseIso(date);
-    tryParseIso(capturedAt);
-
-    if (!candidates.length) return null;
-    return Math.max.apply(null, candidates);
-  }
-
-  async function loadClientMap() {
-    // arquivo estático que vamos gerar no passo 2
-    if (window.__CLIENTS_BY_ID__) return window.__CLIENTS_BY_ID__;
-    try {
-      const r = await ORIG_FETCH("/catalog_clients.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("no clients map");
-      const j = await r.json();
-      const m = j && (j.clients_by_id || j.byId || j);
-      if (m && typeof m === "object") {
-        window.__CLIENTS_BY_ID__ = m;
-        return m;
-      }
-    } catch (e) {}
-    window.__CLIENTS_BY_ID__ = {};
-    return window.__CLIENTS_BY_ID__;
-  }
-
-  async function enrichAndApply(instJson) {
-    const inst = instJson.installation || instJson;
-    const snap = pickSnapshot(instJson);
-    if (!snap) return;
-
-    const hdr = snap.header || {};
-    const raw = (hdr.raw || hdr.header_raw || hdr);
-
-    // IGNITION (farol)
-    const ign = deepFind(raw, /^ignition$/i);
-    if (ign === 0 || ign === "0") setField("ignition", "💤0");
-    else if (ign === 1 || ign === "1") setField("ignition", "💡1");
-    else setField("ignition", "--");
-
-    // COMMUNICATION = timestamp + age
-    const ts = parseTsAny(snap);
-    if (ts != null) {
-      const ageSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
-      const iso = new Date(ts).toISOString().replace(".000Z","Z");
-      const tag = (ageSec > MAX_AGE_SEC) ? `STALE age=${ageSec}s` : `age=${ageSec}s`;
-      setField("communication", `${iso} | ${tag}`);
-    } else {
-      setField("communication", "--");
+  async function runProbe() {
+    const vehicleId = Number(String(vehEl?.value ?? "").trim());
+    if (!Number.isFinite(vehicleId) || vehicleId <= 0) {
+      setStatus("informe um vehicle_id válido", "error");
+      return;
     }
 
-    // CLIENT NAME (via mapping)
-    const clientId = hdr.client_id || inst.client_id || inst.payload?.target_client_id || null;
-    const map = await loadClientMap();
-    if (clientId != null) {
-      const nm = map[String(clientId)] || map[Number(clientId)] || null;
-      if (nm) setField("client", `${nm} (${clientId})`);
-      else setField("client", String(clientId));
+    \1
+    resetUiForNewRun(runId);
+    setBusy(true);
+    setStatus("criando instalação...", "running");
+
+    const payload = { service: "CAN_PROBE", vehicle_id: vehicleId };
+
+    const created = await api("/api/installations", { method: "POST", json: payload });
+    if (runId !== RUN_SEQ) return;
+
+    if (created.status !== 201 || !created.data) {
+      setBusy(false);
+      setStatus(`erro ao criar instalação (HTTP ${created.status})`, "error");
+      if (outEl) outEl.textContent = pretty(created);
+      return;
     }
 
-    // MODEL (já estava aparecendo em algum lugar do raw)
-    const manufacturer = deepFind(raw, /manufacturer/i);
-    const model = deepFind(raw, /\bmodel\b/i);
-    const modelText = [manufacturer, model].filter(Boolean).join(" ").trim();
-    if (modelText) setField("model", modelText);
-  }
-
-  window.fetch = async function (...args) {
-    const url = String(args[0] || "");
-    const resp = await ORIG_FETCH(...args);
-    try {
-      if (url.includes("/api/installations/") && resp && resp.clone) {
-        const clone = resp.clone();
-        clone.json().then(enrichAndApply).catch(() => {});
-      }
-    } catch (e) {}
-    return resp;
-  };
-})();
-</script>
-
-
-<script>
-/* __PROBE_AUTOPOLL_V1__ */
-(function(){
-  if (window.__PROBE_AUTOPOLL_V1__) return;
-  window.__PROBE_AUTOPOLL_V1__=true;
-
-  const POLL_MS = 700;
-  const POLL_MAX_MS = 12000;
-
-  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-
-  async function pollInstallation(getUrl, onData){
-    const t0=Date.now();
-    while (Date.now()-t0 < POLL_MAX_MS){
-      try{
-        const r=await fetch(getUrl, {cache:"no-store"});
-        const j=await r.json();
-        onData(j);
-        // heurística: se já tem params>0, dá uma pausa menor e continua
-        const inst=j.installation||j;
-        const p=(inst.can_snapshot_latest?.parameters||inst.can?.snapshots?.slice(-1)[0]?.parameters||[]);
-        if (Array.isArray(p) && p.length>0) return;
-      }catch(e){}
-      await sleep(POLL_MS);
+    const newId = instIdOf(created.data);
+    if (!newId) {
+      setBusy(false);
+      setStatus("instalação criada, mas sem installation_id no retorno", "error");
+      if (outEl) outEl.textContent = pretty(created);
+      return;
     }
+
+    LAST_INST_ID = newId;
+    if (instViewEl) instViewEl.textContent = newId;
+    localStorage.setItem(LS_LAST_INST, newId);
+
+    setStatus("request snapshot...", "running");
+    const req = await requestSnapshot(newId, vehicleId, runId);
+    if (runId !== RUN_SEQ) return;
+
+    if (!req || req.status >= 400) {
+      setBusy(false);
+      setStatus(`erro no request snapshot (HTTP ${req ? req.status : "?"})`, "error");
+      if (outEl) outEl.textContent = pretty(req);
+      return;
+    }
+
+    setStatus("aguardando CAN...", "running");
+    await pollCan(newId, runId);
+
+    if (runId === RUN_SEQ) setBusy(false);
   }
 
-  // intercepta cliques no botão "Request snapshot"
-  document.addEventListener("click", function(ev){
-    const btn = ev.target && (ev.target.closest ? ev.target.closest("button") : null);
-    if (!btn) return;
-    const txt = (btn.textContent||"").toLowerCase();
-    if (!txt.includes("request")) return;
+  if (btnRunEl) btnRunEl.addEventListener("click", runProbe);
+  if (vehEl) {
+    vehEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); runProbe(); }
+    });
+  }
 
-    // tenta achar installation_id no input do form 2
-    const instEl = document.querySelector('input[name="installation_id"], #installation_id, input[id*="installation"]');
-    const instId = instEl && instEl.value ? instEl.value.trim() : "";
-    if (!instId) return;
+  const last = (localStorage.getItem(LS_LAST_INST) || "").trim();
+  if (last) {
+    LAST_INST_ID = last;
+    if (instViewEl) instViewEl.textContent = last;
+    setStatus("carregando última instalação...", "running");
+    loadInstallation(last).finally(() => setStatus("pronto", "idle"));
+  }
 
-    const url = "/api/installations/" + encodeURIComponent(instId);
-    // chama poll sem atrapalhar o fluxo atual
-    setTimeout(()=>pollInstallation(url, (j)=>{ try{ window.__probeOnInstallation && window.__probeOnInstallation(j);}catch(e){} }), 800);
-  }, true);
+  try {
+    const p = new URLSearchParams(location.search);
+    const vid = p.get("vehicle_id") || p.get("vid");
+    if (vid && vehEl && !vehEl.value) vehEl.value = vid;
+  } catch {}
+
 })();
 </script>
 
