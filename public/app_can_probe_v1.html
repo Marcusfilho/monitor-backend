@@ -112,6 +112,7 @@
       <div class="hint">
         <div>• Fluxo: cria <b>CAN_PROBE</b> → request snapshot → autopoll até preencher CAN.</div>
         <div>• installation_id atual: <b id="installationView">—</b></div>
+        <div>• create: <b id="dbgCreate">—</b> • request: <b id="dbgReq">—</b> • get: <b id="dbgGet">—</b></div>
       </div>
 
       <div class="status" id="status" data-state="idle">
@@ -176,6 +177,9 @@
   const statusEl = qs("status");
   const statusTextEl = qs("statusText");
   const instViewEl = qs("installationView");
+  const dbgCreateEl = qs("dbgCreate");
+  const dbgReqEl = qs("dbgReq");
+  const dbgGetEl = qs("dbgGet");
   const btnRunEl = qs("btnRun");
   const vehEl = qs("vehicle_id");
 
@@ -719,9 +723,13 @@
   async function loadInstallation(id, runId = null) {
     const r = await api(`/api/installations/${encodeURIComponent(id)}`);
     if (runId != null && runId !== RUN_SEQ) return null;
-    if (r.status !== 200 || !r.data) return null;
+    if (r.status !== 200 || !r.data) {
+      if (dbgGetEl) dbgGetEl.textContent = `HTTP ${r.status}`;
+      return null;
+    }
 
     const inst = r.data;
+    if (dbgGetEl) dbgGetEl.textContent = `HTTP ${r.status} status=${inst && inst.status ? inst.status : "-"}`;
     LAST_INST = inst;
     LAST_INST_ID = instIdOf(inst) || id;
     if (instViewEl) instViewEl.textContent = LAST_INST_ID || "—";
@@ -751,7 +759,7 @@
   async function requestSnapshot(id, vehicleId, runId) {
     const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, {
       method: "POST",
-      json: { vehicle_id: vehicleId }
+      json: { vehicle_id: vehicleId, vehicleId: vehicleId }
     });
     if (runId !== RUN_SEQ) return null;
     return r;
@@ -823,10 +831,16 @@
 
     const payload = {
       service: "CAN_PROBE",
-      vehicle_id: vehicleId
+      vehicle_id: vehicleId,
+      vehicleId: vehicleId,
+      target_client_id: null,
+      vehicleSettingId: null,
+      comments: null,
+      installationDate: new Date().toISOString()
     };
 
     const created = await api("/api/installations", { method: "POST", json: payload });
+    if (dbgCreateEl) dbgCreateEl.textContent = `HTTP ${created.status}`;
     if (runId !== RUN_SEQ) return;
 
     if (created.status !== 201 || !created.data) {
@@ -848,8 +862,15 @@
     if (instViewEl) instViewEl.textContent = newId;
     localStorage.setItem(LS_LAST_INST, newId);
 
+    // garante que a instalação já está visível no GET antes do request (evita corrida)
+    try { await loadInstallation(newId, runId); } catch(_e) {}
+
     setStatus("request snapshot...", "running");
     const req = await requestSnapshot(newId, vehicleId, runId);
+    if (dbgReqEl) {
+      const jobId = req && req.data && (req.data.job_id || req.data.jobId || req.data.id);
+      dbgReqEl.textContent = jobId ? `HTTP ${req.status} job=${jobId}` : `HTTP ${req.status}`;
+    }
     if (runId !== RUN_SEQ) return;
 
     if (!req || req.status >= 400) {
