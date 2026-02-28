@@ -337,11 +337,27 @@
     return looksHexLike(t) ? fmtHexDec(t) : t;
   }
 
+
+  function safeDecode(v) {
+    const s0 = String(v ?? "");
+    // decode apenas quando parecer URL-encoded
+    if (!/%[0-9a-fA-F]{2}/.test(s0) && s0.indexOf("+") < 0) return s0;
+    try { return decodeURIComponent(s0.replace(/\+/g, "%20")); } catch { return s0; }
+  }
+
   // -------------------- rows normalize --------------------
   function rowParamName(p) { return p?.name ?? p?.param_name ?? p?.parameter?.name ?? ""; }
   function rowParamType(p) { return p?.param_type ?? p?.type ?? p?.parameter?.type ?? ""; }
   function rowParamId(p) {
-    const v = p?.parameter_id ?? p?.id ?? p?.param_id ?? p?.paramId ?? p?.index ?? null;
+    const v =
+      p?.parameter_id ??
+      p?.param_id ??
+      p?.id ??
+      p?.paramId ??
+      p?.index ??
+      p?.parameter?.id ??
+      p?.param?.id ??
+      null;
     return (v == null) ? null : String(v);
   }
   function rowParamLastUpdate(p) { return p?.last_update ?? p?.lastUpdate ?? p?.ts ?? ""; }
@@ -430,7 +446,7 @@
   function moduleChip(label, row) {
     const ok = strictOkTriple(row);
     const dot = ok ? "okDot" : "badDot";
-    const err = pickErr(row);
+    const err = safeDecode(pickErr(row));
     const base = `${label}:${ok ? "OK" : "FAIL"}`;
     const extra = (!ok && err) ? ` • ${shortErr(err)}` : "";
     const title = err ? ` title="${esc(err)}"` : "";
@@ -491,48 +507,120 @@
   function getHeaderLite(inst, snap) {
     const h = extractHeaderObj(snap);
 
-    // fallback: tenta puxar coisas do inst, se existirem
     const vehicle = inst?.vehicle || inst?.vhcl || inst?.data?.vehicle || null;
+
+    const cfgStatus = firstNonEmpty([
+      h.configuration_status, h.configurationStatus, h.config_status, h.configStatus, h.configuration_state, h.configurationState
+    ], "—");
+
+    const cfgType = firstNonEmpty([
+      h.configuration_type, h.configurationType, h.config_type, h.configType, h.configuration_kind, h.configurationKind
+    ], "—");
+
+    const cfgProgress = firstNonEmpty([
+      h.configuration_progress, h.configurationProgress, h.config_progress, h.configProgress
+    ], "—");
+
+    const cfgError = firstNonEmpty([
+      h.configuration_error, h.configurationError, h.config_error, h.configError, h.error, h.err
+    ], "");
 
     return {
       ignitionRaw: firstNonEmpty([h.ignition, h.ignition_status, h.sys_param_ignition], "—"),
-      communication: firstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—"),
-      progress: firstNonEmpty([h.progress, h.configuration_progress, h.configurationProgress, inst?.status], "—"),
-      driver_code: firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—"),
-      license_number: firstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—"),
-      serial: firstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—"),
-      client: firstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—"),
-      model: firstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—")
+      communication: safeDecode(firstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—")),
+      config_status: safeDecode(cfgStatus),
+      config_type: safeDecode(cfgType),
+      config_progress: safeDecode(cfgProgress),
+      config_error: safeDecode(cfgError),
+      driver_code: safeDecode(firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—")),
+      license_number: safeDecode(firstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
+      serial: safeDecode(firstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
+      client: safeDecode(firstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
+      model: safeDecode(firstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—"))
     };
   }
 
   // -------------------- probe lines (param IDs) --------------------
   const PROBE_PARAM_IDS = {
-    fuel_total_used: ["00000031", "000000C5"],
-    fuel_level: ["00000032", "000000C3"],
-    fuel_rate: ["0000003C"],
-    oil_pressure: ["00000024", "0000010D"],
-    oil_temp: ["0000168E"],
-    coolant_temp: ["0000002F", "0000010E"],
+    fuel_total_used: ["00000031", "000000C5", "00002719"],
+    fuel_level: ["00000032", "000000C3", "0000879F", "00002717"],
+    fuel_rate: ["0000003C", "00002718"],
+    oil_pressure: ["00000024", "0000010D", "00002723"],
+    oil_temp: ["0000168E", "0000271E"],
+    coolant_temp: ["0000002F", "0000010E", "0000271F"],
     fuel_temp: ["0000002E", "0000010F"],
     odometer: ["00002714"],
     windshield: ["0000AF8C", "0000D419", "0000D41A"]
   };
 
+  function normIdVariants(v) {
+    // Normaliza apenas o FORMATO do ID (mesma ideia do probe original):
+    // aceita "00000031", "31", "0x31", decimal, etc. e gera variações equivalentes.
+    const out = new Set();
+    if (v == null) return out;
+    let s = String(v).trim();
+    if (!s) return out;
+
+    // remove 0x
+    let u = s.toUpperCase();
+    u = u.replace(/^0X/, "");
+    out.add(u);
+
+    // se vier "00000031" ou "31" (hex), gera também versão padronizada 8 dígitos
+    if (/^[0-9A-F]+$/.test(u)) {
+      const n16 = parseInt(u, 16);
+      if (Number.isFinite(n16)) out.add(n16.toString(16).toUpperCase().padStart(8, "0"));
+      // se for só dígitos, também tenta interpretar como decimal (casos onde id vem 31)
+      if (/^[0-9]+$/.test(u)) {
+        const n10 = parseInt(u, 10);
+        if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+      }
+    } else if (/^[0-9]+$/.test(u)) {
+      const n10 = parseInt(u, 10);
+      if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+    }
+
+    // também adiciona versão sem zeros à esquerda (pra comparar com "31")
+    const no0 = u.replace(/^0+/, "") || "0";
+    out.add(no0);
+
+    return out;
+  }
+
   function findParamByIds(rows, ids) {
-    const want = new Set((ids || []).map(String).map(s => s.toLowerCase()));
-    return (rows || []).find(p => {
-      const id = rowParamId(p);
-      return id != null && want.has(String(id).toLowerCase());
-    }) || null;
+    const want = new Set();
+    (ids || []).forEach(id => {
+      for (const v of normIdVariants(id)) want.add(v);
+    });
+    if (!want.size) return null;
+
+    for (const p of (rows || [])) {
+      const pid = rowParamId(p);
+      for (const v of normIdVariants(pid)) {
+        if (want.has(v)) return p;
+      }
+    }
+    return null;
   }
 
   function rawParamValue(p) {
-    const rv = rowParamRaw(p);
-    if (rv != null && String(rv).trim() !== "" && String(rv).trim() !== "—") return String(rv).trim();
-    const v = rowParamValue(p);
-    if (v != null && String(v).trim() !== "" && String(v).trim() !== "—") return String(v).trim();
-    return "—";
+    const rv = firstNonEmpty([
+      p?.raw_value,
+      p?.rawValue,
+      p?.raw?.value,
+      p?.raw,
+      p?.parameter_raw_value,
+      p?.value,
+      p?.val,
+      p?.param_value,
+      p?.parameter_value,
+      p?.formatted_value,
+      p?.formattedValue
+    ], "—");
+
+    if (rv == null) return "—";
+    const s = String(rv).trim();
+    return s ? s : "—";
   }
 
   function getParamRawByIds(rows, ids) {
@@ -614,7 +702,11 @@
   function renderProbeScreen(inst, snap, x) {
     if (!probeScreenEl) return;
 
-    const params = (x && x.params) || [];
+    const params0 = (x && x.params) || [];
+    const hdr = (snap && typeof snap === "object" && snap.header && typeof snap.header === "object") ? snap.header : {};
+    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:" + k, name: k, value: hdr[k], raw_value: hdr[k] }));
+    const params = params0.concat(hdrRows);
+
     const msRows = (x && x.ms) || [];
 
     const header = getHeaderLite(inst, snap);
@@ -636,7 +728,7 @@
         <div class="probeBox"><b>communication</b>${esc(header.communication)}</div>
       </div>
       <div class="probeRow">
-        <div class="probeBox"><b>progress</b>${esc(header.progress)}</div>
+        <div class="probeBox"><b>config</b>${esc(header.config_status)}${header.config_type && header.config_type !== "—" ? `<div class="muted" style="margin-top:4px">type: ${esc(header.config_type)}</div>` : ""}${header.config_progress && header.config_progress !== "—" ? `<div class="muted">progress: ${esc(header.config_progress)}</div>` : ""}${header.config_error ? `<div class="muted" title="${esc(header.config_error)}">error: ${esc(header.config_error)}</div>` : ""}</div>
         <div class="probeBox"><b>driver code</b>${esc(header.driver_code)}</div>
       </div>
       <div class="probeRow">
