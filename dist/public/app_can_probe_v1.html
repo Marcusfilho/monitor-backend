@@ -812,6 +812,8 @@ function commModules(msRows) {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   async function pollCan(id, runId, { tries = 180 } = {}) {
+    let __stableSig = \"\";
+    let __stableHits = 0;
     for (let i = 0; i < tries; i++) {
       if (runId !== RUN_SEQ) return null;
 
@@ -828,6 +830,10 @@ function commModules(msRows) {
 
         const x = extractRowsFromSnapshot(snap);
         const hasData = (x.params.length > 0) || (x.ms.length > 0);
+        const __sig = `${x.params.length}|${x.ms.length}`;
+        if (__sig === __stableSig) __stableHits += 1;
+        else { __stableSig = __sig; __stableHits = 0; }
+
 
         if (statusErr) {
           const lastJob = (Array.isArray(inst.jobs) && inst.jobs.length) ? inst.jobs[inst.jobs.length - 1] : null;
@@ -837,8 +843,9 @@ function commModules(msRows) {
           return inst;
         }
 
-        if (statusReady && hasData) {
-          setStatus(`CAN pronto ✅ (params=${x.params.length}, modules=${x.ms.length})`, "ok");
+        if ((statusReady && hasData) || (hasData && __stableHits >= 2)) {
+          const tag = statusReady ? "CAN pronto ✅" : "CAN capturado ✅ (early-stop)";
+          setStatus(`${tag} (params=${x.params.length}, modules=${x.ms.length})`, "ok");
           return inst;
         }
 
