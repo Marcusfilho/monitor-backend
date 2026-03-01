@@ -151,7 +151,7 @@
         <div class="tableWrap">
           <table>
             <thead>
-              <tr><th>id</th><th>name</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
+              <tr><th>row_id</th><th>module_id</th><th>module</th><th>sub_module</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
             </thead>
             <tbody id="tblMsBody"></tbody>
           </table>
@@ -433,6 +433,24 @@
   }
   function rowModuleName(r) { return r?.name ?? r?.module_name ?? r?.moduleName ?? ""; }
 
+  function rowModuleSubName(r) {
+    return r?.sub_module_name ?? r?.subModuleName ?? r?.submodule_name ?? r?.submoduleName ??
+           r?.sub_name ?? r?.subName ?? r?.sub_module ?? r?.subModule ?? "";
+  }
+
+  function rowModuleFixedId(r) {
+    const v = r?.module_id ?? r?.moduleId ?? r?.moduleID ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function rowModuleRowId(r) {
+    const v = r?.id ?? r?.index ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+
   function findModule(msRows, ids, names) {
     const rows = Array.isArray(msRows) ? msRows : [];
     const idsSet = new Set((ids || []).map(Number).filter(Number.isFinite));
@@ -462,6 +480,29 @@
     const ok = strictOkTriple(row);
     const dot = ok ? "okDot" : "badDot";
 
+    const errFull = safeDecode(pickErr(row)) || "";
+    const modFull = safeDecode(rowModuleName(row)) || "";
+    const subFull = safeDecode(rowModuleSubName(row)) || "";
+    const mid = rowModuleFixedId(row);
+    const rid = rowModuleRowId(row);
+
+    const base = `${label}:${ok ? "OK" : "FAIL"}`;
+    const shownErr = errFull ? ` • ${shortErr(errFull, 40)}` : "";
+
+    const titleParts = [];
+    if (modFull) titleParts.push(`module=${modFull}`);
+    if (subFull) titleParts.push(`sub=${subFull}`);
+    if (rid != null) titleParts.push(`row_id=${rid}`);
+    if (mid != null) titleParts.push(`module_id=${mid}`);
+    if (errFull) titleParts.push(`message=${errFull}`);
+    const title = titleParts.length ? ` title="${esc(titleParts.join(" • "))}"` : "";
+
+    return `<span class="pill"${title}><span class="${dot}"></span>${esc(base)}${esc(shownErr)}</span>`;
+  }
+
+    const ok = strictOkTriple(row);
+    const dot = ok ? "okDot" : "badDot";
+
     // Sempre exibir message quando existir (sem esconder). Tooltip inclui name/id/message.
     const errFull = safeDecode(pickErr(row)) || "";
     const nameFull = safeDecode(rowModuleName(row)) || "";
@@ -485,7 +526,7 @@
 
     // Verdade: escolher por NOME do módulo (snapshot). Sem suposição de ID fixo.
     for (const r of rows) {
-      const nameRaw = safeDecode(rowModuleName(r));
+      const nameRaw = safeDecode(rowModuleSubName(r) || rowModuleName(r));
       if (!nameRaw) continue;
       for (const re0 of res) {
         try {
@@ -497,14 +538,14 @@
   }
 
 function commModules(msRows) {
+    // Verdade: casar por sub-module name (como no print do Monitor).
+    // Fallback: se sub-module não vier, cai para module name (via findModuleByName já atualizado).
     return {
-      // Verdade: selecionar por NOME do módulo vindo no snapshot (mesmo que aparece no Debug)
-      // Sem suposição ID fixo -> acessório.
-      can0:   findModuleByName(msRows, [/\bcan\s*0\b/i]),
-      can1:   findModuleByName(msRows, [/\bcan\s*1\b/i]),
-      j1708:  findModuleByName(msRows, [/\bj\s*1708\b/i, /\bj1708\b/i]),
-      dallas: findModuleByName(msRows, [/(dallas|ibutton|i[\s\-]*button)/i]),
-      ramzor: findModuleByName(msRows, [/\bramzor\b/i])
+      can0:   findModuleByName(msRows, [/^CAN0$/i, /\bCAN0\b/i]),
+      can1:   findModuleByName(msRows, [/^CAN1$/i, /\bCAN1\b/i]),
+      j1708:  findModuleByName(msRows, [/^J1708$/i, /\bJ1708\b/i, /\bj\s*1708\b/i]),
+      dallas: findModuleByName(msRows, [/^KEYPAD[_\s-]*DALLAS[_\s-]*IBUTTON$/i, /KEYPAD[_\s-]*DALLAS/i, /\bDALLAS\b/i, /IBUTTON/i]),
+      ramzor: findModuleByName(msRows, [/^KEYPAD[_\s-]*RAMZOR$/i, /KEYPAD[_\s-]*RAMZOR/i, /\bRAMZOR\b/i])
     };
   }
 // -------------------- header lite --------------------
@@ -671,15 +712,19 @@ function commModules(msRows) {
     if (!msBodyEl) return;
     const rows = Array.isArray(msRows) ? msRows : [];
     msBodyEl.innerHTML = rows.map(r => {
-      const id = rowModuleId(r);
-      const name = esc(rowModuleName(r));
+      const rid = rowModuleRowId(r);
+      const mid = rowModuleFixedId(r);
+      const mod = esc(rowModuleName(r));
+      const sub = esc(rowModuleSubName(r));
       const a = toBool01(r.active);
       const o = toBool01(r.ok);
       const w = toBool01(r.was_ok);
       const err = esc(firstNonEmpty([pickErr(r)], ""));
       return `<tr>
-        <td>${id == null ? "" : esc(String(id))}</td>
-        <td>${name}</td>
+        <td>${rid == null ? "" : esc(String(rid))}</td>
+        <td>${mid == null ? "" : esc(String(mid))}</td>
+        <td>${mod}</td>
+        <td>${sub}</td>
         <td>${a === null ? "" : esc(String(a))}</td>
         <td>${o === null ? "" : esc(String(o))}</td>
         <td>${w === null ? "" : esc(String(w))}</td>
@@ -729,8 +774,8 @@ function commModules(msRows) {
         ${moduleChip("CAN0", comm.can0)}
         ${moduleChip("CAN1", comm.can1)}
         ${moduleChip("J1708", comm.j1708)}
-        ${moduleChip("Dallas", comm.dallas)}
-        ${moduleChip("Ramzor", comm.ramzor)}
+        ${moduleChip("KEYPAD_DALLAS_IBUTTON", comm.dallas)}
+        ${moduleChip("KEYPAD_RAMZOR", comm.ramzor)}
       </div>
 
       <div class="probeConsole">
