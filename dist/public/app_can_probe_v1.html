@@ -211,9 +211,9 @@
     __LAST_CAN = { params: [], ms: [] };
 
     if (instViewEl) instViewEl.textContent = "—";
-    if (dbgCreateEl) dbgCreateEl.textContent = "—";
-    if (dbgReqEl) dbgReqEl.textContent = "—";
-    if (dbgGetEl) dbgGetEl.textContent = "—";
+    if (typeof dbgCreateEl !== "undefined" && dbgCreateEl) dbgCreateEl.textContent = "—";
+    if (typeof dbgReqEl !== "undefined" && dbgReqEl) dbgReqEl.textContent = "—";
+    if (typeof dbgGetEl !== "undefined" && dbgGetEl) dbgGetEl.textContent = "—";
 
     if (pillSnapEl) pillSnapEl.textContent = "snapshot: —";
     if (pillParamsEl) pillParamsEl.textContent = "params: 0";
@@ -252,6 +252,14 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
+
+  function safeDecode(v) {
+    if (v === undefined || v === null) return "—";
+    const s0 = String(v);
+    const s1 = s0.replace(/\+/g, " ");
+    try { return decodeURIComponent(s1); } catch { return s1; }
+  }
+
 
   function normKey(s) {
     return String(s ?? "")
@@ -544,19 +552,38 @@ function commModules(msRows) {
     const h = extractHeaderObj(snap);
     const vehicle = inst?.vehicle || inst?.vhcl || inst?.data?.vehicle || null;
 
+    const cfgStatus = firstNonEmpty([
+      h.configuration_status, h.configurationStatus, h.config_status, h.configStatus, h.configuration_state, h.configurationState
+    ], "—");
+    const cfgType = firstNonEmpty([
+      h.configuration_type, h.configurationType, h.config_type, h.configType, h.configuration_kind, h.configurationKind
+    ], "—");
+    const cfgProgress = firstNonEmpty([
+      h.configuration_progress, h.configurationProgress, h.config_progress, h.configProgress
+    ], "—");
+    const cfgError = firstNonEmpty([
+      h.configuration_error, h.configurationError, h.config_error, h.configError, h.error, h.err
+    ], "");
+
+    const cfgParts = [cfgStatus, cfgType, cfgProgress].filter(x => x && x !== "—");
+    let cfg = cfgParts.join(" / ");
+    if (cfgError) cfg = cfg ? (cfg + " • " + cfgError) : cfgError;
+    if (!cfg) cfg = "—";
+
     return {
       ignitionRaw: firstNonEmpty([h.ignition, h.ignition_status, h.sys_param_ignition], "—"),
-      communication: firstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—"),
-      progress: firstNonEmpty([h.progress, h.configuration_progress, h.configurationProgress, inst?.status], "—"),
-      driver_code: firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—"),
-      license_number: firstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—"),
-      serial: firstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—"),
-      client: firstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—"),
-      model: firstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—")
+      communication: safeDecode(firstNonEmpty([
+        h.communication, h.comm, h.gprs, h.gps_gprs_last, h.gps_gprs, h.gprs_last, h.gprsLast, h.gps_last, h.gpsLast,
+        h.server_time, h.serverTime, h.captured_at, snap?.captured_at
+      ], "—")),
+      config: safeDecode(cfg),
+      driver_code: safeDecode(firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—")),
+      license_number: safeDecode(firstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
+      serial: safeDecode(firstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
+      client: safeDecode(firstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
+      model: safeDecode(firstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—"))
     };
-  }
-
-  // -------------------- probe lines (param IDs) --------------------
+  }  // -------------------- probe lines (param IDs) --------------------
   const PROBE_PARAM_IDS = {
     fuel_total_used: ["00000031", "000000C5"],
     fuel_level: ["00000032", "000000C3"],
@@ -686,7 +713,7 @@ function commModules(msRows) {
         <div class="probeBox"><b>communication</b>${esc(header.communication)}</div>
       </div>
       <div class="probeRow">
-        <div class="probeBox"><b>progress</b>${esc(header.progress)}</div>
+        <div class="probeBox"><b>config</b>${esc(header.config)}</div>
         <div class="probeBox"><b>driver code</b>${esc(header.driver_code)}</div>
       </div>
       <div class="probeRow">
@@ -782,6 +809,9 @@ function commModules(msRows) {
 
     const snap = extractCanSnapshot(inst);
     if (snap) renderCanSnapshot(snap);
+    else {
+      try { renderProbeScreen(inst, null, { params: [], ms: [] }); } catch (e) {}
+    }
 
     const snapKey = snap ? firstNonEmpty([snap.captured_at, snap.server_time, snap.serverTime], "ok") : "—";
     if (pillSnapEl) pillSnapEl.textContent = `snapshot: ${snapKey}`;
@@ -812,7 +842,7 @@ function commModules(msRows) {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   async function pollCan(id, runId, { tries = 180 } = {}) {
-    let __stableSig = \"\";
+    let __stableSig = "";
     let __stableHits = 0;
     for (let i = 0; i < tries; i++) {
       if (runId !== RUN_SEQ) return null;
@@ -855,9 +885,9 @@ function commModules(msRows) {
         setStatus(`aguardando instalação... (${i + 1}/${tries})`, "running");
       }
 
-      let wait = 700;
-      if (i >= 12) wait = 2000;
-      if (i >= 60) wait = 3000;
+      let wait = 600;
+      if (i >= 10) wait = 1200;
+      if (i >= 30) wait = 2000;
       await sleep(wait);
     }
 
@@ -871,8 +901,9 @@ function commModules(msRows) {
       setStatus("informe um vehicle_id válido", "error");
       return;
     }
+    RUN_SEQ += 1;
+    const runId = RUN_SEQ;
 
-    \1
     resetUiForNewRun(runId);
     setBusy(true);
     setStatus("criando instalação...", "running");
