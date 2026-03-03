@@ -283,6 +283,114 @@ router.post("/:id/_worker/can-snapshot", requireWorkerKey_1.requireWorkerKey, as
         return res.status(500).json({ ok: false, error: "Internal Server Error" });
     }
 });
+router.post("/:id/actions/retry-html5", async (req, res) => {
+    try {
+        const id = String(req.params.id || "");
+        const getOne = pickFn(installationsEngine, ["getInstallation", "getById", "read"]) ||
+            pickFn(installationsStore, ["getInstallation", "getById", "read"]);
+        if (!getOne)
+            return res.status(500).json({ ok: false, error: "no getInstallation/getById/read found" });
+        const inst = await getOne(id);
+        if (!inst)
+            return res.status(404).json({ ok: false, error: "not found" });
+        // auth: exige token do app
+        const tok = String(req.get("x-installation-token") || "").trim();
+        if (!tok)
+            return res.status(401).json({ ok: false, error: "missing_token" });
+        const requireTokenFn = pickFn(installationsStore, ["requireToken"]);
+        if (requireTokenFn) {
+            const okTok = !!requireTokenFn(inst, tok);
+            if (!okTok)
+                return res.status(401).json({ ok: false, error: "invalid_token" });
+        }
+        else {
+            const recTok = String(inst.installation_token || inst.token || "").trim();
+            if (recTok && tok !== recTok)
+                return res.status(401).json({ ok: false, error: "invalid_token" });
+        }
+        const payload = (inst.payload && typeof inst.payload === "object") ? inst.payload : {};
+        const service = String(payload.service || inst.service || "").trim().toUpperCase();
+        const plateReal = payload.plate_real ||
+            payload.plateReal ||
+            payload.plate ||
+            payload.placa ||
+            null;
+        const serial = payload.serial ||
+            payload.serie ||
+            payload.innerId ||
+            payload.inner_id ||
+            null;
+        let plateLookup = payload.plate_lookup ||
+            payload.plateLookup ||
+            payload.lookup_license ||
+            payload.lookupLicense ||
+            null;
+        if (!plateLookup)
+            plateLookup = (service === "INSTALL") ? serial : plateReal;
+        const targetClientId = payload.target_client_id ||
+            payload.targetClientId ||
+            payload.client_id ||
+            payload.clientId ||
+            payload.CLIENT_ID ||
+            null;
+        const assetType = payload.assetType ||
+            payload.asset_type ||
+            payload.vehicle_type ||
+            payload.vehicleType ||
+            payload.ASSET_TYPE ||
+            null;
+        const vehicleSettingId = payload.vehicleSettingId ||
+            payload.vehicle_setting_id ||
+            payload.vehicleSettingID ||
+            payload.VEHICLE_SETTING_ID ||
+            null;
+        const gsensor = payload.gsensor || payload.gSensor || payload.g_sensor || null;
+        const recTok = String(inst.installation_token || inst.token || tok).trim();
+        const payloadForJob = {
+            installation_id: id,
+            installation_token: recTok,
+            service,
+            plate_real: plateReal,
+            plateReal: plateReal,
+            plate_lookup: plateLookup,
+            plateLookup: plateLookup,
+            lookup_license: plateLookup,
+            plate: plateLookup, // compat
+            serial,
+            target_client_id: targetClientId,
+            assetType,
+            vehicleSettingId,
+            gsensor,
+        };
+        // enqueue job (via loopback /api/jobs)
+        const adminKey = pickAdminKey();
+        const headers = {};
+        if (adminKey)
+            headers["x-admin-key"] = adminKey;
+        headers["x-internal-call"] = "installationsRoutes";
+        const jobType = "html5_install";
+        let enqueueDebug = { ok: false, method: "loopback:/api/jobs", type: jobType };
+        try {
+            const r = await postJson(`${loopbackBase()}/api/jobs`, { type: jobType, payload: payloadForJob }, headers);
+            enqueueDebug.status = r.status;
+            enqueueDebug.response = r.json;
+            enqueueDebug.ok = r.status >= 200 && r.status < 300;
+        }
+        catch (e) {
+            enqueueDebug.error = String(e?.stack || e?.message || e);
+        }
+        // marca status para refletir retry no app (e limpa last_error)
+        try {
+            installationsStore.patchInstallation && installationsStore.patchInstallation(id, { status: "HTML5_QUEUED", last_error: null });
+        }
+        catch { }
+        return res.json({ ok: true, installation_id: id, status: "HTML5_QUEUED", enqueue: enqueueDebug });
+    }
+    catch (e) {
+        console.error("[installationsRoutes] retry-html5 error:", e && (e.stack || e.message || String(e)));
+        return res.status(500).json({ ok: false, error: "Internal Server Error" });
+    }
+});
 router.post("/:id/actions/request-can-snapshot", async (req, res) => {
     try {
         const id = req.params.id;

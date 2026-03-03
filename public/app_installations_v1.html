@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>APP V1 — Instalações (v1.4)</title>
+  <title>APP V1 — Instalações (v1.5)</title>
   <style>
     :root{
       --bg:#0b0f12; --panel:#0f1620; --text:#e8eef2; --muted:#93a4b8; --line:#1f2a38;
@@ -103,7 +103,7 @@
 <body>
 <header>
   <div class="title">
-    <h1>APP V1 — Instalações <span class="pill" style="margin-left:8px">v1.4</span></h1>
+    <h1>APP V1 — Instalações <span class="pill" style="margin-left:8px">v1.5</span></h1>
     <div class="sub" id="subline">Pronto</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center">
@@ -207,6 +207,17 @@
     </div>
 
     <div class="stepper" id="stepper"></div>
+
+<div id="errRow" class="hidden" style="margin-top:12px">
+  <div class="pill" style="border-color:#5b1f1f;background:#2a1111;color:#ffd6d6">
+    <span class="dot bad"></span>
+    <b id="errTitle">ERRO</b>
+    <span id="errMsg" style="font-weight:700"></span>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="btnRetryHtml5" class="secondary">Reprocessar HTML5</button>
+  </div>
+</div>
 
     <div class="chips" id="msChips" style="margin-top:12px"></div>
 
@@ -845,26 +856,66 @@
     kv.appendChild(pill(`Setting: ${setting}`, ""));
   }
 
-  function renderAll(inst){
+  
+
+function extractLastError(inst){
+  const e =
+    inst?.last_error ||
+    inst?.lastError ||
+    inst?.html5?.last_error ||
+    inst?.html5?.lastError ||
+    null;
+  if (!e) return null;
+  if (typeof e === "string") return { title: "ERRO", message: e };
+  if (typeof e === "object"){
+    const msg = e.message || e.error || e.detail || e.hint || "";
+    const title = e.job_type ? String(e.job_type) : "ERRO";
+    const message = String(msg || "job_failed").slice(0, 240);
+    return { title: title.toUpperCase(), message, raw: e };
+  }
+  return { title: "ERRO", message: String(e).slice(0, 240) };
+}
+
+function renderAll(inst){
     state.inst = inst;
     renderTop(inst);
     renderInstKv(inst);
 
-    const status = inst?.status || "";
-    renderStepper(status);
+    
+const status = inst?.status || "";
+const st = String(status || "").toUpperCase();
+renderStepper(status);
 
-    // enable buttons when we have id/token
-    const id = inst?.installation_id || inst?.id || "";
-    const tok = inst?.installation_token || inst?.token || "";
+// erro da última etapa (ex.: HTML5_ERROR)
+const err = extractLastError(inst);
+const errRow = $("errRow");
+const isErr = !!(err && (st.includes("ERROR") || st.includes("HTML5_ERROR") || st.includes("SB_ERROR") || st.includes("GS_ERROR")));
+if (isErr) {
+  errRow.classList.remove("hidden");
+  $("errTitle").textContent = err.title || "ERRO";
+  $("errMsg").textContent = " " + (err.message || "");
+  const canRetryHtml5 = st.includes("HTML5_ERROR") || st.includes("HTML5_");
+  $("btnRetryHtml5").classList.toggle("hidden", !canRetryHtml5);
+  $("btnRetryHtml5").disabled = !canRetryHtml5;
+} else {
+  errRow.classList.add("hidden");
+  $("btnRetryHtml5").classList.add("hidden");
+}
 
-    const canApproveEnabled = !!(id && tok);
-    $("btnApprove").disabled = !canApproveEnabled;
+// enable buttons when we have id/token
+const id = inst?.installation_id || inst?.id || "";
+const tok = inst?.installation_token || inst?.token || "";
 
-    // Atualizar CAN: só quando não estiver no meio (heurística por status)
-    const st = String(status || "").toUpperCase();
-    const canRefreshEnabled = canApproveEnabled && !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
-    $("btnRefresh").disabled = !canRefreshEnabled;
+// VALIDAR CAN: somente quando estivermos no estágio CAN+ (ou depois)
+const canApproveEnabled = !!(id && tok) && (st.includes("CAN") || st.includes("WAITING_REBOOT") || st.includes("GS") || st.includes("COMPLETED"));
+$("btnApprove").disabled = !canApproveEnabled;
 
+// Atualizar CAN: só quando CAN já iniciou em algum momento e não estiver coletando/aguardando reboot/SB
+const canRefreshEnabled =
+  !!(id && tok) &&
+  (st.includes("CAN") || st.includes("WAITING_REBOOT")) &&
+  !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
+$("btnRefresh").disabled = !canRefreshEnabled;
     // snapshot
     const snap = extractSnapshot(inst);
     state.lastSnapshot = snap;
@@ -904,6 +955,7 @@
     renderStepper("");
     renderTop(empty);
     renderInstKv(empty);
+    try { $("errRow").classList.add("hidden"); $("btnRetryHtml5").classList.add("hidden"); } catch {}
     $("btnApprove").disabled = true;
     $("btnRefresh").disabled = true;
     setSubline("Pronto");
@@ -943,7 +995,7 @@
     stopPoll();
     state.inst = null;
     state.lastSnapshot = null;
-    saveLs("", "");
+    // não apagar o último installation_id/token ao clicar "Nova" (permite retomar caso o job esteja rodando)
     $("cardForm").classList.remove("hidden");
     renderEmpty();
     showToast("Nova instalação", "warn");
@@ -1053,7 +1105,41 @@
     }
   };
 
-  // ====== boot ======
+  
+
+$("btnRetryHtml5").onclick = async () => {
+  const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
+  const tok = state?.inst?.installation_token || state?.inst?.token || (loadLs().tok) || "";
+  if (!id || !tok){ showToast("Falta installation_id/token", "bad"); return; }
+
+  try {
+    $("btnRetryHtml5").disabled = true;
+    setSubline("Reprocessando HTML5…");
+
+    const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/retry-html5", {
+      method: "POST",
+      headers: { "x-installation-token": tok },
+      json: {}
+    });
+
+    if (!r.ok){
+      showToast("Falha ao reprocessar (HTTP " + r.status + ")", "bad");
+      console.log(r.data);
+      return;
+    }
+
+    showToast("HTML5 reenfileirado. Aguardando execução…", "good");
+    await loadInstallation(id);
+    startPoll();
+
+  } catch (e) {
+    showToast("Falha: " + fmtErr(e), "bad");
+  } finally {
+    $("btnRetryHtml5").disabled = false;
+  }
+};
+
+// ====== boot ======
   (function init(){
     // debug mode via URL ?debug=1
     try {

@@ -245,6 +245,86 @@ const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : 
   }
 }
 
+
+
+function _pickErrSummary(result: any){
+  try {
+    if (!result) return { message: "job_failed" };
+    if (typeof result === "string") return { message: result };
+    if (typeof result !== "object") return { message: String(result) };
+
+    const r: any = result as any;
+    const msg =
+      r.error ??
+      r.detail ??
+      r.message ??
+      r.reason ??
+      (r.meta && (r.meta.error ?? r.meta.detail ?? r.meta.message)) ??
+      null;
+
+    const code =
+      r.code ??
+      r.statusCode ??
+      r.httpStatus ??
+      (r.meta && (r.meta.code ?? r.meta.statusCode)) ??
+      null;
+
+    const out: any = { message: String(msg || "job_failed") };
+    if (code != null) out.code = String(code);
+    const hint = r.hint ?? (r.meta && r.meta.hint) ?? null;
+    if (hint != null) out.hint = String(hint).slice(0, 240);
+    return out;
+  } catch {
+    return { message: "job_failed" };
+  }
+}
+
+// quando o html5_* falhar, refletir no status da instalação (senão o app fica "CREATED" e confunde)
+function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: string, jobId: string){
+  try {
+    if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation) return;
+    const type = String(job?.type || "");
+    if (!(type === "html5_install" || type.startsWith("html5_"))) return;
+
+    const installationId = _getInstallationId(job);
+    if (!installationId) return;
+
+    const ok = String(finalStatus || "") === "completed";
+    const now = new Date().toISOString();
+
+    // histórico (best-effort)
+    try {
+      installationsStore.pushJob && installationsStore.pushJob(installationId, {
+        type,
+        job_id: String(jobId || job?.id || ""),
+        status: ok ? "completed" : "error",
+        ok,
+        err: ok ? null : _pickErrSummary(result),
+      });
+    } catch {}
+
+    if (ok) {
+      // limpa erro anterior
+      try { installationsStore.patchInstallation(installationId, { last_error: null }); } catch {}
+      return;
+    }
+
+    const err = Object.assign(
+      { ts: now, job_id: String(jobId || job?.id || ""), job_type: type },
+      _pickErrSummary(result)
+    );
+
+    try {
+      installationsStore.patchInstallation(installationId, {
+        status: "HTML5_ERROR",
+        last_error: err,
+      });
+    } catch {}
+  } catch (e: any) {
+    console.log("[jobs] handle HTML5 complete failed:", e && (e.message || String(e)));
+  }
+}
+
 function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
   try {
     if (!job || String(job.type || "") !== "html5_install") return;
@@ -474,6 +554,9 @@ try {
   try { if ((job as any)?.type === "monitor_can_snapshot") _handleCanSnapshotComplete(job, result, id); } catch {}
   // GS: atualizar instalação (COMPLETED/ERROR)
   try { if ((job as any)?.type === "monitor_gs") _handleGsComplete(job, result, id); } catch {}
+  // HTML5: refletir erro/sucesso na instalação (HTML5_ERROR + last_error)
+  try { _handleHtml5CompleteToInstallation(job, result, finalStatus, id); } catch {}
+
 
   // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
   if (finalStatus === "completed") {
