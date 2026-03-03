@@ -185,7 +185,25 @@ const http = axios.create({
   timeout: REQUEST_TIMEOUT_MS,
 });
 
-async function fetchNextJob(): Promise<SchemeBuilderJob | null> {
+const JOB_TYPES = String(process.env.WORKER_JOB_TYPES || "scheme_builder,monitor_gs")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+async function patchInstallation(installationId: string, patch: any) {
+  try {
+    if (!installationId || !WORKER_KEY) return;
+    await (http as any).post(
+      `/api/installations/${encodeURIComponent(String(installationId))}/_worker/patch`,
+      patch,
+      { headers: { "x-worker-key": WORKER_KEY } }
+    );
+  } catch {
+    // best-effort (não bloquear worker)
+  }
+}
+
+async function fetchNextJobOfType(type: string): Promise<SchemeBuilderJob | null> {
   // 1) garante session_token local
   let tok: string | null = null;
   try {
@@ -199,7 +217,7 @@ async function fetchNextJob(): Promise<SchemeBuilderJob | null> {
   // 2) busca job no backend
   try {
     const r = await http.get("/api/jobs/next", {
-      params: { type: "scheme_builder", worker: WORKER_ID },
+      params: { type, worker: WORKER_ID },
       headers: WORKER_KEY ? { "x-worker-key": WORKER_KEY } : undefined,
       validateStatus: () => true,
     });
@@ -232,6 +250,14 @@ async function fetchNextJob(): Promise<SchemeBuilderJob | null> {
   }
 }
 
+async function fetchNextJob(): Promise<SchemeBuilderJob | null> {
+  for (const t of JOB_TYPES) {
+    const j = await fetchNextJobOfType(t);
+    if (j) return j;
+  }
+  return null;
+}
+
 async function completeJob(jobId: string, status: string, result: any) {
   try {
     await reportProgress(jobId, 100, "completed");
@@ -245,7 +271,7 @@ async function processJob(job: SchemeBuilderJob) {
   console.log(`[worker] Processando job ${job.id} (vehicleId=${job.payload.vehicleId})...`);
 
   
-await reportProgress(job.id, 5, "started", `vehicleId=${(job as any)?.payload?.vehicleId ?? ""}`);try {
+await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=${(job as any)?.payload?.vehicleId ?? ""}`);try {
     const token = String(job.payload.sessionToken || "").trim();
     if (!token) throw new Error("Job veio sem sessionToken (backend não injetou token).");
 
@@ -253,6 +279,18 @@ await reportProgress(job.id, 5, "started", `vehicleId=${(job as any)?.payload?.v
 
     const wsUrl = `wss://websocket.traffilog.com:8182/${guid}/${token}/json?defragment=1`;
     const origin = String(process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com");
+
+    const installationId = String(job.payload.installation_id ?? job.payload.installationId ?? "");
+
+    const jobType = String(job.type || "").trim();
+    const isGs = jobType === "monitor_gs";
+
+    if (installationId) {
+      await patchInstallation(installationId, {
+        status: isGs ? "GS_RUNNING" : "SB_RUNNING",
+        sb: isGs ? undefined : { job_id: job.id, started_at: new Date().toISOString() },
+      });
+    }
 
     const args = [
       "tools/sb_run_vm.js",
@@ -269,6 +307,17 @@ await reportProgress(job.id, 5, "started", `vehicleId=${(job as any)?.payload?.v
       MONITOR_SESSION_TOKEN: token,
       MONITOR_WS_COOKIE: "",   // ✅ cookie não é necessário (net-export mostrou)
       MONITOR_WS_ORIGIN: origin,
+      // monitor_gs => roda APENAS GS (sem SB)
+      ...(isGs ? {
+        GS_ENABLE: "1",
+        GS_ONLY: "1",
+        GS_ACTION_ID: String(job.payload.GS_ACTION_ID ?? job.payload.gs_action_id ?? job.payload.gsActionId ?? ""),
+        GS_COMMAND_SYNTAX: String(job.payload.GS_COMMAND_SYNTAX ?? job.payload.gs_command_syntax ?? job.payload.gsCommandSyntax ?? ""),
+        GS_COMMENT_SUFFIX: " [GS]",
+      } : {
+        GS_ENABLE: "0",
+        GS_ONLY: "0",
+      }),
     } as NodeJS.ProcessEnv;
 
     const r = spawnSync(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });

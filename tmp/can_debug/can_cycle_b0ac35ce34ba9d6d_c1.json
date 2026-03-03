@@ -1,0 +1,1210 @@
+{
+  "capturedAt": "2026-03-01T15:54:05.573Z",
+  "vehicleId": 1948654,
+  "isConnected": 2,
+  "header": {
+    "vehicle_id": 1948654,
+    "client_id": 217684,
+    "inner_id": "0000000913055488",
+    "unit_key": "SPT:0000000913055488",
+    "license_nmbr": "192%20-%20FLJ3331",
+    "unit_type": "SPETROTEC",
+    "unit_version": "A79%20Read%20Write.3D",
+    "configuration_key_db": "697BC29D",
+    "configuration_key_unit": "697BC29D",
+    "raw": {
+      "mtkn": "91679568459894952760428038293903229601",
+      "client_id": "217684",
+      "vehicle_id": "1948654",
+      "license_nmbr": "192%20-%20FLJ3331",
+      "ignition": "1",
+      "vcl_manufacturer": "Volkswagen",
+      "vcl_model": "ETT-VW-17.230-D08-4x2-M-E5",
+      "vcl_client_id": "217684",
+      "vcl_client_description": "ETT%20Carapicuiba",
+      "vcl_client_group_id": "230000",
+      "vcl_client_group_description": "ETT%20Carapicuiba",
+      "unit_type": "SPETROTEC",
+      "unit_version": "A79%20Read%20Write.3D",
+      "inner_id": "0000000913055488",
+      "unit_key": "SPT%3A0000000913055488",
+      "configuration_key_db": "697BC29D",
+      "configuration_key_unit": "697BC29D",
+      "server_time": "2026-03-01T15%3A53%3A42.6330000%2B00%3A00",
+      "orig_time": "2026-03-01T15%3A53%3A41.0000000%2B00%3A00",
+      "driver_code": "11244",
+      "mileage": "360046.90",
+      "fuel_used": "161633.00",
+      "speed": "19",
+      "engine_hours": "30195.20",
+      "configuration_status": "",
+      "configuration_type": "",
+      "progress": "",
+      "error": "",
+      "number_of_scms": "167",
+      "number_of_prms": "246",
+      "configuration_key_db_color": "",
+      "configuration_key_unit_color": "",
+      "latitude": "-23.5754750",
+      "longitude": "-46.8171980"
+    }
+  },
+  "parameters": [
+    {
+      "id": "000001F3",
+      "name": "MBU MTST Ignition",
+      "raw_value": "0000031E",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000AF8C",
+      "name": "ARM Analog input 3",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000CE25",
+      "name": "ARM Analog input 4 - Backup Battery voltage",
+      "raw_value": "00000075",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000FB0",
+      "name": "MBU-V2 MTST Battery Voltage",
+      "raw_value": "00000300",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000008A",
+      "name": "GPS_Speed",
+      "raw_value": "00000013",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000001F0",
+      "name": "Unit Time",
+      "raw_value": "0023B16A",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002710",
+      "name": "Sys Param Ignition",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000002FC",
+      "name": "High_Res_Unit_Time",
+      "raw_value": "8B6D055A",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00004062",
+      "name": "Vehicle Warning Light",
+      "raw_value": "01010000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000047AD",
+      "name": "GPS_Alt",
+      "raw_value": "00002DDA",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002711",
+      "name": "Sys Param Ignition No Delay",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002712",
+      "name": "Sys Param Battery Voltage",
+      "raw_value": "00006A59",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002713",
+      "name": "Sys Param Speed",
+      "raw_value": "00000699",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002714",
+      "name": "Sys Param Vehicle Distance",
+      "raw_value": "1575E1D9",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002715",
+      "name": "Sys Param RPM",
+      "raw_value": "00000454",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002717",
+      "name": "Sys Param Fuel Level",
+      "raw_value": "00000030",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002718",
+      "name": "Sys Param Fuel Rate",
+      "raw_value": "00000276",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002719",
+      "name": "Sys Param Total Fuel Used",
+      "raw_value": "0018A9CF",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000070CF",
+      "name": "Sys Param Engine Total Hours of Operation",
+      "raw_value": "00093701",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000271A",
+      "name": "Sys Param Acc Pedal Pos",
+      "raw_value": "00000298",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000271B",
+      "name": "Sys Param Brake Switch",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000271C",
+      "name": "Sys Param Clutch Switch",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000271F",
+      "name": "Sys Param Coolant Temp",
+      "raw_value": "0000016A",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002720",
+      "name": "Sys Param Actual Percent Torque",
+      "raw_value": "000000AA",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002723",
+      "name": "Sys Param Oil Pressure",
+      "raw_value": "000001A4",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002726",
+      "name": "Sys Param Ignition Source",
+      "raw_value": "00000454",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000711F",
+      "name": "Sys Param Brake 1 Air Pressure (Bar)",
+      "raw_value": "00000088",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000099C6",
+      "name": "Sys Param HandBrake / Parking",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000118",
+      "name": "GPS_Lat",
+      "raw_value": "140D6966",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000119",
+      "name": "GPS_Lon",
+      "raw_value": "12AAC961",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000122",
+      "name": "GPS Odo",
+      "raw_value": "1575E176",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000011D",
+      "name": "J1939 DTC",
+      "raw_value": "5D862100",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000001BE",
+      "name": "Trip Score",
+      "raw_value": "0000023A",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000210",
+      "name": "Scheme Output 528",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000297",
+      "name": "Scheme Output 663 - internal for start driving",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000215",
+      "name": "Scheme Output 533 1h of rest after ignition off",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00000216",
+      "name": "Scheme Output 534 - Air pressure less than 7 bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000006FD",
+      "name": "Scheme Output 1789 PTO Active (201)",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000011C6",
+      "name": "Scheme Output 4550 Air pneumatic pressure < 6Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000011CB",
+      "name": "Scheme Output 4555 Air pneumatic pressure >6<8.5Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000011D0",
+      "name": "Scheme Output 4560 Air pneumatic pressure > 8.5<9.5Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000011D5",
+      "name": "Scheme Output 4565 Air pneumatic pressure > 9.5<10.5",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000011DA",
+      "name": "Scheme Output 4570 Air pneumatic pressure > 10.5Bar",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000CB5C",
+      "name": "Calc Total Fuel Used From Sys Fuel Rate",
+      "raw_value": "1E1B49C0",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002BA7",
+      "name": "Scheme Output 11175",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002BAC",
+      "name": "Scheme Output 11180",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C01",
+      "name": "Scheme Output 11265",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C06",
+      "name": "Scheme Output 11270",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C0B",
+      "name": "Scheme Output 11275",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C10",
+      "name": "Scheme Output 11280",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C15",
+      "name": "Scheme Output 11285",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C1A",
+      "name": "Scheme Output 11290",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C1F",
+      "name": "Scheme Output 11295",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C24",
+      "name": "Scheme Output 11300",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C29",
+      "name": "Scheme Output 11305",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C2E",
+      "name": "Scheme Output 11310",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C33",
+      "name": "Scheme Output 11315",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C38",
+      "name": "Scheme Output 11320",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:02Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C3D",
+      "name": "Scheme Output 11325",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C8D",
+      "name": "Scheme Output 11405",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C42",
+      "name": "Scheme Output 11330",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C47",
+      "name": "Scheme Output 11335",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C4C",
+      "name": "Scheme Output 11340",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C51",
+      "name": "Scheme Output 11345",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C88",
+      "name": "Scheme Output 11400",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C92",
+      "name": "Scheme Output 11410",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C97",
+      "name": "Scheme Output 11415",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002C9C",
+      "name": "Scheme Output 11420",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00002EE5",
+      "name": "Scheme Output 12005 - Rainy Conditions",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000341C",
+      "name": "Scheme Output 13340 301 Chart 1",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003421",
+      "name": "Scheme Output 13345 301 Chart 1",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003426",
+      "name": "Scheme Output 13350 301 Chart 1",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000342B",
+      "name": "Scheme Output 13355 301 Chart 1",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003430",
+      "name": "Scheme Output 13360 301 Chart 1",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003435",
+      "name": "Calc Output 13365 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000343A",
+      "name": "Calc Outputs 13370 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000343F",
+      "name": "Calc Output 13375 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003444",
+      "name": "Calc Output 13380 301 Chart 4",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003449",
+      "name": "Calc Output 13385 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000038FE",
+      "name": "Scheme Output 14590",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000354D",
+      "name": "Scheme Output 13645 Cruise distance from total distance",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003589",
+      "name": "Scheme Output 13705",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000035F2",
+      "name": "Scheme Output 13810 - Wipers On",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "0000375A",
+      "name": "Scheme Output 14170",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "00003840",
+      "name": "14400-PTO Switch",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000038EF",
+      "name": "Scheme Output 14575",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000038F4",
+      "name": "Scheme Output 14580",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    },
+    {
+      "id": "000038F9",
+      "name": "Scheme Output 14585",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:54:03Z",
+      "inner_id": "0000000913055488"
+    }
+  ],
+  "moduleState": [
+    {
+      "id": "1",
+      "module": "ALCO_LOCK_MOUDLE_TYPE",
+      "sub": "DCDC_FTDI_EXT_BOARD",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "2",
+      "module": "ALL",
+      "sub": "ALL",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "3",
+      "module": "ALL",
+      "sub": "ALL",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "4",
+      "module": "ALUKA",
+      "sub": "IRMA_SUB_TYPE_4",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "5",
+      "module": "ALUKA",
+      "sub": "SMART_ALUKA",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "6",
+      "module": "BLACKBOX",
+      "sub": "BLACKBOX_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "7",
+      "module": "BUMPER_DETECTION",
+      "sub": "BUMPER_DETECTION_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "8",
+      "module": "CAN",
+      "sub": "CAN0",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "9",
+      "module": "CAN",
+      "sub": "CAN1",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "10",
+      "module": "CAN",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "11",
+      "module": "COLLISION",
+      "sub": "COLLISION",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "12",
+      "module": "GPS",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "13",
+      "module": "GSENSOR",
+      "sub": "GSENSOR_3D_WITH_FIFO",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "14",
+      "module": "J1708",
+      "sub": "J1708",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "15",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_3x2_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "16",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_4x3",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "17",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_6KEY_CIRCULAR_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "18",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_DALLAS_IBUTTON",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "19",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_RAMZOR",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "20",
+      "module": "MODEM",
+      "sub": "MODEM_QUECTEL_BG600L_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "21",
+      "module": "MOVON",
+      "sub": "MOVON_FATIGUE_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "22",
+      "module": "MOVON",
+      "sub": "MOVON_MDAS_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "23",
+      "module": "OBD",
+      "sub": "OBD_CAN_BUS_ISO_15765",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "24",
+      "module": "other",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "25",
+      "module": "other",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "26",
+      "module": "other",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "27",
+      "module": "OW_ADC12CH",
+      "sub": "OW_ADC12CH",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "28",
+      "module": "POWER_SYSTEM",
+      "sub": "BATTERY_CHARGER",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "29",
+      "module": "RFTPMS",
+      "sub": "RFTPMS_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "30",
+      "module": "TEMP",
+      "sub": "TEMP0",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "31",
+      "module": "TEMP",
+      "sub": "TEMP1",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "32",
+      "module": "TEMP",
+      "sub": "TEMP2",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "33",
+      "module": "TEMP",
+      "sub": "TEMP3",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "34",
+      "module": "TicketMachine",
+      "sub": "TICKET_MACHINE_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "35",
+      "module": "TPMS",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "36",
+      "module": "TPMS",
+      "sub": "other",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "37",
+      "module": "WEIGHT_MACHINE",
+      "sub": "WEIGHT_MACHINE_MODULE",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    }
+  ],
+  "rawCounts": {
+    "unitParametersEvents": 19,
+    "unitMessagesEvents": 21,
+    "unitConnEvents": 0
+  },
+  "can": {
+    "can0": {
+      "id": "8",
+      "module": "CAN",
+      "sub": "CAN0",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    "can1": {
+      "id": "9",
+      "module": "CAN",
+      "sub": "CAN1",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": true,
+      "was_ok": true,
+      "ok": true,
+      "error": false,
+      "error_descr": ""
+    },
+    "j1708": {
+      "id": "14",
+      "module": "J1708",
+      "sub": "J1708",
+      "last_update_date": "2026-02-21T09:44:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    "can0_ok": true,
+    "can1_ok": true,
+    "j1708_ok": false
+  }
+}

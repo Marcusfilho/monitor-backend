@@ -692,6 +692,14 @@ try {
   }, sessionToken);
   await sleep(800);
 
+  // GS_ONLY=1 => pula o fluxo de SchemeBuilder (associate+execute) e roda apenas GS (se GS_ENABLE=1)
+  const __gsOnly = __isTruthy(process.env.GS_ONLY);
+  if (__gsOnly) {
+    console.log(`[sb] GS_ONLY=1 -> pulando SB (vehicleSetting/execute_action_opr)`);
+  }
+
+  if (!__gsOnly) {
+
   // 1) Marca veículo
   sendFrame(ws, "vcls_check_opr", {
     client_id: String(clientId),
@@ -771,6 +779,8 @@ try {
 
   console.log("[sb] execute_action_opr enviado.");
   await sleep(2000);
+  } // /SB
+
   // === GS stage ==============================================================
   const __gsEnabled = __isTruthy(process.env.GS_ENABLE);
   if (__gsEnabled) {

@@ -6,8 +6,8 @@ let __createJob = null;
 try { __createJob = require("../jobs/jobStore").createJob; } catch (_) {}
 
 const catalogs = require("./catalogs");
-const CAN_SNAPSHOT_DEFAULT_CYCLES = Number(process.env.CAN_SNAPSHOT_CYCLES || "3");
-const CAN_SNAPSHOT_DEFAULT_INTERVAL_MS = Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "8000");
+const CAN_SNAPSHOT_DEFAULT_CYCLES = Number(process.env.CAN_SNAPSHOT_CYCLES || "12");
+const CAN_SNAPSHOT_DEFAULT_INTERVAL_MS = Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000");
 const store = require("./installationsStore");
 
 // IMPORTANTE: você JÁ tem /api/jobs (enqueue). Vamos chamar a mesma função que essa rota usa.
@@ -259,6 +259,40 @@ async function requestCanSnapshot(installationId) {
   return store.getInstallation(installationId);
 }
 
+function _pickSnapForAudit(inst){
+  const can = inst && inst.can && typeof inst.can === "object" ? inst.can : null;
+  const snap =
+    (inst && inst.can_snapshot_latest && typeof inst.can_snapshot_latest === "object") ? inst.can_snapshot_latest :
+    (inst && inst.can_snapshot && typeof inst.can_snapshot === "object" && !Array.isArray(inst.can_snapshot)) ? inst.can_snapshot :
+    (can && Array.isArray(can.snapshots) && can.snapshots.length ? can.snapshots[0] : null);
+  return (snap && typeof snap === "object") ? snap : null;
+}
+
+function _pickProgressFromSnap(snap){
+  try {
+    const raw = snap && snap.header && snap.header.raw;
+    const cand = [
+      raw && (raw.configuration_progress ?? raw.configurationProgress ?? raw.progress ?? raw.config_progress),
+      snap && snap.header && (snap.header.configuration_progress ?? snap.header.progress),
+      snap && (snap.configuration_progress ?? snap.progress)
+    ].filter(v => v !== undefined && v !== null);
+    if (!cand.length) return null;
+    const n = Number(cand[0]);
+    return Number.isFinite(n) ? n : null;
+  } catch { return null; }
+}
+
+function _pickPacketTsFromSnap(snap){
+  try {
+    const raw = snap && snap.header && snap.header.raw;
+    const cand = [
+      raw && (raw.gprs_last ?? raw.gprs_last_date ?? raw.gprsLast ?? raw.gps_last ?? raw.gpsLast),
+      snap && snap.header && (snap.header.gprs_last ?? snap.header.gps_last)
+    ].filter(v => v !== undefined && v !== null);
+    return cand.length ? String(cand[0]) : null;
+  } catch { return null; }
+}
+
 async function approveCan(installationId, { override, reason }) {
   mustEnqueue();
   const inst = store.getInstallation(installationId);
@@ -269,6 +303,48 @@ async function approveCan(installationId, { override, reason }) {
     store.patchInstallation(installationId, { status: "COMPLETED" });
     return store.getInstallation(installationId);
   }
+
+  const now = new Date().toISOString();
+  const overrideBool = !!override;
+
+  // Auditoria (snapshot final pré-validação) — idempotente
+  try {
+    const canPrev = (inst.can && typeof inst.can === "object") ? inst.can : {};
+    const auditPrev = (canPrev.audit && typeof canPrev.audit === "object") ? canPrev.audit : {};
+    if (!auditPrev.pre_approval) {
+      const snap = _pickSnapForAudit(inst);
+      auditPrev.pre_approval = {
+        schema_version: 1,
+        captured_at: now,
+        override: overrideBool,
+        reason: reason || null,
+        packet_ts: _pickPacketTsFromSnap(snap),
+        sb_progress_at_capture: _pickProgressFromSnap(snap),
+        snapshot: snap || null,
+      };
+    }
+
+    const canPatched = Object.assign({}, canPrev, {
+      audit: auditPrev,
+      stop_requested_at: canPrev.stop_requested_at || now,
+      approved_at: canPrev.approved_at || now,
+      approved_override: overrideBool,
+      approved_reason: reason || null,
+    });
+
+    store.patchInstallation(installationId, {
+      status: overrideBool ? "CAN_APPROVED_OVERRIDE" : "CAN_APPROVED",
+      can: canPatched,
+    });
+  } catch (_e) {}
+
+  // evita duplicar GS se o técnico clicar 2x
+  try {
+    const cur = store.getInstallation(installationId);
+    if (cur && Array.isArray(cur.jobs) && cur.jobs.some(j => String(j?.type||"") === "monitor_gs" && String(j?.status||"") !== "error")) {
+      return store.getInstallation(installationId);
+    }
+  } catch (_e) {}
 
   // enfileira GS
   const gs = catalogs.resolveGsCommand({
@@ -289,24 +365,25 @@ async function approveCan(installationId, { override, reason }) {
     vehicle: inst.payload.vehicle
   });
 
+  const clientName = _clientName(target_client_id);
   const gsJob = await enqueueJob({
     type: "monitor_gs",
     payload: {
       installation_id: installationId,
       clientId: target_client_id,
+      clientName,
       vehicleId: vid,
       vehicleSettingId,
       GS_ACTION_ID: gs.GS_ACTION_ID,
       GS_COMMAND_SYNTAX: gs.GS_COMMAND_SYNTAX,
       comment: inst.payload.comment || ("APP GS " + service),
       canApproved: true,
-      override: !!override,
+      override: overrideBool,
       reason: reason || null
     }
   });
 
   store.pushJob(installationId, { type: "monitor_gs", job_id: gsJob.id || gsJob.job_id || null, status: "queued" });
-  store.patchInstallation(installationId, { status: "GS_RUNNING" });
   return store.getInstallation(installationId);
 }
 

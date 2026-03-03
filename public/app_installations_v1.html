@@ -1,448 +1,1090 @@
 <!doctype html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>APP V1 - Installations (v1.3)</title>
+  <title>APP V1 — Instalações (v1.4)</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 16px; }
-    input, select, button { padding: 8px; margin: 6px 0; width: 100%; max-width: 560px; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
-    .col { flex: 1; min-width: 280px; }
-    pre { background: #111; color: #eee; padding: 12px; overflow: auto; max-height: 420px; }
-    .muted { color: #666; font-size: 12px; }
-    .warn { color: #b36b00; font-size: 12px; }
-    .ok { color: #1a7f37; font-size: 12px; }
-    hr { margin: 12px 0; }
-    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    :root{
+      --bg:#0b0f12; --panel:#0f1620; --text:#e8eef2; --muted:#93a4b8; --line:#1f2a38;
+      --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#60a5fa;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      --radius: 16px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+
+    header{position:sticky;top:0;z-index:5;background:rgba(11,15,18,.92);backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    header .title{display:flex;flex-direction:column;gap:2px}
+    header h1{margin:0;font-size:14px;letter-spacing:.2px}
+    header .sub{font-size:12px;color:var(--muted)}
+
+    .wrap{max-width:980px;margin:0 auto;padding:14px 12px 96px}
+
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+    .card + .card{margin-top:12px}
+    .card h2{margin:0 0 10px 0;font-size:13px;color:#cfe6ff}
+
+    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
+    input, select, textarea{
+      width:100%;padding:10px 12px;border-radius:14px;border:1px solid #273245;background:#0b1118;color:var(--text);
+      outline:none;font-size:14px
+    }
+    textarea{min-height:70px;resize:vertical}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .row > *{flex:1;min-width:220px}
+
+    button{
+      cursor:pointer;border:1px solid #2a3a52;background:#122033;color:var(--text);
+      border-radius:14px;padding:12px 14px;font-weight:700
+    }
+    button:hover{border-color:#3b5478}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .secondary{background:#0b1118}
+    .danger{background:#2a1111;border-color:#5b1f1f}
+
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+      border:1px solid #2a3a52;background:#0b1118;color:#cfe6ff;font-size:11px;white-space:nowrap}
+    .dot{width:8px;height:8px;border-radius:99px;background:var(--muted)}
+    .dot.good{background:var(--good)}
+    .dot.warn{background:var(--warn)}
+    .dot.bad{background:var(--bad)}
+
+    .kv{display:flex;gap:8px;flex-wrap:wrap}
+
+    .stepper{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .step{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;border:1px solid #223043;background:#0b1118}
+    .step b{font-size:12px}
+    .step span{font-size:12px;color:var(--muted)}
+
+    .progressWrap{margin-top:10px}
+    .progressBar{width:100%;height:10px;border-radius:99px;background:#0b1118;border:1px solid #223043;overflow:hidden}
+    .progressFill{height:100%;width:0%;background:var(--accent)}
+    .progressMeta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:var(--muted)}
+
+    .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .chip{border:1px solid #223043;background:#0b1118;border-radius:999px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px}
+    .chip .name{font-weight:800}
+    .chip .msg{color:var(--muted);font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .list{margin-top:10px;border-top:1px solid var(--line)}
+    .li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(31,42,56,.6)}
+    .li .k{color:var(--muted);font-size:12px}
+    .li .v{font-family:var(--mono);font-size:12px}
+
+    details{border:1px solid #223043;background:#0b1118;border-radius:14px;padding:10px 12px;margin-top:12px}
+    details summary{cursor:pointer;color:#cfe6ff;font-weight:700;font-size:12px}
+    pre{margin:10px 0 0 0;white-space:pre-wrap;word-break:break-word;color:#e8eef2;font-family:var(--mono);font-size:12px;line-height:1.35}
+
+    .toast{position:fixed;left:12px;right:12px;bottom:84px;z-index:10;
+      display:none;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;border:1px solid #223043;background:rgba(11,17,24,.96)}
+    .toast.show{display:flex}
+    .toast .t{font-size:13px}
+    .toast .x{margin-left:auto;background:transparent;border:0;color:var(--muted);font-size:18px;cursor:pointer;padding:0 6px}
+
+    .bottomBar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:rgba(11,15,18,.92);backdrop-filter: blur(10px);
+      border-top:1px solid var(--line);padding:12px}
+    .bottomBar .inner{max-width:980px;margin:0 auto;display:flex;gap:10px}
+    .bottomBar button{flex:1}
+
+    .hidden{display:none !important}
+
+    @media (max-width:520px){
+      .row > *{min-width: 100%}
+      header{padding:12px 12px}
+      .wrap{padding:12px 10px 98px}
+      .chip .msg{max-width:160px}
+    }
   </style>
 </head>
 <body>
-  <h2>APP V1 (provisório) — Installations (v1.3)</h2>
-  <div class="muted">
-    Layout alinhado ao plano: <b>1 Serial</b> + <b>1 Placa real</b>. O app calcula <span class="kbd">lookup_license</span> automaticamente:
-    <br/>• INSTALL → lookup_license=serial
-    <br/>• MAINT_*/UNINSTALL → lookup_license=placa real
-    <br/>Compat: o payload também envia <span class="kbd">plate = lookup_license</span> para o worker atual.
+<header>
+  <div class="title">
+    <h1>APP V1 — Instalações <span class="pill" style="margin-left:8px">v1.4</span></h1>
+    <div class="sub" id="subline">Pronto</div>
   </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <div class="kv" id="topKv"></div>
+    <button id="btnNew" class="secondary" style="padding:8px 10px;border-radius:12px;font-weight:800;font-size:12px">Nova</button>
+  </div>
+</header>
 
-  <div class="row">
-    <div class="col">
-      <label>Service</label>
-      <select id="service">
-        <option>INSTALL</option>
-        <option>UNINSTALL</option>
-        <option>MAINT_NO_SWAP</option>
-        <option>MAINT_WITH_SWAP</option>
-      </select>
+<div class="wrap">
+  <!-- 1) FORM -->
+  <section class="card" id="cardForm">
+    <h2>1) Dados da instalação</h2>
 
-      <hr/>
-      <div class="muted">Cliente + Setting (Monitor / Scheme Builder)</div>
+    <label>Serviço</label>
+    <select id="service">
+      <option value="INSTALL">INSTALL</option>
+      <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
+      <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
+      <option value="UNINSTALL">UNINSTALL</option>
+    </select>
 
-      <label>Cliente (nome)</label>
-      <select id="clientSelect"></select>
-      <div class="muted" id="clientMeta"></div>
+    <div class="row">
+      <div>
+        <label>Cliente</label>
+        <select id="clientSelect"></select>
+        <div class="hidden" id="clientMeta" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+      </div>
+      <div>
+        <label>Setting (Monitor)</label>
+        <input id="vehicleSettingId" placeholder="ex.: 5592" inputmode="numeric" />
+      </div>
+    </div>
 
-      <label>target_client_id</label>
-      <input id="target_client_id" placeholder="ex: 218572" />
-
-      <label>vehicleSettingId (Monitor)</label>
-      <input id="vehicleSettingId" placeholder="ex: 5592" />
-
-      <hr/>
-      <div class="muted">Identificação do veículo</div>
-
-      <label>Placa (real)</label>
-      <input id="plate_real" placeholder="ex: BOI0A12" />
-      <div class="muted">Sempre é a placa real do veículo (usada no SAVE como LICENSE_NMBR).</div>
-
+    <div class="row">
+      <div>
+        <label>Placa (real)</label>
+        <input id="plate_real" placeholder="ex.: ABC1D23" autocapitalize="characters" />
+      </div>
       <div id="rowSerial">
         <label>Serial</label>
-        <input id="serial" placeholder="ex: 913055459" />
-        <div class="muted" id="serialHint"></div>
+        <input id="serial" placeholder="ex.: 913055459" inputmode="numeric" />
       </div>
+    </div>
 
-      <label>lookup_license (auto)</label>
-      <input id="lookup_license_auto" readonly />
-      <div class="muted">É a chave usada no VHCLS (INSTALL=serial; demais=placa). Enviado também como <span class="kbd">plate</span> por compatibilidade.</div>
-
-      <hr id="hrInstall"/>
-      <div id="blockInstall">
-        <div class="muted">Modelo (HTML5) — seleciona o <b>assetType</b> (vira ASSET_TYPE no SAVE_VHCL_ACTIVATION_NEW)</div>
-
+    <div class="row" id="rowInstallModel">
+      <div>
         <label>Fabricante</label>
         <select id="cat_manufacturer"></select>
-
+      </div>
+      <div>
         <label>Modelo</label>
         <select id="cat_model"></select>
-
-        <label>assetType (id do modelo)</label>
-        <input id="assetType" readonly />
       </div>
+    </div>
+    <div class="hidden" id="assetTypeWrap" style="margin-top:8px">
+      <span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span>
+    </div>
 
-      <hr/>
-      <div class="muted">G-Sensor — orientação/instalação</div>
+    <details id="gsDetails">
+      <summary>G‑Sensor (orientação)</summary>
+      <div class="row" style="margin-top:6px">
+        <div>
+          <label>Etiqueta (label)</label>
+          <select id="gs_label"></select>
+        </div>
+        <div>
+          <label>Chicote (harness)</label>
+          <select id="gs_harness"></select>
+        </div>
+      </div>
+      <div class="hidden">
+        <label>Comando (auto)</label>
+        <input id="gs_command" readonly />
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted)">O comando é calculado automaticamente.</div>
+    </details>
 
-      <label>Etiqueta (label)</label>
-      <select id="gs_label"></select>
-
-      <label>Chicote (harness)</label>
-      <select id="gs_harness"></select>
-
-      <label>Comando (auto)</label>
-      <input id="gs_command" readonly />
-
-      <div class="muted">O payload envia: gsensor = { label, harness, command }.</div>
-
-      <hr/>
+    <div class="row" style="margin-top:12px">
       <button id="btnCreate">Criar instalação</button>
+      <button class="secondary" id="btnReset">Limpar</button>
+    </div>
 
-      <div class="muted">Preview do payload (antes de enviar)</div>
+    <details id="advancedForm" class="hidden">
+      <summary>Avançado (debug)</summary>
       <pre id="payloadPreview">{}</pre>
+    </details>
+  </section>
+
+  <!-- 2) CAN -->
+  <section class="card" id="cardCan">
+    <h2>2) Validação CAN</h2>
+
+    <div class="kv" id="instKv"></div>
+
+    <div class="progressWrap">
+      <div class="progressBar"><div class="progressFill" id="sbFill"></div></div>
+      <div class="progressMeta">
+        <div>SB: <b id="sbPct">—</b></div>
+        <div>Último pacote: <b id="pktAge">—</b></div>
+      </div>
     </div>
 
-    <div class="col">
-      <label>installation_id</label>
-      <input id="installation_id" />
+    <div class="stepper" id="stepper"></div>
 
-      <label>installation_token</label>
-      <input id="installation_token" />
+    <div class="chips" id="msChips" style="margin-top:12px"></div>
 
-      <div class="row">
-        <button id="btnPoll" class="col">Poll status</button>
-        <button id="btnSnap" class="col">Request CAN snapshot</button>
-      </div>
+    <div class="list" id="keyParams"></div>
 
-      <div class="row">
-        <button id="btnApprove" class="col">Approve CAN</button>
-        <button id="btnOverride" class="col">Approve override</button>
-      </div>
+    <details id="detailsDebug" class="hidden">
+      <summary>Detalhes (JSON)</summary>
+      <pre id="debugJson">{}</pre>
+    </details>
+  </section>
+</div>
 
-      <label>override reason</label>
-      <input id="override_reason" value="vehicle_new_no_engineering" />
+<div class="toast" id="toast">
+  <span class="dot" id="toastDot"></span>
+  <div class="t" id="toastText">…</div>
+  <button class="x" id="toastX">×</button>
+</div>
 
-      <div class="muted">Saída do backend</div>
-      <pre id="out">{}</pre>
-    </div>
+<div class="bottomBar">
+  <div class="inner">
+    <button id="btnApprove" disabled>Validar CAN</button>
+    <button id="btnRefresh" class="secondary" disabled>Atualizar CAN</button>
   </div>
+</div>
 
 <script>
-const $ = (id) => document.getElementById(id);
+  const $ = (id) => document.getElementById(id);
 
-function saveLs() {
-  localStorage.setItem("inst_id", $("installation_id").value || "");
-  localStorage.setItem("inst_tok", $("installation_token").value || "");
-}
-function loadLs() {
-  $("installation_id").value = localStorage.getItem("inst_id") || "";
-  $("installation_token").value = localStorage.getItem("inst_tok") || "";
-}
-loadLs();
-
-async function api(path, opts={}) {
-  const headers = Object.assign({ "content-type": "application/json" }, opts.headers || {});
-  const r = await fetch(path, Object.assign({}, opts, { headers }));
-  const t = await r.text();
-  let j = null;
-  try { j = JSON.parse(t); } catch (_) { j = { raw: t }; }
-  return { status: r.status, json: j };
-}
-
-function showOut(x) { $("out").textContent = JSON.stringify(x, null, 2); }
-function showPayload(x) { $("payloadPreview").textContent = JSON.stringify(x, null, 2); }
-
-function norm(v){ return String(v == null ? "" : v).trim(); }
-function up(v){ return norm(v).toUpperCase(); }
-
-function validatePayload(body){
-  const errs = [];
-  const svc = up(body.service);
-
-  if (!norm(body.plate_real)) errs.push("Placa (real) é obrigatória");
-
-  if (svc === "INSTALL"){
-    if (!norm(body.serial)) errs.push("Serial é obrigatório para INSTALL");
-    if (!body.target_client_id) errs.push("target_client_id é obrigatório para INSTALL");
-    if (!body.assetType) errs.push("assetType é obrigatório para INSTALL");
-  }
-
-  if (svc === "MAINT_WITH_SWAP"){
-    if (!norm(body.serial)) errs.push("Serial (novo) é obrigatório para MAINT_WITH_SWAP");
-  }
-
-  return errs;
-}
-
-// ===== Catálogos =====
-let CATALOG_TYPES = [];      // catalog_vehicle_type.json
-let CATALOG_SETTINGS = [];   // catalog_vehicle_settings.json
-let GS_COMMANDS = [];        // g-sensor_commands.json
-
-function uniqSorted(arr){ return [...new Set(arr)].sort((a,b)=>String(a).localeCompare(String(b))); }
-
-async function loadJson(relPath){
-  const r = await fetch(relPath, { cache: "no-store" });
-  if (!r.ok) throw new Error(relPath + " HTTP " + r.status);
-  return r.json();
-}
-
-async function loadCatalogs(){
-  try {
-    CATALOG_TYPES = await loadJson("catalog_vehicle_type.json");
-    const s = await loadJson("catalog_vehicle_settings.json");
-    CATALOG_SETTINGS = (s && s.items) ? s.items : [];
-    const g = await loadJson("g-sensor_commands.json");
-    GS_COMMANDS = (g && g.commands) ? g.commands : [];
-  } catch (e) {
-    showOut({ error: "Falha ao carregar JSONs. Confirme que estão na mesma pasta do HTML.", details: String(e) });
-  }
-  renderClients();
-  renderManufacturers();
-  renderGsSelectors();
-  applyServiceUI();
-  refreshPreview();
-}
-
-// ===== Cliente -> target_client_id + vehicleSettingId =====
-function renderClients(){
-  const sel = $("clientSelect");
-  sel.innerHTML = "";
-  const items = CATALOG_SETTINGS.slice().sort((a,b)=>
-    String(a.clientName).localeCompare(String(b.clientName)) ||
-    String(a.profileKey).localeCompare(String(b.profileKey))
-  );
-
-  for (const it of items){
-    const o = document.createElement("option");
-    o.value = String(it.clientId) + "|" + String(it.profileKey) + "|" + String(it.vehicleSettingId);
-    o.textContent = `${it.clientName}  [${it.profileKey}]  → setting ${it.vehicleSettingId}` + (it.isDefault ? " (default)" : "");
-    sel.appendChild(o);
-  }
-
-  const idx = items.findIndex(x => x.clientName === "TransLima" && x.profileKey === "default");
-  if (idx >= 0) sel.selectedIndex = idx;
-
-  applyClientSelection();
-}
-
-function applyClientSelection(){
-  const v = $("clientSelect").value || "";
-  const [clientId, profileKey, vehicleSettingId] = v.split("|");
-  $("target_client_id").value = clientId || "";
-  $("vehicleSettingId").value = vehicleSettingId || "";
-  $("clientMeta").textContent = `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`;
-  refreshPreview();
-}
-$("clientSelect").addEventListener("change", applyClientSelection);
-
-// ===== Modelo -> assetType (HTML5) =====
-function renderManufacturers(){
-  const sel = $("cat_manufacturer");
-  sel.innerHTML = "";
-  const mans = uniqSorted(CATALOG_TYPES.map(x => x.manufacturer).filter(Boolean));
-  for (const m of mans){
-    const o = document.createElement("option");
-    o.value = m; o.textContent = m;
-    sel.appendChild(o);
-  }
-  renderModels();
-}
-
-function renderModels(){
-  const man = $("cat_manufacturer").value;
-  const sel = $("cat_model");
-  sel.innerHTML = "";
-  const models = uniqSorted(CATALOG_TYPES.filter(x => x.manufacturer === man).map(x => x.model).filter(Boolean));
-  for (const m of models){
-    const o = document.createElement("option");
-    o.value = m; o.textContent = m;
-    sel.appendChild(o);
-  }
-  updateAssetType();
-}
-
-function updateAssetType(){
-  const man = $("cat_manufacturer").value;
-  const model = $("cat_model").value;
-  const it = CATALOG_TYPES.find(x => x.manufacturer === man && x.model === model);
-  $("assetType").value = it ? String(it.asset_type) : "";
-  refreshPreview();
-}
-$("cat_manufacturer").addEventListener("change", () => { renderModels(); });
-$("cat_model").addEventListener("change", updateAssetType);
-
-// ===== G-Sensor: label+harness -> command =====
-function renderGsSelectors(){
-  const labels = uniqSorted(GS_COMMANDS.map(x => x.label).filter(Boolean));
-  const harness = uniqSorted(GS_COMMANDS.map(x => x.harness).filter(Boolean));
-
-  const selL = $("gs_label"); selL.innerHTML = "";
-  for (const l of labels){ const o=document.createElement("option"); o.value=l; o.textContent=l; selL.appendChild(o); }
-
-  const selH = $("gs_harness"); selH.innerHTML = "";
-  for (const h of harness){ const o=document.createElement("option"); o.value=h; o.textContent=h; selH.appendChild(o); }
-
-  updateGsCommand();
-}
-function updateGsCommand(){
-  const l = $("gs_label").value;
-  const h = $("gs_harness").value;
-  const it = GS_COMMANDS.find(x => x.label === l && x.harness === h);
-  $("gs_command").value = it ? String(it.command) : "";
-  refreshPreview();
-}
-$("gs_label").addEventListener("change", updateGsCommand);
-$("gs_harness").addEventListener("change", updateGsCommand);
-
-// ===== UI por serviço =====
-function applyServiceUI(){
-  const svc = $("service").value;
-  const isInstall = (svc === "INSTALL");
-
-  $("blockInstall").style.display = isInstall ? "" : "none";
-  $("hrInstall").style.display = isInstall ? "" : "none";
-
-  // serial necessário em INSTALL e MAINT_WITH_SWAP; oculto nos demais
-  const wantSerial = (svc === "INSTALL" || svc === "MAINT_WITH_SWAP");
-  $("rowSerial").style.display = wantSerial ? "" : "none";
-
-  $("serialHint").textContent =
-    (svc === "INSTALL")
-      ? "INSTALL: este serial será usado como lookup_license (bancada: license=serial)."
-      : (svc === "MAINT_WITH_SWAP")
-        ? "MAINT_WITH_SWAP: este é o serial novo a instalar."
-        : "";
-
-  refreshPreview();
-}
-$("service").addEventListener("change", applyServiceUI);
-
-// ===== Build payload (canônico) =====
-function buildPayload(){
-  const svc = $("service").value;
-
-  const plateReal = norm($("plate_real").value);
-  const serial = norm($("serial").value);
-
-  // regra do plano: INSTALL procura por serial; demais procuram por placa real
-  const lookup = (svc === "INSTALL") ? serial : plateReal;
-
-  $("lookup_license_auto").value = lookup;
-
-  const body = {
-    service: svc,
-
-    // catálogo/monitor
-    target_client_id: Number($("target_client_id").value || 0) || null,
-    vehicleSettingId: Number($("vehicleSettingId").value || 0) || null,
-
-    // canônico
-    plate_real: plateReal || null,
-    serial: serial || "",
-
-    // chave VHCLS
-    lookup_license: lookup || null,
-
-    // compat worker atual
-    plate: lookup || null,
-
-    // SAVE helper (compat)
-    LICENSE_NMBR: plateReal || null,
-    INNER_ID: serial || null,
-    DIAL_NUMBER: serial || null,
-
-    gsensor: {
-      label: $("gs_label").value,
-      harness: $("gs_harness").value,
-      command: $("gs_command").value
-    }
+  // ====== state ======
+  const state = {
+    inst: null,
+    lastSnapshot: null,
+    pollTimer: null,
+    pollMs: 5000,
+    debug: false,
   };
 
-  if (svc === "INSTALL") {
-    const assetType = Number($("assetType").value || 0) || null;
-    body.assetType = assetType;
-    body.vehicle = {
-      manufacturer: $("cat_manufacturer").value,
-      model: $("cat_model").value,
-      year: null
+  // ====== ui helpers ======
+  function setSubline(msg){ $("subline").textContent = msg || ""; }
+
+  function pill(text, kind){
+    const s = document.createElement("span");
+    s.className = "pill";
+    if (kind) s.dataset.kind = kind;
+    const d = document.createElement("span");
+    d.className = "dot" + (kind ? (" " + kind) : "");
+    const t = document.createElement("span");
+    t.textContent = text;
+    s.appendChild(d);
+    s.appendChild(t);
+    return s;
+  }
+
+  function showToast(text, kind){
+    const t = $("toast");
+    const dot = $("toastDot");
+    dot.className = "dot" + (kind ? (" " + kind) : "");
+    $("toastText").textContent = text;
+    t.classList.add("show");
+    clearTimeout(t.__t);
+    t.__t = setTimeout(()=> t.classList.remove("show"), 3600);
+  }
+  $("toastX").onclick = () => $("toast").classList.remove("show");
+
+  function norm(v){ return String(v == null ? "" : v).trim(); }
+  function up(v){ return norm(v).toUpperCase(); }
+
+  function fmtErr(e){
+    const m = (e && (e.message || e.stack)) ? String(e.message || e.stack) : String(e);
+    return m.length > 220 ? (m.slice(0, 220) + "…") : m;
+  }
+
+  // ====== api ======
+  async function api(path, { method="GET", json=null, headers={} } = {}){
+    const ctrl = new AbortController();
+    const to = setTimeout(()=> ctrl.abort(), 45000);
+    try {
+      const res = await fetch(path, {
+        method,
+        headers: {
+          ...(json ? { "content-type": "application/json" } : {}),
+          ...(headers || {}),
+        },
+        body: json ? JSON.stringify(json) : undefined,
+        signal: ctrl.signal,
+      });
+      const text = await res.text().catch(()=>"");
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      return { ok: res.ok, status: res.status, data };
+    } finally {
+      clearTimeout(to);
+    }
+  }
+
+  // ====== catalogs ======
+  let CATALOG_TYPES = [];      // catalog_vehicle_type.json
+  let CATALOG_SETTINGS = [];   // catalog_vehicle_settings.json
+  let GS_COMMANDS = [];        // g-sensor_commands.json
+
+  function uniqSorted(arr){ return [...new Set(arr)].sort((a,b)=>String(a).localeCompare(String(b))); }
+
+  async function loadJson(rel){
+    const r = await fetch(rel, { cache: "no-store" });
+    if (!r.ok) throw new Error(rel + " HTTP " + r.status);
+    return r.json();
+  }
+
+  async function loadCatalogs(){
+    try {
+      CATALOG_TYPES = await loadJson("catalog_vehicle_type.json");
+      const s = await loadJson("catalog_vehicle_settings.json");
+      CATALOG_SETTINGS = (s && s.items) ? s.items : [];
+      const g = await loadJson("g-sensor_commands.json");
+      GS_COMMANDS = (g && g.commands) ? g.commands : [];
+    } catch (e) {
+      showToast("Falha ao carregar catálogos (JSON).", "bad");
+      console.error(e);
+    }
+    renderClients();
+    renderManufacturers();
+    renderGsSelectors();
+    applyServiceUI();
+    refreshAdvancedPreview();
+  }
+
+  function renderClients(){
+    const sel = $("clientSelect");
+    sel.innerHTML = "";
+
+    const items = CATALOG_SETTINGS.slice().sort((a,b)=>
+      String(a.clientName).localeCompare(String(b.clientName)) ||
+      String(a.profileKey).localeCompare(String(b.profileKey))
+    );
+
+    for (const it of items){
+      const o = document.createElement("option");
+      o.value = String(it.clientId) + "|" + String(it.profileKey) + "|" + String(it.vehicleSettingId);
+      o.textContent = `${it.clientName}` + (it.isDefault ? " (default)" : "");
+      sel.appendChild(o);
+    }
+
+    // default: TransLima default (se existir), senão primeiro
+    const idx = items.findIndex(x => x.clientName === "TransLima" && x.profileKey === "default");
+    if (idx >= 0) sel.selectedIndex = idx;
+
+    applyClientSelection();
+  }
+
+  function applyClientSelection(){
+    const v = $("clientSelect").value || "";
+    const [clientId, profileKey, vehicleSettingId] = v.split("|");
+    // prefill (permite override manual no input)
+    if (!norm($("vehicleSettingId").value)) $("vehicleSettingId").value = vehicleSettingId || "";
+    $("clientMeta").textContent = `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`;
+    refreshAdvancedPreview();
+  }
+  $("clientSelect").addEventListener("change", applyClientSelection);
+
+  function renderManufacturers(){
+    const sel = $("cat_manufacturer");
+    sel.innerHTML = "";
+    const mans = uniqSorted(CATALOG_TYPES.map(x => x.manufacturer).filter(Boolean));
+    for (const m of mans){
+      const o = document.createElement("option");
+      o.value = m; o.textContent = m;
+      sel.appendChild(o);
+    }
+    renderModels();
+  }
+
+  function renderModels(){
+    const man = $("cat_manufacturer").value;
+    const sel = $("cat_model");
+    sel.innerHTML = "";
+    const models = uniqSorted(CATALOG_TYPES.filter(x => x.manufacturer === man).map(x => x.model).filter(Boolean));
+    for (const m of models){
+      const o = document.createElement("option");
+      o.value = m; o.textContent = m;
+      sel.appendChild(o);
+    }
+    updateAssetType();
+  }
+
+  function updateAssetType(){
+    const man = $("cat_manufacturer").value;
+    const model = $("cat_model").value;
+    const it = CATALOG_TYPES.find(x => x.manufacturer === man && x.model === model);
+    const v = it ? String(it.asset_type) : "";
+    $("assetTypeText").textContent = v || "—";
+    refreshAdvancedPreview();
+  }
+  $("cat_manufacturer").addEventListener("change", renderModels);
+  $("cat_model").addEventListener("change", updateAssetType);
+
+  function renderGsSelectors(){
+    const labels = uniqSorted(GS_COMMANDS.map(x => x.label).filter(Boolean));
+    const harness = uniqSorted(GS_COMMANDS.map(x => x.harness).filter(Boolean));
+
+    const selL = $("gs_label"); selL.innerHTML = "";
+    for (const l of labels){ const o=document.createElement("option"); o.value=l; o.textContent=l; selL.appendChild(o); }
+
+    const selH = $("gs_harness"); selH.innerHTML = "";
+    for (const h of harness){ const o=document.createElement("option"); o.value=h; o.textContent=h; selH.appendChild(o); }
+
+    updateGsCommand();
+  }
+
+  function updateGsCommand(){
+    const l = $("gs_label").value;
+    const h = $("gs_harness").value;
+    const it = GS_COMMANDS.find(x => x.label === l && x.harness === h);
+    $("gs_command").value = it ? String(it.command) : "";
+    refreshAdvancedPreview();
+  }
+  $("gs_label").addEventListener("change", updateGsCommand);
+  $("gs_harness").addEventListener("change", updateGsCommand);
+
+  // ====== form logic ======
+  function applyServiceUI(){
+    const svc = $("service").value;
+
+    // serial só em INSTALL e MAINT_WITH_SWAP
+    const wantSerial = (svc === "INSTALL" || svc === "MAINT_WITH_SWAP");
+    $("rowSerial").classList.toggle("hidden", !wantSerial);
+
+    // modelo/assetType só em INSTALL
+    const isInstall = (svc === "INSTALL");
+    $("rowInstallModel").classList.toggle("hidden", !isInstall);
+    $("assetTypeWrap").classList.toggle("hidden", !isInstall);
+
+    refreshAdvancedPreview();
+  }
+  $("service").addEventListener("change", applyServiceUI);
+
+  function buildPayload(){
+    const svc = $("service").value;
+
+    const plateReal = up($("plate_real").value);
+    const serial = norm($("serial").value);
+
+    const v = $("clientSelect").value || "";
+    const [clientId, _profileKey, vehicleSettingIdDefault] = v.split("|");
+    const vehicleSettingId = norm($("vehicleSettingId").value) || vehicleSettingIdDefault || "";
+
+    const gsCmd = $("gs_command").value;
+
+    const body = {
+      service: svc,
+      target_client_id: clientId ? Number(clientId) : null,
+      vehicleSettingId: vehicleSettingId ? Number(vehicleSettingId) : null,
+      plate_real: plateReal || null,
+      serial: serial || "",
+      // compat: plate_lookup fica nulo (backend normaliza); plate usado p/ lookup
+      plate: (svc === "INSTALL") ? (serial || plateReal || null) : (plateReal || null),
+      gsensor: {
+        label_pos: $("gs_label").value || null,
+        harness_pos: $("gs_harness").value || null,
+        command: gsCmd || null,
+      }
+    };
+
+    if (svc === "INSTALL"){
+      const at = Number($("assetTypeText").textContent || 0) || null;
+      body.assetType = at;
+      body.vehicle = {
+        manufacturer: $("cat_manufacturer").value || null,
+        model: $("cat_model").value || null,
+        year: null,
+      };
+    }
+
+    if (svc === "UNINSTALL" || svc === "MAINT_NO_SWAP") body.serial = "";
+
+    return body;
+  }
+
+  function validatePayload(p){
+    const errs = [];
+    const svc = up(p.service);
+    if (!norm(p.plate_real)) errs.push("Placa real é obrigatória");
+    if (svc === "INSTALL"){
+      if (!norm(p.serial)) errs.push("Serial é obrigatório para INSTALL");
+      if (!p.target_client_id) errs.push("Cliente é obrigatório");
+      if (!p.assetType) errs.push("Modelo (assetType) é obrigatório");
+    }
+    if (svc === "MAINT_WITH_SWAP"){
+      if (!norm(p.serial)) errs.push("Serial (novo) é obrigatório para MAINT_WITH_SWAP");
+    }
+    return errs;
+  }
+
+  function refreshAdvancedPreview(){
+    const dbg = $("advancedForm");
+    if (!state.debug) { dbg.classList.add("hidden"); return; }
+    dbg.classList.remove("hidden");
+    $("payloadPreview").textContent = JSON.stringify(buildPayload(), null, 2);
+  }
+
+  // ====== installation id/token persistence ======
+  function saveLs(id, tok){
+    localStorage.setItem("inst_id", id || "");
+    localStorage.setItem("inst_tok", tok || "");
+  }
+  function loadLs(){
+    return {
+      id: localStorage.getItem("inst_id") || "",
+      tok: localStorage.getItem("inst_tok") || "",
     };
   }
 
-  // regra: não mandar assetType fora do INSTALL
-  if (svc !== "INSTALL") delete body.assetType;
+  // ====== snapshot parsing ======
+  function lastOf(v){ return Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v; }
 
-  // UNINSTALL / MAINT_NO_SWAP não precisam de serial no payload final
-  if (svc === "UNINSTALL" || svc === "MAINT_NO_SWAP") body.serial = "";
-
-  return body;
-}
-
-function refreshPreview(){ showPayload(buildPayload()); }
-["target_client_id","vehicleSettingId","plate_real","serial"].forEach(id => {
-  $(id).addEventListener("input", refreshPreview);
-});
-
-$("btnCreate").onclick = async () => {
-  const body = buildPayload();
-  showPayload(body);
-
-  const errs = validatePayload(body);
-  if (errs.length) {
-    alert("Payload inválido:\n- " + errs.join("\n- "));
-    return;
+  function pick(obj, paths){
+    for (const p of paths){
+      let cur = obj;
+      let ok = true;
+      for (const k of p){
+        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
+        else { ok = false; break; }
+      }
+      if (ok && cur !== undefined && cur !== null) return cur;
+    }
+    return null;
   }
 
-  const r = await api("/api/installations", { method: "POST", body: JSON.stringify(body) });
-  showOut(r);
-  if (r.json && r.json.ok) {
-    $("installation_id").value = r.json.installation_id;
-    $("installation_token").value = r.json.installation_token;
-    saveLs();
+  function unwrapSnapshot(x){
+    if (!x) return null;
+    let cur = lastOf(x);
+    for (let i=0;i<5;i++){
+      if (!cur || typeof cur !== "object") break;
+      if (Array.isArray(cur)) { cur = lastOf(cur); continue; }
+      if (cur.snapshot) { cur = cur.snapshot; continue; }
+      if (cur.data) { cur = cur.data; continue; }
+      if (cur.payload) { cur = cur.payload; continue; }
+      if (cur.result) { cur = cur.result; continue; }
+      break;
+    }
+    return cur && typeof cur === "object" ? cur : null;
   }
-};
 
-$("btnPoll").onclick = async () => {
-  const id = $("installation_id").value.trim();
-  const r = await api("/api/installations/" + encodeURIComponent(id));
-  showOut(r);
-};
+  function extractSnapshot(inst){
+    const raw =
+      inst?.can_snapshot_latest ||
+      inst?.canSnapshotLatest ||
+      inst?.can_snapshot_best ||
+      inst?.canSnapshotBest ||
+      inst?.can_snapshot ||
+      inst?.canSnapshot ||
+      inst?.can?.snapshot_latest ||
+      inst?.can?.snapshot ||
+      (Array.isArray(inst?.can?.snapshots) ? inst.can.snapshots[inst.can.snapshots.length-1] : null) ||
+      null;
 
-$("btnSnap").onclick = async () => {
-  const id = $("installation_id").value.trim();
-  const tok = $("installation_token").value.trim();
-  const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/request-can-snapshot", {
-    method: "POST",
-    headers: { "x-installation-token": tok },
-    body: "{}"
-  });
-  showOut(r);
-};
+    const snap = unwrapSnapshot(raw);
+    return snap && typeof snap === "object" ? snap : null;
+  }
 
-$("btnApprove").onclick = async () => {
-  const id = $("installation_id").value.trim();
-  const tok = $("installation_token").value.trim();
-  const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/approve-can", {
-    method: "POST",
-    headers: { "x-installation-token": tok },
-    body: JSON.stringify({ override: false })
-  });
-  showOut(r);
-};
+  function parsePacketAge(snapshot){
+    const header = snapshot?.header || snapshot?.meta || {};
+    const ts =
+      header.packet_ts || header.packetTs || header.last_packet_ts || header.lastPacketTs ||
+      header.gprs_last || header.gprsLast || header.gps_gprs_last || header.gpsGprsLast ||
+      snapshot?.packet_ts || snapshot?.packetTs ||
+      null;
 
-$("btnOverride").onclick = async () => {
-  const id = $("installation_id").value.trim();
-  const tok = $("installation_token").value.trim();
-  const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/approve-can", {
-    method: "POST",
-    headers: { "x-installation-token": tok },
-    body: JSON.stringify({ override: true, reason: $("override_reason").value })
-  });
-  showOut(r);
-};
+    if (!ts) return { ageText: "—", kind: "", ageSec: null };
+    const d = new Date(ts);
+    if (!Number.isFinite(d.getTime())) return { ageText: "—", kind: "", ageSec: null };
 
-loadCatalogs();
-applyServiceUI();
-refreshPreview();
+    const ageSec = Math.max(0, Math.round((Date.now() - d.getTime())/1000));
+    let ageText = `${ageSec}s`;
+    if (ageSec >= 60) ageText = `${Math.floor(ageSec/60)}m`;
+    if (ageSec >= 3600) ageText = `${Math.floor(ageSec/3600)}h`;
+
+    let kind = "good";
+    if (ageSec > 120) kind = "warn";
+    if (ageSec > 600) kind = "bad";
+
+    return { ageText, kind, ageSec };
+  }
+
+  function parseSbProgress(inst, snapshot){
+    const p =
+      inst?.sb_progress ??
+      inst?.sb?.progress ??
+      inst?.sb?.progress_percent ??
+      inst?.sbProgress ??
+      snapshot?.sb_progress ??
+      snapshot?.header?.configuration_progress ??
+      snapshot?.header?.progress ??
+      null;
+
+    const n = Number(p);
+    if (!Number.isFinite(n)) return null;
+    if (n < 0) return 0;
+    if (n > 100) return 100;
+    return Math.round(n);
+  }
+
+  const MS_WANT = [
+    { id: 8,  key: "CAN0" },
+    { id: 9,  key: "CAN1" },
+    { id: 15, key: "J1708" },
+    { id: 19, key: "KEYPAD_DALLAS" },
+    { id: 20, key: "KEYPAD_RAMZOR" },
+  ];
+
+  function normMsId(it){
+    const v = it?.id ?? it?.module_state_id ?? it?.moduleStateId ?? it?.module_id ?? it?.moduleId ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function truthy(v){
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return v !== 0;
+    return /^(1|true|yes|on)$/i.test(String(v || "").trim());
+  }
+
+  function renderModuleState(snapshot){
+    const ms = snapshot?.module_state || snapshot?.moduleState || snapshot?.module_states || snapshot?.moduleStates || [];
+    const arr = Array.isArray(ms) ? ms : [];
+
+    const byId = new Map();
+    for (const it of arr){
+      const id = normMsId(it);
+      if (id != null && !byId.has(id)) byId.set(id, it);
+    }
+
+    const host = $("msChips");
+    host.innerHTML = "";
+
+    for (const w of MS_WANT){
+      const it = byId.get(w.id) || null;
+      const active = truthy(it?.active);
+      const ok = truthy(it?.ok);
+      const wasOk = truthy(it?.was_ok ?? it?.wasOk);
+      const msg = norm(it?.message || it?.msg || "");
+
+      let kind = "bad";
+      if (it && active && ok && wasOk) kind = "good";
+      else if (!it) kind = "warn";
+
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      const d = document.createElement("span");
+      d.className = "dot " + kind;
+      const n = document.createElement("span");
+      n.className = "name";
+      n.textContent = w.key;
+      const m = document.createElement("span");
+      m.className = "msg";
+      if (!it) m.textContent = "sem dados";
+      else if (msg) m.textContent = msg;
+      else m.textContent = (kind === "good") ? "OK" : "falha";
+
+      chip.appendChild(d);
+      chip.appendChild(n);
+      chip.appendChild(m);
+      host.appendChild(chip);
+    }
+  }
+
+  function hasValue(v){
+    if (v === 0) return true;
+    if (v === false) return true;
+    if (v == null) return false;
+    const s = String(v).trim();
+    return s !== "" && s.toLowerCase() !== "null" && s.toLowerCase() !== "nan";
+  }
+
+  function pickKeyParams(snapshot, maxN){
+    const params = snapshot?.parameters || snapshot?.params || [];
+    const arr = Array.isArray(params) ? params : [];
+
+    const scored = [];
+    for (const p of arr){
+      const name = String(p?.name || p?.param_name || p?.paramName || "");
+      const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
+      if (!hasValue(val)) continue;
+
+      const n = name.toLowerCase();
+      let score = 0;
+      if (/(speed|veloc)/.test(n)) score += 50;
+      if (/(rpm)/.test(n)) score += 45;
+      if (/(mile|odo|odomet|km)/.test(n)) score += 35;
+      if (/(fuel|comb|diesel|gas)/.test(n)) score += 30;
+      if (/(hour|hora)/.test(n)) score += 25;
+      if (/(temp|temper)/.test(n)) score += 20;
+      if (/(ignit|key)/.test(n)) score += 15;
+      scored.push({ p, name, val, score });
+    }
+
+    scored.sort((a,b)=> (b.score - a.score) || String(a.name).localeCompare(String(b.name)));
+
+    const out = [];
+    const seen = new Set();
+    for (const it of scored){
+      const k = it.name || String(it.p?.id || "");
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push({ name: it.name || ("id " + String(it.p?.id || "?")), val: it.val });
+      if (out.length >= maxN) break;
+    }
+
+    // fallback: pega os primeiros com valor (se nada ranqueado)
+    if (!out.length){
+      for (const p of arr){
+        const name = String(p?.name || p?.param_name || p?.paramName || "");
+        const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
+        if (!hasValue(val)) continue;
+        out.push({ name: name || ("id " + String(p?.id || "?")), val });
+        if (out.length >= maxN) break;
+      }
+    }
+
+    return out;
+  }
+
+  function renderKeyParams(snapshot){
+    const host = $("keyParams");
+    host.innerHTML = "";
+
+    const params = snapshot?.parameters || snapshot?.params || [];
+    const arr = Array.isArray(params) ? params : [];
+    const total = arr.length;
+
+    let withVal = 0;
+    for (const p of arr){
+      const v = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
+      if (hasValue(v)) withVal++;
+    }
+
+    const top = document.createElement("div");
+    top.className = "li";
+    top.innerHTML = `<div class="k">Parameters</div><div class="v">${withVal}/${total}</div>`;
+    host.appendChild(top);
+
+    const picked = pickKeyParams(snapshot, 8);
+    for (const it of picked){
+      const li = document.createElement("div");
+      li.className = "li";
+      const k = document.createElement("div");
+      k.className = "k";
+      k.textContent = it.name;
+      const v = document.createElement("div");
+      v.className = "v";
+      v.textContent = String(it.val);
+      li.appendChild(k);
+      li.appendChild(v);
+      host.appendChild(li);
+    }
+
+    if (!picked.length){
+      const li = document.createElement("div");
+      li.className = "li";
+      li.innerHTML = `<div class="k">Sem parâmetros com valor</div><div class="v">—</div>`;
+      host.appendChild(li);
+    }
+  }
+
+  function statusToLabel(s){
+    const x = String(s || "").trim();
+    if (!x) return "CRIADA";
+    return x;
+  }
+
+  function statusToStepIndex(status){
+    const s = String(status || "").toUpperCase();
+    if (s.includes("COMPLETED")) return 5;
+    if (s.includes("GS")) return 4;
+    if (s.includes("CAN_APPROVED")) return 3;
+    if (s.includes("CAN_")) return 2;
+    if (s.includes("WAITING_REBOOT")) return 2;
+    if (s.includes("SB")) return 1;
+    if (s.includes("HTML5")) return 0;
+    return 0;
+  }
+
+  function renderStepper(status){
+    const steps = [
+      { b:"HTML5", s:"cadastro" },
+      { b:"SB", s:"atualizando" },
+      { b:"CAN", s:"coletando" },
+      { b:"Aprovar", s:"técnico" },
+      { b:"GS", s:"enviado" },
+      { b:"Fim", s:"ok" },
+    ];
+
+    const idx = statusToStepIndex(status);
+    const host = $("stepper");
+    host.innerHTML = "";
+
+    for (let i=0;i<steps.length;i++){
+      const it = steps[i];
+      const el = document.createElement("div");
+      el.className = "step";
+      const d = document.createElement("span");
+      d.className = "dot " + (i < idx ? "good" : (i === idx ? "warn" : ""));
+      const b = document.createElement("b");
+      b.textContent = it.b;
+      const s = document.createElement("span");
+      s.textContent = it.s;
+      el.appendChild(d);
+      el.appendChild(b);
+      el.appendChild(s);
+      host.appendChild(el);
+    }
+  }
+
+  function renderTop(inst){
+    const top = $("topKv");
+    top.innerHTML = "";
+
+    const st = statusToLabel(inst?.status);
+    top.appendChild(pill("status: " + st, ""));
+
+    const id = inst?.installation_id || inst?.id || null;
+    if (id) top.appendChild(pill(String(id), ""));
+  }
+
+  function renderInstKv(inst){
+    const kv = $("instKv");
+    kv.innerHTML = "";
+
+    const plate = inst?.plate_real || inst?.plateReal || inst?.plate || "—";
+    const serial = inst?.serial || inst?.inner_id || inst?.innerId || "—";
+    kv.appendChild(pill(`Placa: ${plate}`, ""));
+    kv.appendChild(pill(`Serial: ${serial}`, ""));
+
+    const client = inst?.target_client_id || inst?.client_id || "—";
+    const setting = inst?.vehicleSettingId || inst?.vehicle_setting_id || "—";
+    kv.appendChild(pill(`Cliente: ${client}`, ""));
+    kv.appendChild(pill(`Setting: ${setting}`, ""));
+  }
+
+  function renderAll(inst){
+    state.inst = inst;
+    renderTop(inst);
+    renderInstKv(inst);
+
+    const status = inst?.status || "";
+    renderStepper(status);
+
+    // enable buttons when we have id/token
+    const id = inst?.installation_id || inst?.id || "";
+    const tok = inst?.installation_token || inst?.token || "";
+
+    const canApproveEnabled = !!(id && tok);
+    $("btnApprove").disabled = !canApproveEnabled;
+
+    // Atualizar CAN: só quando não estiver no meio (heurística por status)
+    const st = String(status || "").toUpperCase();
+    const canRefreshEnabled = canApproveEnabled && !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
+    $("btnRefresh").disabled = !canRefreshEnabled;
+
+    // snapshot
+    const snap = extractSnapshot(inst);
+    state.lastSnapshot = snap;
+
+    const sb = parseSbProgress(inst, snap);
+    $("sbPct").textContent = (sb == null) ? "—" : (sb + "%");
+    $("sbFill").style.width = (sb == null) ? "0%" : (sb + "%");
+
+    const pa = parsePacketAge(snap);
+    $("pktAge").textContent = pa.ageText;
+
+    renderModuleState(snap || {});
+    renderKeyParams(snap || {});
+
+    if (state.debug){
+      $("detailsDebug").classList.remove("hidden");
+      $("debugJson").textContent = JSON.stringify({ installation: inst, snapshot: snap }, null, 2);
+    } else {
+      $("detailsDebug").classList.add("hidden");
+    }
+
+    // status line
+    if (!id) setSubline("Pronto");
+    else {
+      const human = statusToLabel(status);
+      setSubline(human);
+    }
+  }
+
+  function renderEmpty(){
+    const empty = { status: "", plate_real: "—", serial: "—" };
+    $("msChips").innerHTML = "";
+    $("keyParams").innerHTML = "";
+    $("sbPct").textContent = "—";
+    $("sbFill").style.width = "0%";
+    $("pktAge").textContent = "—";
+    renderStepper("");
+    renderTop(empty);
+    renderInstKv(empty);
+    $("btnApprove").disabled = true;
+    $("btnRefresh").disabled = true;
+    setSubline("Pronto");
+  }
+
+  // ====== polling ======
+  function stopPoll(){
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+
+  async function loadInstallation(id){
+    if (!id) return;
+    const r = await api("/api/installations/" + encodeURIComponent(id));
+    if (!r.ok){
+      showToast("Falha ao carregar instalação (HTTP " + r.status + ")", "bad");
+      return;
+    }
+    renderAll(r.data);
+
+    // stop auto poll on completed
+    const st = String(r.data?.status || "").toUpperCase();
+    if (st.includes("COMPLETED")) stopPoll();
+  }
+
+  function startPoll(){
+    stopPoll();
+    state.pollTimer = setInterval(async () => {
+      const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
+      if (!id) return;
+      try { await loadInstallation(id); } catch {}
+    }, state.pollMs);
+  }
+
+  // ====== actions ======
+  $("btnNew").onclick = () => {
+    stopPoll();
+    state.inst = null;
+    state.lastSnapshot = null;
+    saveLs("", "");
+    $("cardForm").classList.remove("hidden");
+    renderEmpty();
+    showToast("Nova instalação", "warn");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  $("btnCreate").onclick = async () => {
+    const payload = buildPayload();
+    const errs = validatePayload(payload);
+    if (errs.length){
+      showToast(errs[0], "bad");
+      return;
+    }
+
+    try {
+      $("btnCreate").disabled = true;
+      setSubline("Enviando…");
+
+      const r = await api("/api/installations", { method: "POST", json: payload });
+      if (!r.ok){
+        showToast("Erro ao criar (HTTP " + r.status + ")", "bad");
+        console.log(r.data);
+        return;
+      }
+
+      const inst = r.data;
+      const id = inst?.installation_id || inst?.id || null;
+      const tok = inst?.installation_token || inst?.token || null;
+
+      if (id && tok) saveLs(String(id), String(tok));
+
+      renderAll(inst);
+
+      // colapsa o form (mantém a seção mas reduz ruído)
+      $("cardForm").classList.add("hidden");
+      showToast("Instalação criada. Vá para a validação CAN.", "good");
+      document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
+
+      startPoll();
+
+    } catch (e) {
+      showToast("Falha: " + fmtErr(e), "bad");
+    } finally {
+      $("btnCreate").disabled = false;
+    }
+  };
+
+  $("btnReset").onclick = () => {
+    $("plate_real").value = "";
+    $("serial").value = "";
+    showToast("Campos limpos", "warn");
+    refreshAdvancedPreview();
+  };
+
+  $("btnApprove").onclick = async () => {
+    const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
+    const tok = state?.inst?.installation_token || state?.inst?.token || (loadLs().tok) || "";
+    if (!id || !tok){ showToast("Falta installation_id/token", "bad"); return; }
+
+    try {
+      $("btnApprove").disabled = true;
+      setSubline("Validando CAN…");
+
+      const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/approve-can", {
+        method: "POST",
+        headers: { "x-installation-token": tok },
+        json: { override: false }
+      });
+      if (!r.ok){
+        showToast("Falha ao validar (HTTP " + r.status + ")", "bad");
+        console.log(r.data);
+        return;
+      }
+      showToast("CAN validada. GS será enviado.", "good");
+      await loadInstallation(id);
+    } catch (e) {
+      showToast("Falha: " + fmtErr(e), "bad");
+    } finally {
+      $("btnApprove").disabled = false;
+    }
+  };
+
+  $("btnRefresh").onclick = async () => {
+    const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
+    const tok = state?.inst?.installation_token || state?.inst?.token || (loadLs().tok) || "";
+    if (!id || !tok){ showToast("Falta installation_id/token", "bad"); return; }
+
+    try {
+      $("btnRefresh").disabled = true;
+      setSubline("Solicitando snapshot…");
+      const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/request-can-snapshot", {
+        method: "POST",
+        headers: { "x-installation-token": tok },
+        json: {}
+      });
+      if (!r.ok){
+        showToast("Falha ao solicitar (HTTP " + r.status + ")", "bad");
+        console.log(r.data);
+        return;
+      }
+      showToast("Snapshot solicitado.", "good");
+      await loadInstallation(id);
+    } catch (e) {
+      showToast("Falha: " + fmtErr(e), "bad");
+    } finally {
+      // re-habilita após um curto delay
+      setTimeout(()=> { $("btnRefresh").disabled = false; }, 700);
+    }
+  };
+
+  // ====== boot ======
+  (function init(){
+    // debug mode via URL ?debug=1
+    try {
+      const u = new URL(location.href);
+      state.debug = u.searchParams.get("debug") === "1";
+    } catch {}
+
+    if (state.debug){
+      $("advancedForm").classList.remove("hidden");
+      $("detailsDebug").classList.remove("hidden");
+      $("clientMeta").classList.remove("hidden");
+      showToast("Debug habilitado", "warn");
+    }
+
+    loadCatalogs();
+
+    renderEmpty();
+
+    // se já houver instalação salva, carrega e rola para CAN
+    const { id } = loadLs();
+    if (id){
+      setTimeout(async () => {
+        try {
+          await loadInstallation(id);
+          $("cardForm").classList.add("hidden");
+          document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
+          startPoll();
+        } catch {}
+      }, 200);
+    }
+  })();
 </script>
 </body>
 </html>

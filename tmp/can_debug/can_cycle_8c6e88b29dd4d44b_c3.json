@@ -1,0 +1,596 @@
+{
+  "capturedAt": "2026-03-01T15:42:54.459Z",
+  "vehicleId": 1939216,
+  "isConnected": 2,
+  "header": {
+    "vehicle_id": 1939216,
+    "client_id": 217916,
+    "inner_id": "0000000913046486",
+    "unit_key": "SPT:0000000913046486",
+    "license_nmbr": "4001%20-%20HIV6C99",
+    "unit_type": "SPETROTEC",
+    "unit_version": "A79%20Read%20Write.41",
+    "configuration_key_db": "697BE77B",
+    "configuration_key_unit": "69978191",
+    "raw": {
+      "mtkn": "212245457963456809328671462729743312595",
+      "client_id": "217916",
+      "vehicle_id": "1939216",
+      "license_nmbr": "4001%20-%20HIV6C99",
+      "ignition": "1",
+      "vcl_manufacturer": "Volvo",
+      "vcl_model": "FH%20460-6x2-D13KE-R-UP-T",
+      "vcl_client_id": "217916",
+      "vcl_client_description": "Ra%C3%A7a%20Transportes",
+      "vcl_client_group_id": "231427",
+      "vcl_client_group_description": "Matriz%20%28Viagens%29",
+      "unit_type": "SPETROTEC",
+      "unit_version": "A79%20Read%20Write.41",
+      "inner_id": "0000000913046486",
+      "unit_key": "SPT%3A0000000913046486",
+      "configuration_key_db": "697BE77B",
+      "configuration_key_unit": "69978191",
+      "server_time": "2026-03-01T15%3A42%3A37.7870000%2B00%3A00",
+      "orig_time": "2026-03-01T15%3A42%3A27.0000000%2B00%3A00",
+      "driver_code": "12111",
+      "mileage": "187169.20",
+      "fuel_used": "21532.00",
+      "speed": "64",
+      "engine_hours": "1256.40",
+      "configuration_status": "",
+      "configuration_type": "",
+      "progress": "",
+      "error": "",
+      "number_of_scms": "138",
+      "number_of_prms": "195",
+      "configuration_key_db_color": "%23c70e33",
+      "configuration_key_unit_color": "%23c70e33",
+      "latitude": "-10.3715480",
+      "longitude": "-48.8922100"
+    }
+  },
+  "parameters": [
+    {
+      "id": "00002712",
+      "name": "Sys Param Battery Voltage",
+      "raw_value": "0000761E",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000001F3",
+      "name": "MBU MTST Ignition",
+      "raw_value": "00000370",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000AF8C",
+      "name": "ARM Analog input 3",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000CE25",
+      "name": "ARM Analog input 4 - Backup Battery voltage",
+      "raw_value": "00000076",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000FB0",
+      "name": "MBU-V2 MTST Battery Voltage",
+      "raw_value": "00000355",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000008A",
+      "name": "GPS_Speed",
+      "raw_value": "00000041",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000001F0",
+      "name": "Unit Time",
+      "raw_value": "000CD8E3",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002710",
+      "name": "Sys Param Ignition",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000002FC",
+      "name": "High_Res_Unit_Time",
+      "raw_value": "322F3470",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002711",
+      "name": "Sys Param Ignition No Delay",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002713",
+      "name": "Sys Param Speed",
+      "raw_value": "00001A99",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002714",
+      "name": "Sys Param Vehicle Distance",
+      "raw_value": "0B27FB63",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002715",
+      "name": "Sys Param RPM",
+      "raw_value": "00000422",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002717",
+      "name": "Sys Param Fuel Level",
+      "raw_value": "0000003C",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002718",
+      "name": "Sys Param Fuel Rate",
+      "raw_value": "00000F91",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002719",
+      "name": "Sys Param Total Fuel Used",
+      "raw_value": "0003491E",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000271A",
+      "name": "Sys Param Acc Pedal Pos",
+      "raw_value": "000002E4",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000271B",
+      "name": "Sys Param Brake Switch",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000271E",
+      "name": "Sys Param Oil Temp",
+      "raw_value": "0000017B",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000271F",
+      "name": "Sys Param Coolant Temp",
+      "raw_value": "00000167",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002723",
+      "name": "Sys Param Oil Pressure",
+      "raw_value": "00000154",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002726",
+      "name": "Sys Param Ignition Source",
+      "raw_value": "00000422",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000070CF",
+      "name": "Sys Param Engine Total Hours of Operation",
+      "raw_value": "00006228",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000711F",
+      "name": "Sys Param Brake 1 Air Pressure (Bar)",
+      "raw_value": "00000095",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000232",
+      "name": "Driver ID",
+      "raw_value": "00002F4F",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000122",
+      "name": "GPS Odo",
+      "raw_value": "0B27FA5B",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000001BE",
+      "name": "Trip Score",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003435",
+      "name": "Calc Output 13365 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000011DA",
+      "name": "Scheme Output 4570 Air pneumatic pressure > 10.5Bar",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000CB5C",
+      "name": "Calc Total Fuel Used From Sys Fuel Rate",
+      "raw_value": "0402C158",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00002EE5",
+      "name": "Scheme Output 12005 - Rainy Conditions",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000210",
+      "name": "Scheme Output 528",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000215",
+      "name": "Scheme Output 533 1h of rest after ignition off",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000216",
+      "name": "Scheme Output 534 - Air pressure less than 7 bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000297",
+      "name": "Scheme Output 663 - internal for start driving",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000006FD",
+      "name": "Scheme Output 1789 PTO Active (201)",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00000F51",
+      "name": "Scheme Output 3921 - Vehicle in neutral",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000011C6",
+      "name": "Scheme Output 4550 Air pneumatic pressure < 6Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000011CB",
+      "name": "Scheme Output 4555 Air pneumatic pressure >6<8.5Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000011D0",
+      "name": "Scheme Output 4560 Air pneumatic pressure > 8.5<9.5Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000011D5",
+      "name": "Scheme Output 4565 Air pneumatic pressure > 9.5<10.5",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:50Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003589",
+      "name": "Scheme Output 13705",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000343A",
+      "name": "Calc Outputs 13370 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000343F",
+      "name": "Calc Output 13375 301 Chart 4",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003444",
+      "name": "Calc Output 13380 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003449",
+      "name": "Calc Output 13385 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000354D",
+      "name": "Scheme Output 13645 Cruise distance from total distance",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000391C",
+      "name": "Scheme Output 14620",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003921",
+      "name": "Scheme Output 14625",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003926",
+      "name": "Scheme Output 14630",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000392B",
+      "name": "Scheme Output 14635",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000035F2",
+      "name": "Scheme Output 13810 - Wipers On",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003840",
+      "name": "14400-PTO Switch",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000038EF",
+      "name": "Scheme Output 14575",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000038F4",
+      "name": "Scheme Output 14580",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000038F9",
+      "name": "Scheme Output 14585",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000038FE",
+      "name": "Scheme Output 14590",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003903",
+      "name": "Scheme Output 14595",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003908",
+      "name": "Scheme Output 14600",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "0000390D",
+      "name": "Scheme Output 14605",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003912",
+      "name": "Scheme Output 14610",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003917",
+      "name": "Scheme Output 14615",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00003930",
+      "name": "Scheme Output 14640",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:51Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00004907",
+      "name": "Calc Output 18695 301 Chart 5",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:52Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "000048FD",
+      "name": "Calc Output 18685 301 Chart 5",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:52Z",
+      "inner_id": "0000000913046486"
+    },
+    {
+      "id": "00004902",
+      "name": "Calc Output 18690 301 Chart 5",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T15:42:52Z",
+      "inner_id": "0000000913046486"
+    }
+  ],
+  "moduleState": [],
+  "rawCounts": {
+    "unitParametersEvents": 14,
+    "unitMessagesEvents": 16,
+    "unitConnEvents": 0
+  },
+  "can": {
+    "can0": null,
+    "can1": null,
+    "j1708": null,
+    "can0_ok": false,
+    "can1_ok": false,
+    "j1708_ok": false
+  }
+}

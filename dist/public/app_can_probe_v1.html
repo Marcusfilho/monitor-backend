@@ -45,6 +45,7 @@
     details{margin-top:10px}
     summary{cursor:pointer;color:#cfe6ff;font-size:12px}
 
+    /* probe "screen" */
     .probeScreen{
       background:#000;border:1px solid #273245;border-radius:20px;padding:10px; margin:8px 0 12px;
       font-family:var(--mono); color:#f4f7fb;
@@ -67,6 +68,7 @@
     .probeItem .v{color:#e8eef2}
     .probeItem.miss .v{color:#93a4b8}
 
+    /* status visual */
     .status{display:flex; align-items:center; gap:10px; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--muted)}
     .statusDot{width:10px;height:10px;border-radius:999px;background:#93a4b8;opacity:.6}
     .statusText{flex:1}
@@ -110,6 +112,7 @@
       <div class="hint">
         <div>• Fluxo: cria <b>CAN_PROBE</b> → request snapshot → autopoll até preencher CAN.</div>
         <div>• installation_id atual: <b id="installationView">—</b></div>
+        <div>• create: <b id="dbgCreate">—</b> • request: <b id="dbgReq">—</b> • get: <b id="dbgGet">—</b></div>
       </div>
 
       <div class="status" id="status" data-state="idle">
@@ -151,7 +154,7 @@
         <div class="tableWrap">
           <table>
             <thead>
-              <tr><th>row_id</th><th>module_id</th><th>module</th><th>sub_module</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
+              <tr><th>id</th><th>name</th><th>active</th><th>ok</th><th>was_ok</th><th>message</th></tr>
             </thead>
             <tbody id="tblMsBody"></tbody>
           </table>
@@ -174,6 +177,9 @@
   const statusEl = qs("status");
   const statusTextEl = qs("statusText");
   const instViewEl = qs("installationView");
+  const dbgCreateEl = qs("dbgCreate");
+  const dbgReqEl = qs("dbgReq");
+  const dbgGetEl = qs("dbgGet");
   const btnRunEl = qs("btnRun");
   const vehEl = qs("vehicle_id");
 
@@ -204,31 +210,6 @@
     if (vehEl) vehEl.disabled = !!isBusy;
   }
 
-  function resetUiForNewRun(runId) {
-    // Reset determinístico (evita stale UI / dados do probe anterior)
-    LAST_INST = null;
-    LAST_INST_ID = null;
-    __LAST_CAN = { params: [], ms: [] };
-
-    if (instViewEl) instViewEl.textContent = "—";
-    if (typeof dbgCreateEl !== "undefined" && dbgCreateEl) dbgCreateEl.textContent = "—";
-    if (typeof dbgReqEl !== "undefined" && dbgReqEl) dbgReqEl.textContent = "—";
-    if (typeof dbgGetEl !== "undefined" && dbgGetEl) dbgGetEl.textContent = "—";
-
-    if (pillSnapEl) pillSnapEl.textContent = "snapshot: —";
-    if (pillParamsEl) pillParamsEl.textContent = "params: 0";
-    if (pillParamsWithEl) pillParamsWithEl.textContent = "com valor: 0";
-    if (pillMsEl) pillMsEl.textContent = "module: 0";
-
-    if (probeScreenEl) probeScreenEl.textContent = "aguardando snapshot...";
-    if (paramsBodyEl) paramsBodyEl.innerHTML = "";
-    if (msBodyEl) msBodyEl.innerHTML = "";
-    if (outEl) outEl.textContent = "{}";
-
-    if (canFilterEl) canFilterEl.value = "";
-  }
-
-
   function pretty(obj) {
     try { return JSON.stringify(obj, null, 2); } catch { return String(obj); }
   }
@@ -252,14 +233,6 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
-
-  function safeDecode(v) {
-    if (v === undefined || v === null) return "—";
-    const s0 = String(v);
-    const s1 = s0.replace(/\+/g, " ");
-    try { return decodeURIComponent(s1); } catch { return s1; }
-  }
-
 
   function normKey(s) {
     return String(s ?? "")
@@ -364,11 +337,27 @@
     return looksHexLike(t) ? fmtHexDec(t) : t;
   }
 
+
+  function safeDecode(v) {
+    const s0 = String(v ?? "");
+    // decode apenas quando parecer URL-encoded
+    if (!/%[0-9a-fA-F]{2}/.test(s0) && s0.indexOf("+") < 0) return s0;
+    try { return decodeURIComponent(s0.replace(/\+/g, "%20")); } catch { return s0; }
+  }
+
   // -------------------- rows normalize --------------------
   function rowParamName(p) { return p?.name ?? p?.param_name ?? p?.parameter?.name ?? ""; }
   function rowParamType(p) { return p?.param_type ?? p?.type ?? p?.parameter?.type ?? ""; }
   function rowParamId(p) {
-    const v = p?.parameter_id ?? p?.id ?? p?.param_id ?? p?.paramId ?? p?.index ?? null;
+    const v =
+      p?.parameter_id ??
+      p?.param_id ??
+      p?.id ??
+      p?.paramId ??
+      p?.index ??
+      p?.parameter?.id ??
+      p?.param?.id ??
+      null;
     return (v == null) ? null : String(v);
   }
   function rowParamLastUpdate(p) { return p?.last_update ?? p?.lastUpdate ?? p?.ts ?? ""; }
@@ -433,24 +422,6 @@
   }
   function rowModuleName(r) { return r?.name ?? r?.module_name ?? r?.moduleName ?? ""; }
 
-  function rowModuleSubName(r) {
-    return r?.sub_module_name ?? r?.subModuleName ?? r?.submodule_name ?? r?.submoduleName ??
-           r?.sub_name ?? r?.subName ?? r?.sub_module ?? r?.subModule ?? "";
-  }
-
-  function rowModuleFixedId(r) {
-    const v = r?.module_id ?? r?.moduleId ?? r?.moduleID ?? null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  function rowModuleRowId(r) {
-    const v = r?.id ?? r?.index ?? null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-
   function findModule(msRows, ids, names) {
     const rows = Array.isArray(msRows) ? msRows : [];
     const idsSet = new Set((ids || []).map(Number).filter(Number.isFinite));
@@ -473,82 +444,26 @@
   }
 
   function moduleChip(label, row) {
-    if (!row) {
-      return `<span class="pill"><span class="unkDot"></span>${esc(label)}:N/A</span>`;
-    }
-
     const ok = strictOkTriple(row);
     const dot = ok ? "okDot" : "badDot";
-
-    const errFull = safeDecode(pickErr(row)) || "";
-    const modFull = safeDecode(rowModuleName(row)) || "";
-    const subFull = safeDecode(rowModuleSubName(row)) || "";
-    const mid = rowModuleFixedId(row);
-    const rid = rowModuleRowId(row);
-
+    const err = safeDecode(pickErr(row));
     const base = `${label}:${ok ? "OK" : "FAIL"}`;
-    const shownErr = errFull ? ` • ${shortErr(errFull, 40)}` : "";
-
-    const titleParts = [];
-    if (modFull) titleParts.push(`module=${modFull}`);
-    if (subFull) titleParts.push(`sub=${subFull}`);
-    if (rid != null) titleParts.push(`row_id=${rid}`);
-    if (mid != null) titleParts.push(`module_id=${mid}`);
-    if (errFull) titleParts.push(`message=${errFull}`);
-    const title = titleParts.length ? ` title="${esc(titleParts.join(" • "))}"` : "";
-
-    return `<span class="pill"${title}><span class="${dot}"></span>${esc(base)}${esc(shownErr)}</span>`;
+    const extra = (!ok && err) ? ` • ${shortErr(err)}` : "";
+    const title = err ? ` title="${esc(err)}"` : "";
+    return `<span class="pill"${title}><span class="${dot}"></span>${esc(base)}${esc(extra)}</span>`;
   }
 
-    const ok = strictOkTriple(row);
-    const dot = ok ? "okDot" : "badDot";
-
-    // Sempre exibir message quando existir (sem esconder). Tooltip inclui name/id/message.
-    const errFull = safeDecode(pickErr(row)) || "";
-    const nameFull = safeDecode(rowModuleName(row)) || "";
-    const id = rowModuleId(row);
-
-    const base = `${label}:${ok ? "OK" : "FAIL"}`;
-    const shownErr = errFull ? ` • ${shortErr(errFull, 40)}` : "";
-
-    const titleParts = [];
-    if (nameFull) titleParts.push(`name=${nameFull}`);
-    if (id != null) titleParts.push(`id=${id}`);
-    if (errFull) titleParts.push(`message=${errFull}`);
-    const title = titleParts.length ? ` title="${esc(titleParts.join(" • "))}"` : "";
-
-    return `<span class="pill"${title}><span class="${dot}"></span>${esc(base)}${esc(shownErr)}</span>`;
-  }
-
-    function findModuleByName(msRows, nameRes) {
-    const rows = Array.isArray(msRows) ? msRows : [];
-    const res = (nameRes || []).filter(Boolean);
-
-    // Verdade: escolher por NOME do módulo (snapshot). Sem suposição de ID fixo.
-    for (const r of rows) {
-      const nameRaw = safeDecode(rowModuleSubName(r) || rowModuleName(r));
-      if (!nameRaw) continue;
-      for (const re0 of res) {
-        try {
-          if (re0.test(nameRaw)) return r;
-        } catch {}
-      }
-    }
-    return null;
-  }
-
-function commModules(msRows) {
-    // Verdade: casar por sub-module name (como no print do Monitor).
-    // Fallback: se sub-module não vier, cai para module name (via findModuleByName já atualizado).
+  function commModules(msRows) {
     return {
-      can0:   findModuleByName(msRows, [/^CAN0$/i, /\bCAN0\b/i]),
-      can1:   findModuleByName(msRows, [/^CAN1$/i, /\bCAN1\b/i]),
-      j1708:  findModuleByName(msRows, [/^J1708$/i, /\bJ1708\b/i, /\bj\s*1708\b/i]),
-      dallas: findModuleByName(msRows, [/^KEYPAD[_\s-]*DALLAS[_\s-]*IBUTTON$/i, /KEYPAD[_\s-]*DALLAS/i, /\bDALLAS\b/i, /IBUTTON/i]),
-      ramzor: findModuleByName(msRows, [/^KEYPAD[_\s-]*RAMZOR$/i, /KEYPAD[_\s-]*RAMZOR/i, /\bRAMZOR\b/i])
+      can0: findModule(msRows, [8], ["can0"]),
+      can1: findModule(msRows, [9], ["can1"]),
+      j1708: findModule(msRows, [15], ["j1708"]),
+      dallas: findModule(msRows, [19], ["dallas", "ibutton"]),
+      ramzor: findModule(msRows, [20], ["ramzor"])
     };
   }
-// -------------------- header lite --------------------
+
+  // -------------------- header lite --------------------
   function extractHeaderObj(snap) {
     const s = unwrapSnapshot(snap);
     if (!s || typeof s !== "object") return {};
@@ -591,66 +506,121 @@ function commModules(msRows) {
 
   function getHeaderLite(inst, snap) {
     const h = extractHeaderObj(snap);
+
     const vehicle = inst?.vehicle || inst?.vhcl || inst?.data?.vehicle || null;
 
     const cfgStatus = firstNonEmpty([
       h.configuration_status, h.configurationStatus, h.config_status, h.configStatus, h.configuration_state, h.configurationState
     ], "—");
+
     const cfgType = firstNonEmpty([
       h.configuration_type, h.configurationType, h.config_type, h.configType, h.configuration_kind, h.configurationKind
     ], "—");
+
     const cfgProgress = firstNonEmpty([
       h.configuration_progress, h.configurationProgress, h.config_progress, h.configProgress
     ], "—");
+
     const cfgError = firstNonEmpty([
       h.configuration_error, h.configurationError, h.config_error, h.configError, h.error, h.err
     ], "");
 
-    const cfgParts = [cfgStatus, cfgType, cfgProgress].filter(x => x && x !== "—");
-    let cfg = cfgParts.join(" / ");
-    if (cfgError) cfg = cfg ? (cfg + " • " + cfgError) : cfgError;
-    if (!cfg) cfg = "—";
-
     return {
       ignitionRaw: firstNonEmpty([h.ignition, h.ignition_status, h.sys_param_ignition], "—"),
-      communication: safeDecode(firstNonEmpty([
-        h.communication, h.comm, h.gprs, h.gps_gprs_last, h.gps_gprs, h.gprs_last, h.gprsLast, h.gps_last, h.gpsLast,
-        h.server_time, h.serverTime, h.captured_at, snap?.captured_at
-      ], "—")),
-      config: safeDecode(cfg),
+      communication: safeDecode(firstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—")),
+      config_status: safeDecode(cfgStatus),
+      config_type: safeDecode(cfgType),
+      config_progress: safeDecode(cfgProgress),
+      config_error: safeDecode(cfgError),
       driver_code: safeDecode(firstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—")),
       license_number: safeDecode(firstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
       serial: safeDecode(firstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
       client: safeDecode(firstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
       model: safeDecode(firstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—"))
     };
-  }  // -------------------- probe lines (param IDs) --------------------
+  }
+
+  // -------------------- probe lines (param IDs) --------------------
   const PROBE_PARAM_IDS = {
-    fuel_total_used: ["00000031", "000000C5"],
-    fuel_level: ["00000032", "000000C3"],
-    fuel_rate: ["0000003C"],
-    oil_pressure: ["00000024", "0000010D"],
-    oil_temp: ["0000168E"],
-    coolant_temp: ["0000002F", "0000010E"],
+    fuel_total_used: ["00000031", "000000C5", "00002719"],
+    fuel_level: ["00000032", "000000C3", "0000879F", "00002717"],
+    fuel_rate: ["0000003C", "00002718"],
+    oil_pressure: ["00000024", "0000010D", "00002723"],
+    oil_temp: ["0000168E", "0000271E"],
+    coolant_temp: ["0000002F", "0000010E", "0000271F"],
     fuel_temp: ["0000002E", "0000010F"],
     odometer: ["00002714"],
     windshield: ["0000AF8C", "0000D419", "0000D41A"]
   };
 
+  function normIdVariants(v) {
+    // Normaliza apenas o FORMATO do ID (mesma ideia do probe original):
+    // aceita "00000031", "31", "0x31", decimal, etc. e gera variações equivalentes.
+    const out = new Set();
+    if (v == null) return out;
+    let s = String(v).trim();
+    if (!s) return out;
+
+    // remove 0x
+    let u = s.toUpperCase();
+    u = u.replace(/^0X/, "");
+    out.add(u);
+
+    // se vier "00000031" ou "31" (hex), gera também versão padronizada 8 dígitos
+    if (/^[0-9A-F]+$/.test(u)) {
+      const n16 = parseInt(u, 16);
+      if (Number.isFinite(n16)) out.add(n16.toString(16).toUpperCase().padStart(8, "0"));
+      // se for só dígitos, também tenta interpretar como decimal (casos onde id vem 31)
+      if (/^[0-9]+$/.test(u)) {
+        const n10 = parseInt(u, 10);
+        if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+      }
+    } else if (/^[0-9]+$/.test(u)) {
+      const n10 = parseInt(u, 10);
+      if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+    }
+
+    // também adiciona versão sem zeros à esquerda (pra comparar com "31")
+    const no0 = u.replace(/^0+/, "") || "0";
+    out.add(no0);
+
+    return out;
+  }
+
   function findParamByIds(rows, ids) {
-    const want = new Set((ids || []).map(String).map(s => s.toLowerCase()));
-    return (rows || []).find(p => {
-      const id = rowParamId(p);
-      return id != null && want.has(String(id).toLowerCase());
-    }) || null;
+    const want = new Set();
+    (ids || []).forEach(id => {
+      for (const v of normIdVariants(id)) want.add(v);
+    });
+    if (!want.size) return null;
+
+    for (const p of (rows || [])) {
+      const pid = rowParamId(p);
+      for (const v of normIdVariants(pid)) {
+        if (want.has(v)) return p;
+      }
+    }
+    return null;
   }
 
   function rawParamValue(p) {
-    const rv = rowParamRaw(p);
-    if (rv != null && String(rv).trim() !== "" && String(rv).trim() !== "—") return String(rv).trim();
-    const v = rowParamValue(p);
-    if (v != null && String(v).trim() !== "" && String(v).trim() !== "—") return String(v).trim();
-    return "—";
+    const rv = firstNonEmpty([
+      p?.raw_value,
+      p?.rawValue,
+      p?.raw?.value,
+      p?.raw,
+      p?.parameter_raw_value,
+      p?.value,
+      p?.val,
+      p?.param_value,
+      p?.parameter_value,
+      p?.formatted_value,
+      p?.formattedValue
+    ], "—");
+
+    if (rv == null) return "—";
+    const s = String(rv).trim();
+    return s ? s : "—";
   }
 
   function getParamRawByIds(rows, ids) {
@@ -712,19 +682,15 @@ function commModules(msRows) {
     if (!msBodyEl) return;
     const rows = Array.isArray(msRows) ? msRows : [];
     msBodyEl.innerHTML = rows.map(r => {
-      const rid = rowModuleRowId(r);
-      const mid = rowModuleFixedId(r);
-      const mod = esc(rowModuleName(r));
-      const sub = esc(rowModuleSubName(r));
+      const id = rowModuleId(r);
+      const name = esc(rowModuleName(r));
       const a = toBool01(r.active);
       const o = toBool01(r.ok);
       const w = toBool01(r.was_ok);
       const err = esc(firstNonEmpty([pickErr(r)], ""));
       return `<tr>
-        <td>${rid == null ? "" : esc(String(rid))}</td>
-        <td>${mid == null ? "" : esc(String(mid))}</td>
-        <td>${mod}</td>
-        <td>${sub}</td>
+        <td>${id == null ? "" : esc(String(id))}</td>
+        <td>${name}</td>
         <td>${a === null ? "" : esc(String(a))}</td>
         <td>${o === null ? "" : esc(String(o))}</td>
         <td>${w === null ? "" : esc(String(w))}</td>
@@ -736,7 +702,11 @@ function commModules(msRows) {
   function renderProbeScreen(inst, snap, x) {
     if (!probeScreenEl) return;
 
-    const params = (x && x.params) || [];
+    const params0 = (x && x.params) || [];
+    const hdr = (snap && typeof snap === "object" && snap.header && typeof snap.header === "object") ? snap.header : {};
+    const hdrRows = Object.keys(hdr).map(k => ({ id: "hdr:" + k, name: k, value: hdr[k], raw_value: hdr[k] }));
+    const params = params0.concat(hdrRows);
+
     const msRows = (x && x.ms) || [];
 
     const header = getHeaderLite(inst, snap);
@@ -758,7 +728,7 @@ function commModules(msRows) {
         <div class="probeBox"><b>communication</b>${esc(header.communication)}</div>
       </div>
       <div class="probeRow">
-        <div class="probeBox"><b>config</b>${esc(header.config)}</div>
+        <div class="probeBox"><b>config</b>${esc(header.config_status)}${header.config_type && header.config_type !== "—" ? `<div class="muted" style="margin-top:4px">type: ${esc(header.config_type)}</div>` : ""}${header.config_progress && header.config_progress !== "—" ? `<div class="muted">progress: ${esc(header.config_progress)}</div>` : ""}${header.config_error ? `<div class="muted" title="${esc(header.config_error)}">error: ${esc(header.config_error)}</div>` : ""}</div>
         <div class="probeBox"><b>driver code</b>${esc(header.driver_code)}</div>
       </div>
       <div class="probeRow">
@@ -774,8 +744,8 @@ function commModules(msRows) {
         ${moduleChip("CAN0", comm.can0)}
         ${moduleChip("CAN1", comm.can1)}
         ${moduleChip("J1708", comm.j1708)}
-        ${moduleChip("KEYPAD_DALLAS_IBUTTON", comm.dallas)}
-        ${moduleChip("KEYPAD_RAMZOR", comm.ramzor)}
+        ${moduleChip("Dallas", comm.dallas)}
+        ${moduleChip("Ramzor", comm.ramzor)}
       </div>
 
       <div class="probeConsole">
@@ -841,12 +811,17 @@ function commModules(msRows) {
     });
   }
 
+  // -------------------- load + poll --------------------
   async function loadInstallation(id, runId = null) {
     const r = await api(`/api/installations/${encodeURIComponent(id)}`);
     if (runId != null && runId !== RUN_SEQ) return null;
-    if (r.status !== 200 || !r.data) return null;
+    if (r.status !== 200 || !r.data) {
+      if (dbgGetEl) dbgGetEl.textContent = `HTTP ${r.status}`;
+      return null;
+    }
 
     const inst = r.data;
+    if (dbgGetEl) dbgGetEl.textContent = `HTTP ${r.status} status=${inst && inst.status ? inst.status : "-"}`;
     LAST_INST = inst;
     LAST_INST_ID = instIdOf(inst) || id;
     if (instViewEl) instViewEl.textContent = LAST_INST_ID || "—";
@@ -854,10 +829,8 @@ function commModules(msRows) {
 
     const snap = extractCanSnapshot(inst);
     if (snap) renderCanSnapshot(snap);
-    else {
-      try { renderProbeScreen(inst, null, { params: [], ms: [] }); } catch (e) {}
-    }
 
+    // snapshot label
     const snapKey = snap ? firstNonEmpty([snap.captured_at, snap.server_time, snap.serverTime], "ok") : "—";
     if (pillSnapEl) pillSnapEl.textContent = `snapshot: ${snapKey}`;
 
@@ -878,7 +851,7 @@ function commModules(msRows) {
   async function requestSnapshot(id, vehicleId, runId) {
     const r = await api(`/api/installations/${encodeURIComponent(id)}/actions/request-can-snapshot`, {
       method: "POST",
-      json: { vehicle_id: vehicleId }
+      json: { vehicle_id: vehicleId, vehicleId: vehicleId }
     });
     if (runId !== RUN_SEQ) return null;
     return r;
@@ -887,8 +860,6 @@ function commModules(msRows) {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   async function pollCan(id, runId, { tries = 180 } = {}) {
-    let __stableSig = "";
-    let __stableHits = 0;
     for (let i = 0; i < tries; i++) {
       if (runId !== RUN_SEQ) return null;
 
@@ -905,10 +876,6 @@ function commModules(msRows) {
 
         const x = extractRowsFromSnapshot(snap);
         const hasData = (x.params.length > 0) || (x.ms.length > 0);
-        const __sig = `${x.params.length}|${x.ms.length}`;
-        if (__sig === __stableSig) __stableHits += 1;
-        else { __stableSig = __sig; __stableHits = 0; }
-
 
         if (statusErr) {
           const lastJob = (Array.isArray(inst.jobs) && inst.jobs.length) ? inst.jobs[inst.jobs.length - 1] : null;
@@ -918,9 +885,8 @@ function commModules(msRows) {
           return inst;
         }
 
-        if ((statusReady && hasData) || (hasData && __stableHits >= 2)) {
-          const tag = statusReady ? "CAN pronto ✅" : "CAN capturado ✅ (early-stop)";
-          setStatus(`${tag} (params=${x.params.length}, modules=${x.ms.length})`, "ok");
+        if (statusReady && hasData) {
+          setStatus(`CAN pronto ✅ (params=${x.params.length}, modules=${x.ms.length})`, "ok");
           return inst;
         }
 
@@ -930,9 +896,10 @@ function commModules(msRows) {
         setStatus(`aguardando instalação... (${i + 1}/${tries})`, "running");
       }
 
-      let wait = 600;
-      if (i >= 10) wait = 1200;
-      if (i >= 30) wait = 2000;
+      // rápido no começo, mais calmo depois
+      let wait = 700;
+      if (i >= 12) wait = 2000;
+      if (i >= 60) wait = 3000;
       await sleep(wait);
     }
 
@@ -940,22 +907,32 @@ function commModules(msRows) {
     return null;
   }
 
+  // -------------------- main action (1 button) --------------------
   async function runProbe() {
     const vehicleId = Number(String(vehEl?.value ?? "").trim());
     if (!Number.isFinite(vehicleId) || vehicleId <= 0) {
       setStatus("informe um vehicle_id válido", "error");
       return;
     }
+
     RUN_SEQ += 1;
     const runId = RUN_SEQ;
 
-    resetUiForNewRun(runId);
     setBusy(true);
     setStatus("criando instalação...", "running");
 
-    const payload = { service: "CAN_PROBE", vehicle_id: vehicleId };
+    const payload = {
+      service: "CAN_PROBE",
+      vehicle_id: vehicleId,
+      vehicleId: vehicleId,
+      target_client_id: null,
+      vehicleSettingId: null,
+      comments: null,
+      installationDate: new Date().toISOString()
+    };
 
     const created = await api("/api/installations", { method: "POST", json: payload });
+    if (dbgCreateEl) dbgCreateEl.textContent = `HTTP ${created.status}`;
     if (runId !== RUN_SEQ) return;
 
     if (created.status !== 201 || !created.data) {
@@ -977,8 +954,15 @@ function commModules(msRows) {
     if (instViewEl) instViewEl.textContent = newId;
     localStorage.setItem(LS_LAST_INST, newId);
 
+    // garante que a instalação já está visível no GET antes do request (evita corrida)
+    try { await loadInstallation(newId, runId); } catch(_e) {}
+
     setStatus("request snapshot...", "running");
     const req = await requestSnapshot(newId, vehicleId, runId);
+    if (dbgReqEl) {
+      const jobId = req && req.data && (req.data.job_id || req.data.jobId || req.data.id);
+      dbgReqEl.textContent = jobId ? `HTTP ${req.status} job=${jobId}` : `HTTP ${req.status}`;
+    }
     if (runId !== RUN_SEQ) return;
 
     if (!req || req.status >= 400) {
@@ -1001,6 +985,7 @@ function commModules(msRows) {
     });
   }
 
+  // load last installation (read-only)
   const last = (localStorage.getItem(LS_LAST_INST) || "").trim();
   if (last) {
     LAST_INST_ID = last;
@@ -1009,6 +994,7 @@ function commModules(msRows) {
     loadInstallation(last).finally(() => setStatus("pronto", "idle"));
   }
 
+  // querystring prefill
   try {
     const p = new URLSearchParams(location.search);
     const vid = p.get("vehicle_id") || p.get("vid");

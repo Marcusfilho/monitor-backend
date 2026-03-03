@@ -674,52 +674,5 @@
 })();
 </script>
 
-
-<script>
-/* __PROBE_AUTOPOLL_V1__ */
-(function(){
-  if (window.__PROBE_AUTOPOLL_V1__) return;
-  window.__PROBE_AUTOPOLL_V1__=true;
-
-  const POLL_MS = 700;
-  const POLL_MAX_MS = 12000;
-
-  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-
-  async function pollInstallation(getUrl, onData){
-    const t0=Date.now();
-    while (Date.now()-t0 < POLL_MAX_MS){
-      try{
-        const r=await fetch(getUrl, {cache:"no-store"});
-        const j=await r.json();
-        onData(j);
-        // heurística: se já tem params>0, dá uma pausa menor e continua
-        const inst=j.installation||j;
-        const p=(inst.can_snapshot_latest?.parameters||inst.can?.snapshots?.slice(-1)[0]?.parameters||[]);
-        if (Array.isArray(p) && p.length>0) return;
-      }catch(e){}
-      await sleep(POLL_MS);
-    }
-  }
-
-  // intercepta cliques no botão "Request snapshot"
-  document.addEventListener("click", function(ev){
-    const btn = ev.target && (ev.target.closest ? ev.target.closest("button") : null);
-    if (!btn) return;
-    const txt = (btn.textContent||"").toLowerCase();
-    if (!txt.includes("request")) return;
-
-    // tenta achar installation_id no input do form 2
-    const instEl = document.querySelector('input[name="installation_id"], #installation_id, input[id*="installation"]');
-    const instId = instEl && instEl.value ? instEl.value.trim() : "";
-    if (!instId) return;
-
-    const url = "/api/installations/" + encodeURIComponent(instId);
-    // chama poll sem atrapalhar o fluxo atual
-    setTimeout(()=>pollInstallation(url, (j)=>{ try{ window.__probeOnInstallation && window.__probeOnInstallation(j);}catch(e){} }), 800);
-  }, true);
-})();
-</script>
-
 </body>
 </html>

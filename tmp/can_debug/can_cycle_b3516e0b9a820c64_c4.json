@@ -1,0 +1,344 @@
+{
+  "capturedAt": "2026-03-01T16:41:49.616Z",
+  "vehicleId": 1943804,
+  "isConnected": 2,
+  "header": {
+    "vehicle_id": 1943804,
+    "client_id": 217657,
+    "inner_id": "0000000913022508",
+    "unit_key": "SPT:0000000913022508",
+    "license_nmbr": "RJT6G40",
+    "unit_type": "SPETROTEC",
+    "unit_version": "A79%20Read%20Write.18",
+    "configuration_key_db": "697BD58F",
+    "configuration_key_unit": "698C6A32",
+    "raw": {
+      "mtkn": "134240968304446109064637943323727061490",
+      "client_id": "217657",
+      "vehicle_id": "1943804",
+      "license_nmbr": "RJT6G40",
+      "ignition": "1",
+      "vcl_manufacturer": "Volvo",
+      "vcl_model": "FH%20460-D13KE-R-6x2-EE",
+      "vcl_client_id": "217657",
+      "vcl_client_description": "Souza%20Araujo",
+      "vcl_client_group_id": "232143",
+      "vcl_client_group_description": "Carreta",
+      "unit_type": "SPETROTEC",
+      "unit_version": "A79%20Read%20Write.18",
+      "inner_id": "0000000913022508",
+      "unit_key": "SPT%3A0000000913022508",
+      "configuration_key_db": "697BD58F",
+      "configuration_key_unit": "698C6A32",
+      "server_time": "2026-03-01T16%3A41%3A38.3830000%2B00%3A00",
+      "orig_time": "2026-03-01T16%3A41%3A35.0000000%2B00%3A00",
+      "driver_code": "",
+      "mileage": "301827.90",
+      "fuel_used": "16549.00",
+      "speed": "0",
+      "engine_hours": "1366.05",
+      "configuration_status": "",
+      "configuration_type": "",
+      "progress": "",
+      "error": "",
+      "number_of_scms": "182",
+      "number_of_prms": "216",
+      "configuration_key_db_color": "%23c70e33",
+      "configuration_key_unit_color": "%23c70e33",
+      "latitude": "-17.8402440",
+      "longitude": "-40.3306880"
+    }
+  },
+  "parameters": [
+    {
+      "id": "00002C06",
+      "name": "Scheme Output 11270",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:40Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C0B",
+      "name": "Scheme Output 11275",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:40Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C10",
+      "name": "Scheme Output 11280",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:40Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C15",
+      "name": "Scheme Output 11285",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:40Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C1A",
+      "name": "Scheme Output 11290",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:40Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002CA1",
+      "name": "Scheme Output 11425",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002EE5",
+      "name": "Scheme Output 12005 - Rainy Conditions",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00003435",
+      "name": "Calc Output 13365 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000343A",
+      "name": "Calc Outputs 13370 301 Chart 4",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C1F",
+      "name": "Scheme Output 11295",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C24",
+      "name": "Scheme Output 11300",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C29",
+      "name": "Scheme Output 11305",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C2E",
+      "name": "Scheme Output 11310",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C33",
+      "name": "Scheme Output 11315",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C38",
+      "name": "Scheme Output 11320",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C3D",
+      "name": "Scheme Output 11325",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C88",
+      "name": "Scheme Output 11400",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C8D",
+      "name": "Scheme Output 11405",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C92",
+      "name": "Scheme Output 11410",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C97",
+      "name": "Scheme Output 11415",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002C9C",
+      "name": "Scheme Output 11420",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000343F",
+      "name": "Calc Output 13375 301 Chart 4",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:46Z",
+      "inner_id": "0000000913022508"
+    }
+  ],
+  "moduleState": [
+    {
+      "id": "1",
+      "module": "ALUKA",
+      "sub": "IRMA_SUB_TYPE_4",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "2",
+      "module": "ALUKA",
+      "sub": "SMART_ALUKA",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "3",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_4x3",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "4",
+      "module": "KEYPAD",
+      "sub": "KEYPAD_DALLAS_IBUTTON",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "5",
+      "module": "OW_ADC12CH",
+      "sub": "OW_ADC12CH",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "6",
+      "module": "TEMP",
+      "sub": "TEMP0",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "7",
+      "module": "TEMP",
+      "sub": "TEMP1",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "8",
+      "module": "TEMP",
+      "sub": "TEMP2",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    },
+    {
+      "id": "9",
+      "module": "TEMP",
+      "sub": "TEMP3",
+      "last_update_date": "2026-03-01T16:41:00.0000000+00:00",
+      "active": false,
+      "was_ok": false,
+      "ok": false,
+      "error": false,
+      "error_descr": ""
+    }
+  ],
+  "rawCounts": {
+    "unitParametersEvents": 5,
+    "unitMessagesEvents": 6,
+    "unitConnEvents": 0
+  },
+  "can": {
+    "can0": null,
+    "can1": null,
+    "j1708": null,
+    "can0_ok": false,
+    "can1_ok": false,
+    "j1708_ok": false
+  }
+}

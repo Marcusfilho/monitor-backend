@@ -158,6 +158,26 @@ function _alreadyHasSb(installationId: string): boolean {
     );
   } catch { return false; }
 }
+
+function _alreadyHasCan(installationId: string): boolean {
+  try {
+    return listJobs().some((j: any) =>
+      j?.type === "monitor_can_snapshot" &&
+      String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(installationId) &&
+      j?.status !== "error"
+    );
+  } catch { return false; }
+}
+
+function _alreadyHasGs(installationId: string): boolean {
+  try {
+    return listJobs().some((j: any) =>
+      j?.type === "monitor_gs" &&
+      String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(installationId) &&
+      j?.status !== "error"
+    );
+  } catch { return false; }
+}
 function _handleCanSnapshotComplete(job: any, result: any, jobId?: string) {
   try {
     if (!installationsStore?.getInstallation || !installationsStore?.patchInstallation) { console.log("[jobs] CAN snapshot: sem store/get+patch, skip persist"); return; }
@@ -277,6 +297,80 @@ function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
     console.log("[jobs] [PIPELINE] enqueue SB failed:", e && (e.message || String(e)));
   }
 }
+
+function _enqueueCanAfterSchemeBuilder(job: any, result: any) {
+  try {
+    if (!job || String(job.type || "") !== "scheme_builder") return;
+    if (!_resultOk(result)) return;
+
+    const installationId = _getInstallationId(job);
+    if (!installationId) return;
+    if (_alreadyHasCan(installationId)) return;
+
+    const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
+    const service = _upper(job?.payload?.service ?? inst?.service);
+    if (!service) return;
+    if (!["INSTALL", "MAINT_WITH_SWAP"].includes(service)) return;
+
+    const vehicleId = _num(job?.payload?.vehicleId ?? job?.payload?.vehicle_id ?? job?.payload?.VEHICLE_ID);
+    if (!vehicleId) {
+      console.log(`[jobs] [PIPELINE] skip CAN: missing vehicleId installation=${installationId}`);
+      return;
+    }
+
+    // Post-SB CAN battery: o worker faz Gate B (reboot) e publica snapshots parciais
+    const cycles = _num((job as any)?.payload?.can_cycles ?? (job as any)?.payload?.cycles) ?? 12;
+    const interval_ms = _num((job as any)?.payload?.can_interval_ms ?? (job as any)?.payload?.interval_ms) ?? 12000;
+
+    const canJob = createJob("monitor_can_snapshot", {
+      installation_id: installationId,
+      service,
+      vehicleId: String(vehicleId),
+      cycles,
+      interval_ms,
+      mode: "post_sb",
+      reboot_sleep_ms: 60000,
+      sb_poll_interval_ms: 60000,
+    });
+
+    try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" }); } catch {}
+    try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "WAITING_REBOOT_CAN" }); } catch {}
+
+    console.log(`[jobs] [PIPELINE] enqueued monitor_can_snapshot(post_sb) job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+  } catch (e: any) {
+    console.log("[jobs] [PIPELINE] enqueue CAN failed:", e && (e.message || String(e)));
+  }
+}
+
+function _handleGsComplete(job: any, result: any, jobId?: string) {
+  try {
+    if (!job || String(job.type || "") !== "monitor_gs") return;
+    const installationId = _getInstallationId(job);
+    if (!installationId) return;
+    if (!installationsStore?.patchInstallation) return;
+
+    // marca GS_DONE + COMPLETED (o técnico não espera no app)
+    installationsStore.patchInstallation(installationId, {
+      status: _resultOk(result) ? "COMPLETED" : "ERROR",
+      gs: {
+        done_at: new Date().toISOString(),
+        ok: _resultOk(result),
+      }
+    });
+
+    try {
+      installationsStore.pushJob && installationsStore.pushJob(installationId, {
+        type: "monitor_gs",
+        job_id: String(jobId || job?.id || ""),
+        status: "completed",
+        ok: _resultOk(result),
+        meta: (result && (result.meta || result)) ? (result.meta || result) : null,
+      });
+    } catch {}
+  } catch (e: any) {
+    console.log("[jobs] handle GS complete failed:", e && (e.message || String(e)));
+  }
+}
 // === /PIPELINE_AUTO_SB_V1 ===
 
 
@@ -378,10 +472,13 @@ try {
   if (!job) return res.status(404).json({ error: "Job not found" });
   // CAN snapshot: sempre atualizar instalação (READY/ERROR), mesmo se job falhar
   try { if ((job as any)?.type === "monitor_can_snapshot") _handleCanSnapshotComplete(job, result, id); } catch {}
+  // GS: atualizar instalação (COMPLETED/ERROR)
+  try { if ((job as any)?.type === "monitor_gs") _handleGsComplete(job, result, id); } catch {}
 
   // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
   if (finalStatus === "completed") {
     _enqueueSchemeBuilderAfterHtml5(job, result);
+    _enqueueCanAfterSchemeBuilder(job, result);
   }
 
   return res.json({ job });

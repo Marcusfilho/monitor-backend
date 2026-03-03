@@ -1,0 +1,244 @@
+{
+  "capturedAt": "2026-03-01T16:41:37.991Z",
+  "vehicleId": 1943804,
+  "isConnected": 2,
+  "header": {
+    "vehicle_id": 1943804,
+    "client_id": 217657,
+    "inner_id": "0000000913022508",
+    "unit_key": "SPT:0000000913022508",
+    "license_nmbr": "RJT6G40",
+    "unit_type": "SPETROTEC",
+    "unit_version": "A79%20Read%20Write.18",
+    "configuration_key_db": "697BD58F",
+    "configuration_key_unit": "698C6A32",
+    "raw": {
+      "mtkn": "130794780608552992941931728279233656905",
+      "client_id": "217657",
+      "vehicle_id": "1943804",
+      "license_nmbr": "RJT6G40",
+      "ignition": "1",
+      "vcl_manufacturer": "Volvo",
+      "vcl_model": "FH%20460-D13KE-R-6x2-EE",
+      "vcl_client_id": "217657",
+      "vcl_client_description": "Souza%20Araujo",
+      "vcl_client_group_id": "232143",
+      "vcl_client_group_description": "Carreta",
+      "unit_type": "SPETROTEC",
+      "unit_version": "A79%20Read%20Write.18",
+      "inner_id": "0000000913022508",
+      "unit_key": "SPT%3A0000000913022508",
+      "configuration_key_db": "697BD58F",
+      "configuration_key_unit": "698C6A32",
+      "server_time": "2026-03-01T16%3A41%3A13.7070000%2B00%3A00",
+      "orig_time": "2026-03-01T16%3A40%3A53.0000000%2B00%3A00",
+      "driver_code": "",
+      "mileage": "301827.90",
+      "fuel_used": "16549.00",
+      "speed": "0",
+      "engine_hours": "1366.05",
+      "configuration_status": "",
+      "configuration_type": "",
+      "progress": "",
+      "error": "",
+      "number_of_scms": "182",
+      "number_of_prms": "216",
+      "configuration_key_db_color": "%23c70e33",
+      "configuration_key_unit_color": "%23c70e33",
+      "latitude": "-17.8402440",
+      "longitude": "-40.3306880"
+    }
+  },
+  "parameters": [
+    {
+      "id": "00000215",
+      "name": "Scheme Output 533 1h of rest after ignition off",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000122",
+      "name": "GPS Odo",
+      "raw_value": "11FD8720",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000011D",
+      "name": "J1939 DTC",
+      "raw_value": "004FA900",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "000001BE",
+      "name": "Trip Score",
+      "raw_value": "00000032",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000210",
+      "name": "Scheme Output 528",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002719",
+      "name": "Sys Param Total Fuel Used",
+      "raw_value": "0002867A",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000271A",
+      "name": "Sys Param Acc Pedal Pos",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000271B",
+      "name": "Sys Param Brake Switch",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000271E",
+      "name": "Sys Param Oil Temp",
+      "raw_value": "00000166",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000271F",
+      "name": "Sys Param Coolant Temp",
+      "raw_value": "00000163",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002723",
+      "name": "Sys Param Oil Pressure",
+      "raw_value": "00000140",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00002726",
+      "name": "Sys Param Ignition Source",
+      "raw_value": "00000259",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "000070CF",
+      "name": "Sys Param Engine Total Hours of Operation",
+      "raw_value": "00006AB9",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "0000711F",
+      "name": "Sys Param Brake 1 Air Pressure (Bar)",
+      "raw_value": "00000090",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000232",
+      "name": "Driver ID",
+      "raw_value": "000004D2",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000118",
+      "name": "GPS_Lat",
+      "raw_value": "1464F18C",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000119",
+      "name": "GPS_Lon",
+      "raw_value": "130DC440",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "000011C6",
+      "name": "Scheme Output 4550 Air pneumatic pressure < 6Bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000216",
+      "name": "Scheme Output 534 - Air pressure less than 7 bar",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000297",
+      "name": "Scheme Output 663 - internal for start driving",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "000006FD",
+      "name": "Scheme Output 1789 PTO Active (201)",
+      "raw_value": "00000000",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    },
+    {
+      "id": "00000F51",
+      "name": "Scheme Output 3921 - Vehicle in neutral",
+      "raw_value": "00000001",
+      "source": "FF",
+      "orig_time": "2026-03-01T16:41:28Z",
+      "inner_id": "0000000913022508"
+    }
+  ],
+  "moduleState": [],
+  "rawCounts": {
+    "unitParametersEvents": 5,
+    "unitMessagesEvents": 6,
+    "unitConnEvents": 1
+  },
+  "can": {
+    "can0": null,
+    "can1": null,
+    "j1708": null,
+    "can0_ok": false,
+    "can1_ok": false,
+    "j1708_ok": false
+  }
+}

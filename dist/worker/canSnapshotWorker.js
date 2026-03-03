@@ -70,8 +70,8 @@ const WS_PASSWORD   = (process.env.WS_PASSWORD   || process.env.MONITOR_PASSWORD
 const VM_WINDOW_MS = Number(process.env.VM_WINDOW_MS || "8000");
 const VM_WAIT_AFTER_CMD_MS = Number(process.env.VM_WAIT_AFTER_CMD_MS || "1000");
 const VM_WS_OPEN_TIMEOUT_MS = Number(process.env.VM_WS_OPEN_TIMEOUT_MS || "15000");
-const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "8");
-const DEFAULT_CYCLES = Number(process.env.VM_DEFAULT_CYCLES || "3");
+const MAX_CYCLES = Number(process.env.VM_MAX_CYCLES || "20");
+const DEFAULT_CYCLES = Number(process.env.VM_DEFAULT_CYCLES || "12");
 const DEFAULT_INTERVAL_MS = Number(process.env.VM_DEFAULT_INTERVAL_MS || "12000");
 const EARLY_STOP_MIN_TOTAL = Number(process.env.VM_EARLY_STOP_MIN_TOTAL || "6");
 const EARLY_STOP_MIN_WITH = Number(process.env.VM_EARLY_STOP_MIN_WITH || "6");
@@ -419,6 +419,97 @@ async function postProgress(jobId, percent, snapshot, detail){
   }
 }
 
+// === INSTALL V1: publish parcial + stop flag ================================
+async function fetchInstallation(installationId){
+  try{
+    if(!BASE) return null;
+    const url = `${BASE}/api/installations/${encodeURIComponent(String(installationId))}`;
+    const { r, json } = await fetchJsonOrText(url, { method:"GET", headers:{ "accept":"application/json" } });
+    if(!r || !r.ok) return null;
+    return json;
+  }catch{ return null; }
+}
+
+function instShouldStop(inst){
+  try{
+    if(!inst || typeof inst !== "object") return false;
+    const st = String(inst.status || "");
+    if (st === "COMPLETED") return true;
+    if (st === "ERROR") return true;
+    if (st.startsWith("CAN_APPROVED")) return true;
+    if (st.startsWith("GS_")) return true;
+    const can = inst.can && typeof inst.can === "object" ? inst.can : null;
+    if (can && (can.stop_requested_at || can.stopRequestedAt)) return true;
+    if (can && can.audit && can.audit.pre_approval) return true;
+    return false;
+  }catch{ return false; }
+}
+
+async function postInstallationPatch(installationId, patch){
+  try{
+    if(!BASE || !KEY || !installationId) return;
+    const url = `${BASE}/api/installations/${encodeURIComponent(String(installationId))}/_worker/patch`;
+    const body = JSON.stringify(patch || {});
+    await fetch(url, { method:"POST", headers:{ "x-worker-key": KEY, "content-type":"application/json", "accept":"application/json" }, body });
+  }catch{ /*best-effort*/ }
+}
+
+async function postInstallationCanSnapshot(installationId, snapshot, extra){
+  try{
+    if(!BASE || !KEY || !installationId || !snapshot) return;
+    const url = `${BASE}/api/installations/${encodeURIComponent(String(installationId))}/_worker/can-snapshot`;
+    const payload = Object.assign({ snapshot }, (extra && typeof extra === "object") ? extra : {});
+    const body = JSON.stringify(payload);
+    await fetch(url, { method:"POST", headers:{ "x-worker-key": KEY, "content-type":"application/json", "accept":"application/json" }, body });
+  }catch{ /*best-effort*/ }
+}
+
+function __parseTsAny(v){
+  if(v===null || v===undefined) return null;
+  if(typeof v === "number"){
+    if (v > 1e12) return v;
+    if (v > 1e9) return v * 1000;
+    return null;
+  }
+  const s = String(v).trim();
+  if(!s) return null;
+  const d = Date.parse(s);
+  if (!Number.isNaN(d)) return d;
+  const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if(m){
+    const dd = Number(m[1]), mm = Number(m[2]), yy = Number(m[3]);
+    const HH = Number(m[4]), MI = Number(m[5]), SS = Number(m[6]);
+    const dt = Date.UTC(yy, mm-1, dd, HH, MI, SS);
+    return Number.isFinite(dt) ? dt : null;
+  }
+  return null;
+}
+
+function __pickProgressFromHeader(hdr){
+  if(!hdr || typeof hdr !== "object") return null;
+  const raw = hdr.raw && typeof hdr.raw === "object" ? hdr.raw : null;
+  const cand = [
+    hdr.configuration_progress,
+    hdr.progress,
+    raw && (raw.configuration_progress ?? raw.configurationProgress ?? raw.progress ?? raw.config_progress)
+  ].filter(v => v !== undefined && v !== null);
+  if(!cand.length) return null;
+  const n = Number(cand[0]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function __pickPacketTsFromHeader(hdr){
+  if(!hdr || typeof hdr !== "object") return null;
+  const raw = hdr.raw && typeof hdr.raw === "object" ? hdr.raw : null;
+  const cand = [
+    raw && (raw.gprs_last ?? raw.gprs_last_date ?? raw.gprsLast ?? raw.gps_last ?? raw.gpsLast),
+    hdr.gprs_last,
+    hdr.gps_last,
+  ].filter(v => v !== undefined && v !== null);
+  return cand.length ? String(cand[0]) : null;
+}
+// === /INSTALL V1 ============================================================
+
 
 function clampInt(v, lo, hi, def){
   const n = Number(v);
@@ -649,15 +740,16 @@ function __cs_pickBestSummary(){
   return best;
 }
 
-async function takeSnapshotOnce(sessionToken, vehicleId){
+async function takeSnapshotOnce(sessionToken, vehicleId, opt){
+  opt = (opt && typeof opt === "object") ? opt : {};
   const ws = await openMonitorWs(sessionToken, VM_WS_OPEN_TIMEOUT_MS);
   try{
     const snap = await collectVehicleMonitorSnapshot({
       ws,
       sessionToken,
       vehicleId,
-      windowMs: VM_WINDOW_MS,
-      waitAfterCmdMs: VM_WAIT_AFTER_CMD_MS,
+      windowMs: Number(opt.windowMs || opt.window_ms || VM_WINDOW_MS),
+      waitAfterCmdMs: Number(opt.waitAfterCmdMs || opt.wait_after_cmd_ms || VM_WAIT_AFTER_CMD_MS),
       urlEncode: URL_ENCODE,
     });
     // adiciona contexto (sem quebrar UI)
@@ -719,7 +811,7 @@ async function pollOnce(){
 
 
   // __CAN_MULTI_REFRESH_V3__
-  const MR_ENABLED = String(process.env.CAN_MULTI_REFRESH_ENABLED || "1") !== "0";
+  const MR_ENABLED = String(process.env.CAN_MULTI_REFRESH_ENABLED || "0") !== "0";
   const MR_CYCLES = Number(process.env.CAN_MULTI_REFRESH_CYCLES || 5);                 // 5 repetições
   const MR_INTERVAL_MS = Number(process.env.CAN_MULTI_REFRESH_INTERVAL_MS || 1000);   // 1s
   const MR_STOP_AT_PARAMS = Number(process.env.CAN_MULTI_REFRESH_STOP_AT_PARAMS || 120); // para cedo se já tem bastante
@@ -752,6 +844,76 @@ async function pollOnce(){
   }
 
   if(sessionToken && vehicleId){
+    const __mode = String(p.mode || p.pipeline || (p.post_sb ? "post_sb" : "") || "").trim();
+    const __isPostSb = (__mode === "post_sb") || (String(p.post_sb||"") === "1");
+    const __wantMsKey = __isPostSb ? 5 : 3;
+    const __completeMinWith = clampInt(p.complete_min_with, 0, 999999, Number(process.env.CAN_COMPLETE_MIN_WITH || "8"));
+
+    // estágio inicial: Gate B (reboot) em modo post_sb
+    let __baselinePktMs = null;
+    if (__isPostSb && installationId) {
+      try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "WAITING_REBOOT_CAN", worker_job_id: jobId } }); } catch(_e) {}
+
+      // snapshot rápido (baseline)
+      try {
+        const pre = await takeSnapshotOnce(sessionToken, vehicleId, { windowMs: 4000, waitAfterCmdMs: 500 });
+        const preSum = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(pre) || pre) : pre;
+        const hdr = preSum && preSum.header ? preSum.header : (pre && pre.header) ? pre.header : null;
+        const pkt = __pickPacketTsFromHeader(hdr);
+        __baselinePktMs = __parseTsAny(pkt);
+        const prog = __pickProgressFromHeader(hdr);
+        await postInstallationCanSnapshot(installationId, preSum, { status: "SB_RUNNING", phase: "SB_UPDATE", sb_progress: prog, packet_ts: pkt, job_id: jobId });
+      } catch(e) {
+        errors.push(String(e?.message || e));
+      }
+
+      // sleep 60s (reboot)
+      const __sleepMs = clampInt(p.reboot_sleep_ms, 0, 300000, 60000);
+      if (__sleepMs > 0) {
+        try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "SLEEP_REBOOT", sleep_ms: __sleepMs } }); } catch(_e) {}
+        await sleep(__sleepMs);
+      }
+
+      // aguarda packet_ts voltar recente e avançar vs baseline
+      const __waitMaxMs = clampInt(p.reboot_wait_max_ms, 30000, 900000, 600000);
+      const __pollMs = clampInt(p.reboot_poll_ms, 5000, 60000, 10000);
+      const __recentSec = clampInt(p.reboot_recent_sec, 30, 600, 120);
+      const __t0 = Date.now();
+      while ((Date.now() - __t0) < __waitMaxMs) {
+        try {
+          const instNow = await fetchInstallation(installationId);
+          if (instShouldStop(instNow)) {
+            console.log(`[INFO] stop requested during reboot-wait installation=${installationId}`);
+            break;
+          }
+        } catch {}
+
+        try {
+          const s = await takeSnapshotOnce(sessionToken, vehicleId, { windowMs: 4000, waitAfterCmdMs: 500 });
+          const sSum = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(s) || s) : s;
+          const hdr = sSum && sSum.header ? sSum.header : (s && s.header) ? s.header : null;
+          const pkt = __pickPacketTsFromHeader(hdr);
+          const pktMs = __parseTsAny(pkt);
+          const prog = __pickProgressFromHeader(hdr);
+
+          const okRecent = (pktMs != null) ? ((Date.now() - pktMs) <= (__recentSec * 1000)) : false;
+          const okAdv = (__baselinePktMs != null && pktMs != null) ? (pktMs > __baselinePktMs) : true;
+
+          await postInstallationCanSnapshot(installationId, sSum, { status: "WAITING_REBOOT_CAN", phase: "WAIT_REBOOT_PACKET", sb_progress: prog, packet_ts: pkt, job_id: jobId });
+          if (okRecent && okAdv) {
+            console.log(`[INFO] reboot confirmed packet_ts recent+advanced installation=${installationId}`);
+            break;
+          }
+        } catch(e) {
+          errors.push(String(e?.message || e));
+        }
+
+        await sleep(__pollMs);
+      }
+
+      try { await postInstallationPatch(installationId, { status: "CAN_RUNNING", can: { phase: "CAN_BATTERY", worker_job_id: jobId } }); } catch(_e) {}
+    }
+
           // OPTC_PROGRESS_SEND_V1 trackers
       let __bestSummary = null;
       let __bestWith = 0;
@@ -760,6 +922,14 @@ for(let i=0;i<cycles;i++){
       let __cycleWith = 0;
       let __cycleWindowMs = 0;
       try{
+        // stop flag (técnico pode validar a qualquer momento)
+        if (installationId) {
+          const instNow = await fetchInstallation(installationId);
+          if (instShouldStop(instNow)) {
+            console.log(`[INFO] stop requested installation=${installationId} cycle=${i+1}/${cycles}`);
+            break;
+          }
+        }
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
       // __lastSnap removed (was causing ReferenceError) /*__FIX_LASTSNAP__*/
         snapshots.unshift(snap); // newest first
@@ -814,9 +984,24 @@ for(let i=0;i<cycles;i++){
         const __hasHdr = !!(__hdr && (__hdr.communication || __hdr.server_time || __hdr.license_nmbr || __hdr.license_number || __hdr.inner_id || __hdr.serial || __hdr.client || __hdr.model || __hdr.manufacturer || __hdr.progress));
         const __msKey = Number((__sum && __sum.counts && __sum.counts.module_state_key) || 0) || 0;
 
+        // publish parcial pro App (installation.can_snapshot_latest)
+        try {
+          if (installationId && __sum) {
+            const pkt = __pickPacketTsFromHeader(__hdr);
+            const prog = __pickProgressFromHeader(__hdr);
+            await postInstallationCanSnapshot(installationId, __sum, { status: "CAN_RUNNING", phase: (__isPostSb ? "CAN_BATTERY" : "CAN"), sb_progress: prog, packet_ts: pkt, job_id: jobId, cycle: i+1, cycles });
+          }
+        } catch {}
+
         console.log("[DBG] cycle-summary", jobId, "cycle=", (i+1), "pTot=", __total, "pRaw=", __with, "msKey=", __msKey, "hasHdr=", (__hasHdr?1:0), "snaps=", snapshots.length);
 
-        if ((hitWith || hitTotal) && snapshots.length >= 2 && __hasHdr && __msKey >= 3){
+        // early-stop por completude (post_sb)
+        if (__isPostSb && __msKey >= 5 && __total > 0 && (__with >= __completeMinWith)){
+          console.log("[INFO] early-stop COMPLETE(post_sb)", jobId, "total=", __total, "with=", __with, "msKey=", __msKey, "minWith=", __completeMinWith);
+          break;
+        }
+
+        if ((hitWith || hitTotal) && snapshots.length >= 2 && __hasHdr && __msKey >= __wantMsKey){
           console.log("[INFO] early-stop", jobId, "total=", __total, "with=", __with, "msKey=", __msKey, "hasHdr=", (__hasHdr?1:0), "thrTotal=", earlyStopMinTotal, "thrWith=", earlyStopMinWith);
           break;
         }

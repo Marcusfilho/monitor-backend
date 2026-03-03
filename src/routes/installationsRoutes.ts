@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireWorkerKey } from "../middleware/requireWorkerKey";
 
 const router = Router();
 
@@ -465,6 +466,111 @@ router.get("/:id", async (req, res) => {
   } catch (e:any) {
     console.error("[installationsRoutes] GET /:id error:", e && (e.stack || e.message || String(e)));
     return res.status(500).json({ ok:false, error:"Internal Server Error" });
+  }
+});
+
+// ===============================
+// Worker internal endpoints (x-worker-key)
+// - usados para publicar progresso/snapshot parcial durante baterias longas
+// - payload é snapshot já resumido pelo worker
+// ===============================
+
+// PATCH genérico (status/can/sb/resolved) — allowlist
+router.post("/:id/_worker/patch", requireWorkerKey, async (req, res) => {
+  try {
+    const id = String(req.params.id || "");
+    const inst = installationsStore.getInstallation(id);
+    if (!inst) return res.status(404).json({ ok: false, error: "not found" });
+
+    const body = (req.body && typeof req.body === "object") ? req.body : {};
+    const patch = (body.patch && typeof body.patch === "object") ? body.patch : body;
+
+    const out: any = {};
+    if (patch.status != null) out.status = String(patch.status);
+
+    if (patch.sb && typeof patch.sb === "object") {
+      out.sb = Object.assign({}, (inst.sb && typeof inst.sb === "object") ? inst.sb : {}, patch.sb);
+    }
+
+    if (patch.can && typeof patch.can === "object") {
+      out.can = Object.assign({}, (inst.can && typeof inst.can === "object") ? inst.can : {}, patch.can);
+    }
+
+    if (patch.resolved && typeof patch.resolved === "object") {
+      out.resolved = Object.assign({}, (inst.resolved && typeof inst.resolved === "object") ? inst.resolved : {}, patch.resolved);
+    }
+
+    // nada permitido? idempotente
+    if (!Object.keys(out).length) return res.json({ ok: true, skipped: true });
+
+    const updated = installationsStore.patchInstallation(id, out);
+    return res.json({ ok: true, installation_id: id, status: updated?.status || null });
+  } catch (e: any) {
+    console.error("[installationsRoutes] _worker/patch error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok: false, error: "Internal Server Error" });
+  }
+});
+
+// Publicar snapshot CAN parcial (já resumido) a cada ciclo
+router.post("/:id/_worker/can-snapshot", requireWorkerKey, async (req, res) => {
+  try {
+    const id = String(req.params.id || "");
+    const inst = installationsStore.getInstallation(id);
+    if (!inst) return res.status(404).json({ ok: false, error: "not found" });
+
+    const body = (req.body && typeof req.body === "object") ? req.body : {};
+    const snap = (body.snapshot && typeof body.snapshot === "object") ? body.snapshot : null;
+    if (!snap) return res.status(400).json({ ok: false, error: "missing snapshot" });
+
+    const now = new Date().toISOString();
+    if (!(snap as any).captured_at && !(snap as any).capturedAt) (snap as any).captured_at = now;
+
+    const canPrev = (inst.can && typeof inst.can === "object") ? inst.can : {};
+    const prevSnaps = Array.isArray(canPrev.snapshots) ? canPrev.snapshots : [];
+    const mergedSnaps = [snap, ...prevSnaps].filter(Boolean).slice(0, 12);
+
+    const counts = (snap as any).counts || {};
+    const hasData =
+      Number(counts.params_total || counts.paramsTotal || 0) > 0 ||
+      Number(counts.module_total || counts.moduleTotal || 0) > 0 ||
+      (Array.isArray((snap as any).parameters) && (snap as any).parameters.length > 0) ||
+      (Array.isArray((snap as any).moduleState) && (snap as any).moduleState.length > 0) ||
+      (Array.isArray((snap as any).module_state) && (snap as any).module_state.length > 0);
+
+    const phase = (body.phase != null) ? String(body.phase) : null;
+    const sb_progress = (body.sb_progress != null && isFinite(Number(body.sb_progress))) ? Number(body.sb_progress) : null;
+    const packet_ts = (body.packet_ts != null) ? String(body.packet_ts) : null;
+
+    const canPatched: any = Object.assign({}, canPrev, {
+      last_snapshot_at: (snap as any).captured_at || now,
+      snapshots: mergedSnaps,
+      phase: phase || canPrev.phase || null,
+      summary: (snap as any).counts || canPrev.summary || null,
+    });
+
+    const topPatch: any = {
+      can: canPatched,
+      can_snapshot_latest: snap,
+      can_snapshot: hasData ? snap : null,
+    };
+
+    // opcional: status vindo do worker
+    if (body.status != null) topPatch.status = String(body.status);
+
+    if (sb_progress != null || packet_ts != null) {
+      const sbPrev = (inst.sb && typeof inst.sb === "object") ? inst.sb : {};
+      topPatch.sb = Object.assign({}, sbPrev, {
+        progress: (sb_progress != null) ? sb_progress : (sbPrev.progress ?? null),
+        packet_ts: packet_ts || (sbPrev.packet_ts ?? null),
+        updated_at: now,
+      });
+    }
+
+    const updated = installationsStore.patchInstallation(id, topPatch);
+    return res.json({ ok: true, installation_id: id, status: updated?.status || null });
+  } catch (e: any) {
+    console.error("[installationsRoutes] _worker/can-snapshot error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok: false, error: "Internal Server Error" });
   }
 });
 
