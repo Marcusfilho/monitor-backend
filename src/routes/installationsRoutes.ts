@@ -438,9 +438,38 @@ const adminKey = pickAdminKey();
       enqueueDebug.error = String(e?.stack || e?.message || e);
     }
 
+    // 2.1) Persistir status/queue no installationsStore (para o app ver imediatamente)
+    try {
+      if (instId && installationsStore?.patchInstallation) {
+        if (enqueueDebug.ok) {
+          installationsStore.patchInstallation(String(instId), { status: "HTML5_QUEUED" });
+          try {
+            const jobId = enqueueDebug?.response?.job?.id || enqueueDebug?.response?.jobId || null;
+            if (jobId && installationsStore?.pushJob) {
+              installationsStore.pushJob(String(instId), { type: jobType, job_id: String(jobId), status: "pending", ok: true });
+            }
+          } catch {}
+        } else {
+          installationsStore.patchInstallation(String(instId), {
+            status: "HTML5_ERROR",
+            last_error: { ts: new Date().toISOString(), job_type: jobType, message: "enqueue_failed", detail: enqueueDebug.error || enqueueDebug.response }
+          });
+        }
+      }
+    } catch (_) {}
+
     // 3) tenta anexar no objeto de retorno (debug)
     try {
       inst.enqueue = enqueueDebug;
+    } catch (_) {}
+
+    // 4) retornar estado mais novo (evita UI ficar em CREATED)
+    try {
+      const fresh = installationsStore?.getInstallation ? installationsStore.getInstallation(String(instId)) : null;
+      if (fresh) {
+        try { fresh.enqueue = enqueueDebug; } catch {}
+        return res.status(201).json(fresh);
+      }
     } catch (_) {}
 
     return res.status(201).json(inst);

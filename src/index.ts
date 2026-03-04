@@ -16,7 +16,12 @@ import cors from "cors";
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 const app = express();
+
+// Identificador do processo para detectar restarts do Render (debug)
+const BOOT_ID = crypto.randomBytes(6).toString("hex");
+const BOOT_AT_MS = Date.now();
 
 
 // === APP_INSTALLATIONS_V1_UI (same-origin, sem CORS) ===
@@ -105,6 +110,9 @@ app.get("/health", (_req, res) => {
     timestamp: new Date().toISOString(),
     git_commit: process.env.RENDER_GIT_COMMIT || null,
     git_branch: process.env.RENDER_GIT_BRANCH || null,
+    boot_id: BOOT_ID,
+    uptime_s: Math.round(process.uptime()),
+    pid: process.pid,
   });
 });
 
