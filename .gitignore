@@ -22,3 +22,6 @@ node_modules/
 
 # local backups
 *.bak.*
+
+# runtime/debug artifacts
+/tmp/
