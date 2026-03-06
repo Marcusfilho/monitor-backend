@@ -3,8 +3,8 @@ import { Router } from "express";
 const router = Router();
 
 // mesmos serviços usados no installationsRoutes
-const installationsStore: any = require("./services/installationsStore");
-const installationsEngine: any = require("./services/installationsEngine");
+const installationsStore: any = require("../services/installationsStore");
+const installationsEngine: any = require("../services/installationsEngine");
 
 function pickFn(obj: any, names: string[]) {
   for (const n of names) if (obj && typeof obj[n] === "function") return obj[n].bind(obj);

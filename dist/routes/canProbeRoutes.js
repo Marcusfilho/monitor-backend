@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const router = (0, express_1.Router)();
 // mesmos serviços usados no installationsRoutes
-const installationsStore = require("./services/installationsStore");
-const installationsEngine = require("./services/installationsEngine");
+const installationsStore = require("../services/installationsStore");
+const installationsEngine = require("../services/installationsEngine");
 function pickFn(obj, names) {
     for (const n of names)
         if (obj && typeof obj[n] === "function")
