@@ -848,8 +848,8 @@ async function pollOnce(){
 
   let cycles = clampInt(p.cycles, 1, MAX_CYCLES, DEFAULT_CYCLES);
   let intervalMs = clampInt(p.interval_ms, 2000, 60000, DEFAULT_INTERVAL_MS);
-  const earlyStopMinTotal = clampInt(p.early_stop_min_total, 0, 999999, EARLY_STOP_MIN_TOTAL);
-  const earlyStopMinWith = clampInt(p.early_stop_min_with, 0, 999999, EARLY_STOP_MIN_WITH);
+  let earlyStopMinTotal = clampInt(p.early_stop_min_total, 0, 999999, EARLY_STOP_MIN_TOTAL);
+  let earlyStopMinWith = clampInt(p.early_stop_min_with, 0, 999999, EARLY_STOP_MIN_WITH);
 
 
   // __CAN_MULTI_REFRESH_V3__
@@ -864,8 +864,8 @@ async function pollOnce(){
     if (typeof intervalMs === "number" && isFinite(intervalMs)) intervalMs = Math.min(intervalMs, MR_INTERVAL_MS);
 
     // deixa o coletor rodar os ciclos (não parar cedo por threshold antigo)
-    if (typeof earlyStopTotal !== "undefined") earlyStopTotal = 9999;
-    if (typeof earlyStopWith  !== "undefined") earlyStopWith  = 9999;
+    earlyStopMinTotal = 9999;
+    earlyStopMinWith  = 9999;
 
     console.log(`[INFO] multi-refresh V3 enabled cycles=${cycles} intervalMs=${intervalMs} stopAtParams=${MR_STOP_AT_PARAMS}`);
   }
@@ -909,18 +909,19 @@ async function pollOnce(){
         errors.push(String(e?.message || e));
       }
 
-      // sleep 60s (reboot)
-      const __sleepMs = clampInt(p.reboot_sleep_ms, 0, 300000, 60000);
-      if (__sleepMs > 0) {
-        try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "SLEEP_REBOOT", sleep_ms: __sleepMs } }); } catch(_e) {}
-        await sleep(__sleepMs);
-      }
-
-      // aguarda packet_ts voltar recente e avançar vs baseline
-      const __waitMaxMs = clampInt(p.reboot_wait_max_ms, 30000, 900000, 600000);
-      const __pollMs = clampInt(p.reboot_poll_ms, 5000, 60000, 10000);
-      const __recentSec = clampInt(p.reboot_recent_sec, 30, 600, 120);
+      // Gate B inteligente: acompanha o fim do SB e só entra em CAN quando o pacote ficou recente.
+      // Regras:
+      // - enquanto progress existe e < 90 => status SB_RUNNING
+      // - após progress >= 90, se o progress sumir e o packet_ts ficar recente/avançado => libera CAN
+      // - se progress vier vazio desde o início, usa packet_ts recente+avançado como confirmação
+      const __waitMaxMs = clampInt(p.reboot_wait_max_ms, 30000, 900000, 240000);
+      const __pollMs = clampInt(p.reboot_poll_ms, 3000, 60000, 6000);
+      const __recentSec = clampInt(p.reboot_recent_sec, 30, 600, 180);
       const __t0 = Date.now();
+      let __sawHighProgress = false;
+      let __emptyProgressAfterHigh = 0;
+      let __bestGatePktMs = __baselinePktMs;
+
       while ((Date.now() - __t0) < __waitMaxMs) {
         try {
           const instNow = await fetchInstallation(installationId);
@@ -937,13 +938,36 @@ async function pollOnce(){
           const pkt = __pickPacketTsFromHeader(hdr);
           const pktMs = __parseTsAny(pkt);
           const prog = __pickProgressFromHeader(hdr);
+          const hasProgress = Number.isFinite(Number(prog));
+          const progNum = hasProgress ? Number(prog) : null;
+
+          if (progNum != null && progNum >= 90) __sawHighProgress = true;
+          if (__sawHighProgress && progNum == null) __emptyProgressAfterHigh += 1;
+          else if (progNum != null) __emptyProgressAfterHigh = 0;
+
+          if (pktMs != null && (__bestGatePktMs == null || pktMs > __bestGatePktMs)) {
+            __bestGatePktMs = pktMs;
+          }
 
           const okRecent = (pktMs != null) ? ((Date.now() - pktMs) <= (__recentSec * 1000)) : false;
-          const okAdv = (__baselinePktMs != null && pktMs != null) ? (pktMs > __baselinePktMs) : true;
+          const okAdv = (__baselinePktMs != null && pktMs != null) ? (pktMs > __baselinePktMs) : (pktMs != null);
+          const progressDone = (progNum != null) ? (progNum >= 90) : false;
+          const progressGoneAfterDone = (__sawHighProgress && __emptyProgressAfterHigh >= 1);
+          const gateReady = okRecent && okAdv && (progressDone || progressGoneAfterDone || progNum == null);
 
-          await postInstallationCanSnapshot(installationId, sSum, { status: "WAITING_REBOOT_CAN", phase: "WAIT_REBOOT_PACKET", sb_progress: prog, packet_ts: pkt, job_id: jobId });
-          if (okRecent && okAdv) {
-            console.log(`[INFO] reboot confirmed packet_ts recent+advanced installation=${installationId}`);
+          const gateStatus = (progNum != null && progNum < 90) ? "SB_RUNNING" : "WAITING_REBOOT_CAN";
+          const gatePhase = (progNum != null && progNum < 90) ? "SB_UPDATE" : "WAIT_REBOOT_PACKET";
+
+          await postInstallationCanSnapshot(installationId, sSum, {
+            status: gateStatus,
+            phase: gatePhase,
+            sb_progress: progNum,
+            packet_ts: pkt,
+            job_id: jobId,
+          });
+
+          if (gateReady) {
+            console.log(`[INFO] reboot/SB gate ready installation=${installationId} progress=${progNum} pkt=${pkt}`);
             break;
           }
         } catch(e) {
@@ -973,7 +997,6 @@ for(let i=0;i<cycles;i++){
           }
         }
         const snap = await takeSnapshotOnce(sessionToken, vehicleId);
-      // __lastSnap removed (was causing ReferenceError) /*__FIX_LASTSNAP__*/
         snapshots.unshift(snap); // newest first
         try {
           const __dumpDir = path.join(process.cwd(), "tmp", "can_debug");
@@ -981,43 +1004,29 @@ for(let i=0;i<cycles;i++){
           const __dumpFile = path.join(__dumpDir, "can_cycle_" + String(jobId) + "_c" + String(i+1) + ".json");
           fs.writeFileSync(__dumpFile, JSON.stringify(snap, null, 2));
         } catch(_e_dump) {}
-        console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters)?snap.parameters.length:0);
-        try { console.log("[INFO] cycle-summary", jobId, "c=", (i+1), (__sum && __sum.counts) || null, (__sum && __sum.rawCounts) ? __sum.rawCounts : null); } catch(_e) {}
 
-    // __CAN_MULTI_REFRESH_V3__ guards
-    const __msg = Number((rawCounts && rawCounts.unit_messages_events) || (counts && counts.unit_messages_events) || 0);
-    const __conn = Number((rawCounts && rawCounts.unit_conn_events) || (counts && counts.unit_conn_events) || 0);
-
-    // 1) já está bom: para cedo
-    if (MR_ENABLED && pTot >= MR_STOP_AT_PARAMS) {
-      console.log(`[INFO] multi-refresh V3 early-stop: pTot=${pTot} >= stopAt=${MR_STOP_AT_PARAMS}`);
-      break;
-    }
-
-    // 2) veículo “morto”: não insiste em 5 ciclos
-    if (MR_ENABLED && cycle >= MR_NO_DATA_CUTOFF && pTot === 0 && __msg === 0 && __conn === 0) {
-      console.log(`[INFO] multi-refresh V3 no-data cutoff: cycle=${cycle} pTot=0 msg=0 conn=0`);
-      break;
-    }
-
-    // listen-window retry: se após ~5s ainda estiver incompleto, espera e coleta mais (máx 1 retry)
-    if (!__didListenRetry && __CAN_LISTEN_RETRY_MAX > 1 && cycle === __minCyclesBeforeRetry && pTot < __CAN_LISTEN_MIN_PARAMS) {
-      __didListenRetry = true;
-      const extra = Math.min(__minCycles, (__CAN_LISTEN_MAX_CYCLES - cycles));
-      if (extra > 0) {
-        console.log(`[INFO] listen-window retry: pTot=${pTot} < min=${__CAN_LISTEN_MIN_PARAMS}; sleep ${__CAN_LISTEN_RETRY_BACKOFF_MS}ms; extend cycles +${extra} -> ${cycles + extra}`);
-        await sleep(__CAN_LISTEN_RETRY_BACKOFF_MS);
-        cycles = Math.min(__CAN_LISTEN_MAX_CYCLES, cycles + extra);
-      } else {
-        console.log(`[INFO] listen-window retry skipped (cap): cycles=${cycles}`);
-      }
-    }
-        // early-stop: usa counts (inclui raw_value) via summarizeSnapshot
         let __sum = null;
-        try{ __sum = __cs_summarizeSnapshot(snap) || null; }catch(_e){}
+        try { __sum = __cs_summarizeSnapshot(snap) || null; } catch(_e) {}
         const __c = (__sum && __sum.counts) ? __sum.counts : null;
-        const __total = Number((__c && __c.params_total) || (Array.isArray(snap.parameters)?snap.parameters.length:0) || 0);
-        const __with = Number((__c && __c.params_with_value) || 0);
+        const __rawCounts = (__sum && __sum.rawCounts) ? __sum.rawCounts : (snap && snap.rawCounts ? snap.rawCounts : null);
+        const __total = Number((__c && (__c.params_total ?? __c.parameters_total)) || (Array.isArray(snap.parameters) ? snap.parameters.length : 0) || 0);
+        const __with = Number((__c && (__c.params_with_value ?? __c.parameters_with_value)) || 0);
+        const __msg = Number((__rawCounts && (__rawCounts.unitMessagesEvents ?? __rawCounts.unit_messages_events)) || 0);
+        const __conn = Number((__rawCounts && (__rawCounts.unitConnEvents ?? __rawCounts.unit_conn_events)) || 0);
+        const __cycle = i + 1;
+
+        console.log("[INFO] snapshot ok", jobId, "params=", Array.isArray(snap.parameters) ? snap.parameters.length : 0);
+        try { console.log("[INFO] cycle-summary", jobId, "c=", __cycle, (__sum && __sum.counts) || null, __rawCounts || null); } catch(_e) {}
+
+        if (MR_ENABLED && __total >= MR_STOP_AT_PARAMS) {
+          console.log(`[INFO] multi-refresh V3 early-stop: pTot=${__total} >= stopAt=${MR_STOP_AT_PARAMS}`);
+          break;
+        }
+
+        if (MR_ENABLED && __cycle >= MR_NO_DATA_CUTOFF && __total === 0 && __msg === 0 && __conn === 0) {
+          console.log(`[INFO] multi-refresh V3 no-data cutoff: cycle=${__cycle} pTot=0 msg=0 conn=0`);
+          break;
+        }
         __cycleWith = __with;
         __cycleWindowMs = Number((snap && snap.meta && snap.meta.windowMs) || 0) || 0;
         const hitWith = (earlyStopMinWith > 0) ? (__with >= earlyStopMinWith) : false;

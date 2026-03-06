@@ -434,8 +434,8 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             return;
         }
         // Post-SB CAN battery: o worker faz Gate B (reboot) e publica snapshots parciais
-        const cycles = _num(job?.payload?.can_cycles ?? job?.payload?.cycles) ?? 12;
-        const interval_ms = _num(job?.payload?.can_interval_ms ?? job?.payload?.interval_ms) ?? 12000;
+        const cycles = _num(job?.payload?.can_cycles ?? job?.payload?.cycles) ?? 8;
+        const interval_ms = _num(job?.payload?.can_interval_ms ?? job?.payload?.interval_ms) ?? 8000;
         const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
             installation_id: installationId,
             service,
@@ -443,8 +443,9 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             cycles,
             interval_ms,
             mode: "post_sb",
-            reboot_sleep_ms: 60000,
-            sb_poll_interval_ms: 60000,
+            reboot_wait_max_ms: 240000,
+            reboot_poll_ms: 6000,
+            reboot_recent_sec: 180,
         });
         try {
             installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
