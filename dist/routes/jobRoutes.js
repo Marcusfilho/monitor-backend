@@ -238,9 +238,22 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                 summary: __summary || ((can && can.summary) ? can.summary : null),
                 last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
             });
-            installationsStore.patchInstallation(installationId, { can: __canPatched,
+            const curStatus = String(inst?.status || "").toUpperCase();
+            const keepStatus = curStatus.includes("CAN_APPROVED") ||
+                curStatus.startsWith("GS_") ||
+                curStatus.includes("COMPLETED") ||
+                (curStatus.includes("ERROR") && !curStatus.startsWith("CAN_"));
+            const prevBest = inst.can_snapshot || inst.canSnapshot || null;
+            const nextStatus = (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR");
+            const patch = {
+                can: __canPatched,
                 can_snapshot_latest: (__snap || null),
-                can_snapshot: (__hasData ? __snap : null), status: (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
+                // não apagar o último snapshot "bom" quando vier um ciclo vazio
+                can_snapshot: (__hasData ? __snap : (prevBest || null)),
+            };
+            if (!keepStatus)
+                patch.status = nextStatus;
+            installationsStore.patchInstallation(installationId, patch);
         }
         catch { }
         try {

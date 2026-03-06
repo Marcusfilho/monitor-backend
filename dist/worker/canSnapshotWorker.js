@@ -607,27 +607,68 @@ async function openMonitorWs(sessionToken, timeoutMs){
 function __cs_summarizeSnapshot(snap){
   if (!snap || typeof snap !== "object") return null;
   const params = Array.isArray(snap.parameters) ? snap.parameters : [];
-  const ms = Array.isArray(snap.moduleState) ? snap.moduleState : [];
+    const ms =
+    Array.isArray(snap.moduleState) ? snap.moduleState :
+    (Array.isArray(snap.module_state) ? snap.module_state : []);
   const idsKeep = new Set(["8","9","15","19","20"]);
 
-  const pickedMs = ms.filter(function(r){
-    const id = String((r && (r.id || r.module_id || r.moduleId)) || "").trim();
-    return idsKeep.has(id);
-  }).map(function(r){
-    return {
+function __toBool(v){
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  const s = String(v == null ? "" : v).trim().toLowerCase();
+  if (s === "1" || s === "true" || s === "yes" || s === "on") return true;
+  if (s === "0" || s === "false" || s === "no" || s === "off" || s === "") return false;
+  return !!v;
+}
+
+  function __normKey(s){
+    return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+  function __keyFromRow(r){
+    const s = __normKey((r && (r.key || r.sub || r.sub_module_name || r.subModuleName || r.module_name || r.moduleName || r.name)) || "");
+    if (!s) return null;
+    if (s.includes("CAN0")) return "CAN0";
+    if (s.includes("CAN1")) return "CAN1";
+    if (s.includes("J1708")) return "J1708";
+    if (s.includes("KEYPADDALLAS") || s.includes("DALLAS") || s.includes("IBUTTON")) return "KEYPAD_DALLAS";
+    if (s.includes("KEYPADRAMZOR") || s.includes("RAMZOR")) return "KEYPAD_RAMZOR";
+    return null;
+  }
+  function __keyFromId(idStr){
+    if (idStr === "8") return "CAN0";
+    if (idStr === "9") return "CAN1";
+    if (idStr === "15") return "J1708";
+    if (idStr === "19") return "KEYPAD_DALLAS";
+    if (idStr === "20") return "KEYPAD_RAMZOR";
+    return null;
+  }
+
+  const pickedMs = [];
+  const seen = new Set();
+  for (var mi=0; mi<ms.length; mi++){
+    var r = ms[mi] || {};
+    var id = String((r && (r.id || r.module_id || r.moduleId)) || "").trim();
+    var key = __keyFromRow(r) || (idsKeep.has(id) ? __keyFromId(id) : null);
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    pickedMs.push({
+      key: key,
       id: (r && (r.id || r.module_id || r.moduleId) != null) ? String(r.id || r.module_id || r.moduleId) : null,
       name: (r && (r.name || r.module_name || r.moduleName)) ? String(r.name || r.module_name || r.moduleName) : null,
       module_name: (r && (r.module_name || r.moduleName || r.name)) ? String(r.module_name || r.moduleName || r.name) : null,
       module: (r && r.module) ? String(r.module) : null,
       sub: (r && (r.sub || r.sub_module_name || r.subModuleName)) ? String(r.sub || r.sub_module_name || r.subModuleName) : null,
-      active: !!(r && r.active),
-      ok: !!(r && r.ok),
-      was_ok: !!(r && r.was_ok),
-      error: !!(r && r.error),
+      active: __toBool(r && r.active),
+      ok: __toBool(r && r.ok),
+      was_ok: __toBool(r && (r.was_ok != null ? r.was_ok : (r.wasOk != null ? r.wasOk : null))),
+      error: __toBool(r && r.error),
+      message: (r && (r.message || r.msg || r.error_descr || r.errorDescr) != null) ? String(r.message || r.msg || r.error_descr || r.errorDescr) : null,
       error_descr: (r && r.error_descr != null) ? String(r.error_descr) : null,
       last_update_date: (r && (r.last_update_date || r.last_update || r.lastUpdate) != null) ? String(r.last_update_date || r.last_update || r.lastUpdate) : null,
-    };
-  });
+    });
+  }
 
   var hdr = (snap.header && typeof snap.header === "object") ? snap.header : null;
   var hdrLite = hdr ? {
@@ -652,6 +693,7 @@ function __cs_summarizeSnapshot(snap){
     model: hdr.model || hdr.vcl_model || null,
     vcl_client_description: hdr.vcl_client_description || hdr.client || null,
     client: hdr.client || hdr.vcl_client_description || null,
+    ignition: (hdr.ignition != null ? hdr.ignition : null),
     speed: hdr.speed != null ? hdr.speed : null,
     fuel: hdr.fuel != null ? hdr.fuel : null,
     mileage: hdr.mileage != null ? hdr.mileage : null,
