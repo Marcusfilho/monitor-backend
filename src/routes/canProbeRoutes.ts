@@ -59,10 +59,11 @@ router.post("/", async (req, res) => {
   try {
     const payload = req.body || {};
     payload.service = "CAN_PROBE_STANDALONE";
+payload.service = "CAN_PROBE_STANDALONE";
 
     const create =
-      pickFn(installationsEngine, ["createInstallation", "create", "createAndStart", "startInstallation"]) ||
-      pickFn(installationsStore, ["createInstallation", "create"]);
+      pickFn(installationsStore, ["createInstallation", "create", "createAndStart", "startInstallation"]) ||
+      pickFn(installationsEngine, ["createInstallation", "create"]);
 
     if (!create) {
       return res.status(500).json({ ok: false, error: "no createInstallation/create found in engine/store" });
@@ -70,13 +71,22 @@ router.post("/", async (req, res) => {
 
     const inst = await create(payload);
 
+    // PATCH_ASSERT_CAN_PROBE: garantir que o GET encontre a instalação
+    try {
+      const instId = inst?.installation_id || inst?.id || null;
+      const has = instId && installationsStore?.getInstallation ? installationsStore.getInstallation(instId) : null;
+      if (instId && !has && installationsStore?.patchInstallation) {
+        installationsStore.patchInstallation(instId, inst);
+      }
+    } catch {}
+
     // opcional: status inicial “neutro”
     try {
       const id = inst?.installation_id || inst?.id;
       installationsStore?.patchInstallation && id && installationsStore.patchInstallation(id, { status: "PROBE_CREATED" });
     } catch {}
 
-    return res.json(inst);
+    return res.status(201).json(inst);
   } catch (e: any) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
