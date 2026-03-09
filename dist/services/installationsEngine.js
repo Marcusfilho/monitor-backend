@@ -346,47 +346,36 @@ async function approveCan(installationId, { override, reason }) {
     }
   } catch (_e) {}
 
-  
   // enfileira GS
   const gs = catalogs.resolveGsCommand({
     label_pos: inst.payload?.gsensor?.label_pos,
     harness_pos: inst.payload?.gsensor?.harness_pos
   });
-
-  const gsCmd = String(gs?.GS_COMMAND_SYNTAX || gs?.command || gs?.command_syntax || "").trim();
-  const gsActionId = Number(gs?.GS_ACTION_ID || gs?.action_id || process.env.GS_ACTION_ID_DEFAULT || 5);
-
-  if (!gsCmd) {
-    // mantém CAN aprovado, mas marca erro de GS (config)
-    store.patchInstallation(installationId, {
-      status: "GS_ERROR",
-      last_error: { ts: now, code: "GS_COMMAND_NOT_CONFIGURED", message: "gsensorMap sem comando (label/harness)" }
-    });
+  if (!gs) {
+    store.patchInstallation(installationId, { status: "ERROR", error: { code: "GS_COMMAND_NOT_CONFIGURED" } });
     return store.getInstallation(installationId);
   }
 
   const vid = (inst.resolved || {}).vehicle_id;
   const target_client_id = (inst.resolved && inst.resolved.target_client_id) || Number(inst.payload.target_client_id || 0) || null;
-  const current_client_id = (inst.resolved || {}).current_client_id || null;
-
   const vehicleSettingId = catalogs.resolveVehicleSettingId({
     target_client_id,
-    client_id: current_client_id,
+    client_id: (inst.resolved || {}).current_client_id,
     vehicleSettingId: inst.payload.vehicleSettingId,
     vehicle: inst.payload.vehicle
   });
 
-  const clientName = _clientName(target_client_id || current_client_id);
+  const clientName = _clientName(target_client_id);
   const gsJob = await enqueueJob({
     type: "monitor_gs",
     payload: {
       installation_id: installationId,
-      clientId: target_client_id || current_client_id,
+      clientId: target_client_id,
       clientName,
       vehicleId: vid,
       vehicleSettingId,
-      GS_ACTION_ID: gsActionId,
-      GS_COMMAND_SYNTAX: gsCmd,
+      GS_ACTION_ID: gs.GS_ACTION_ID,
+      GS_COMMAND_SYNTAX: gs.GS_COMMAND_SYNTAX,
       comment: inst.payload.comment || ("APP GS " + service),
       canApproved: true,
       override: overrideBool,
@@ -395,7 +384,6 @@ async function approveCan(installationId, { override, reason }) {
   });
 
   store.pushJob(installationId, { type: "monitor_gs", job_id: gsJob.id || gsJob.job_id || null, status: "queued" });
-  store.patchInstallation(installationId, { status: "GS_QUEUED" });
   return store.getInstallation(installationId);
 }
 

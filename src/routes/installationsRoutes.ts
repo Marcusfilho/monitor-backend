@@ -579,10 +579,8 @@ router.post("/:id/_worker/can-snapshot", requireWorkerKey, async (req, res) => {
 
     const topPatch: any = {
       can: canPatched,
-
-can_snapshot_latest: hasData ? snap : ((inst as any).can_snapshot_latest || (inst as any).canSnapshotLatest || snap),
-// mantém o "melhor snapshot" (não zera quando vier parcial)
-can_snapshot: hasData ? snap : ((inst as any).can_snapshot || (inst as any).canSnapshot || null),
+      can_snapshot_latest: snap,
+      can_snapshot: hasData ? snap : null,
     };
 
     // opcional: status vindo do worker

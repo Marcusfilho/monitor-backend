@@ -129,10 +129,6 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/worker", workerRoutes);
 app.use("/api/worker", workerSessionTokenRoutes);
 
-import canProbeRoutes from "./routes/canProbeRoutes";
-app.use("/api/can-probes", canProbeRoutes);
-
-
 async function main() {
   await initSessionTokenStore();
 

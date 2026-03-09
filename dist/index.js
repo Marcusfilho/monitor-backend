@@ -114,8 +114,6 @@ app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 app.use("/api/admin", adminRoutes_1.default);
 app.use("/api/worker", workerRoutes_1.workerRoutes);
 app.use("/api/worker", workerSessionTokenRoutes_1.default);
-const canProbeRoutes_1 = __importDefault(require("./routes/canProbeRoutes"));
-app.use("/api/can-probes", canProbeRoutes_1.default);
 async function main() {
     await (0, sessionTokenStore_1.initSessionTokenStore)();
     // DB pode ser desligado na fase de testes (Render Postgres free expirado/suspenso)
