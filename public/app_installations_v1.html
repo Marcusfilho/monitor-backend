@@ -219,6 +219,8 @@
   </div>
 </div>
 
+    <div class="list" id="canHeader"></div>
+
     <div class="chips" id="msChips" style="margin-top:12px"></div>
 
     <div class="list" id="keyParams"></div>
@@ -529,11 +531,34 @@
     };
   }
 
-  // ====== snapshot parsing ======
-  function lastOf(v){ return Array.isArray(v) ? (v.length ? v[v.length-1] : null) : v; }
 
-  function pick(obj, paths){
-    for (const p of paths){
+  // ====== CAN transplant (baseado no CAN Probe) ======
+  function canEsc(s){
+    return String(s ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function canNormKey(s){
+    return String(s ?? "")
+      .toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function canFirstNonEmpty(arr, fallback = "—"){
+    for (const v of arr || []){
+      if (v === undefined || v === null) continue;
+      const s = String(v).trim();
+      if (!s || s === "—") continue;
+      return s;
+    }
+    return fallback;
+  }
+
+  function canPick(obj, paths){
+    for (const p of (paths || [])){
       let cur = obj;
       let ok = true;
       for (const k of p){
@@ -545,12 +570,101 @@
     return null;
   }
 
-  function unwrapSnapshot(x){
+  function canLastOf(v){ return Array.isArray(v) ? (v.length ? v[v.length - 1] : null) : v; }
+
+  function canSafeDecode(v){
+    const s0 = String(v ?? "");
+    if (!/%[0-9a-fA-F]{2}/.test(s0) && s0.indexOf("+") < 0) return s0;
+    try { return decodeURIComponent(s0.replace(/\+/g, "%20")); } catch { return s0; }
+  }
+
+  function canLooksHexLike(s){
+    if (s == null) return false;
+    const t0 = String(s).trim();
+    if (!t0) return false;
+    let t = t0.toLowerCase();
+    if (t.startsWith("0x")) t = t.slice(2);
+    if (!/^[0-9a-f]+$/i.test(t)) return false;
+    const hasLetters = /[a-f]/i.test(t);
+    const hasLeadingZero = t.length >= 4 && t[0] === "0";
+    const typicalLen = t.length >= 8;
+    return hasLetters || hasLeadingZero || typicalLen || t0.toLowerCase().startsWith("0x");
+  }
+
+  function canFmtHexDec(s){
+    const t0 = String(s ?? "").trim();
+    if (!t0 || t0 === "—") return "—";
+    if (!canLooksHexLike(t0)) return t0;
+    let hex = t0.toLowerCase();
+    if (hex.startsWith("0x")) hex = hex.slice(2);
+    try {
+      const dec = BigInt("0x" + hex).toString(10);
+      return `${t0} (${dec})`;
+    } catch {
+      return t0;
+    }
+  }
+
+  function canFmtAny(s){
+    const t = String(s ?? "").trim();
+    if (!t) return "";
+    return canLooksHexLike(t) ? canFmtHexDec(t) : t;
+  }
+
+  function canRowParamName(p){ return p?.original_name ?? p?.name ?? p?.param_name ?? p?.paramName ?? p?.parameter?.name ?? ""; }
+  function canRowParamId(p){
+    const v = p?.parameter_id ?? p?.param_id ?? p?.id ?? p?.paramId ?? p?.index ?? p?.parameter?.id ?? p?.param?.id ?? null;
+    return (v == null) ? null : String(v);
+  }
+  function canRowParamLastUpdate(p){ return p?.last_update ?? p?.lastUpdate ?? p?.orig_time ?? p?.ts ?? ""; }
+  function canRowParamSource(p){ return p?.source ?? p?.data_source ?? p?.dataSource ?? ""; }
+  function canRowParamValue(p){ return p?.value ?? p?.val ?? p?.param_value ?? p?.parameter_value ?? null; }
+  function canRowParamRaw(p){ return p?.raw_value ?? p?.rawValue ?? p?.raw ?? p?.parameter_raw_value ?? null; }
+
+  function canHasValue(v){
+    if (v === 0 || v === false) return true;
+    if (v == null) return false;
+    const s = String(v).trim();
+    return s !== "" && s.toLowerCase() !== "null" && s.toLowerCase() !== "nan";
+  }
+
+  function canDisplayValue(p){
+    const raw = canRowParamRaw(p);
+    const val = canRowParamValue(p);
+    if (canHasValue(raw)) return canFmtAny(raw);
+    if (canHasValue(val)) return canFmtAny(val);
+    return "—";
+  }
+
+  function canNormIdVariants(v){
+    const out = new Set();
+    if (v == null) return out;
+    let s = String(v).trim();
+    if (!s) return out;
+    let u = s.toUpperCase().replace(/^0X/, "");
+    out.add(u);
+    if (/^[0-9A-F]+$/.test(u)) {
+      const n16 = parseInt(u, 16);
+      if (Number.isFinite(n16)) out.add(n16.toString(16).toUpperCase().padStart(8, "0"));
+      if (/^[0-9]+$/.test(u)) {
+        const n10 = parseInt(u, 10);
+        if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+      }
+    } else if (/^[0-9]+$/.test(u)) {
+      const n10 = parseInt(u, 10);
+      if (Number.isFinite(n10)) out.add(n10.toString(16).toUpperCase().padStart(8, "0"));
+    }
+    const no0 = u.replace(/^0+/, "") || "0";
+    out.add(no0);
+    return out;
+  }
+
+  function canUnwrapSnapshot(x){
     if (!x) return null;
-    let cur = lastOf(x);
-    for (let i=0;i<5;i++){
+    let cur = canLastOf(x);
+    for (let i = 0; i < 8; i++){
       if (!cur || typeof cur !== "object") break;
-      if (Array.isArray(cur)) { cur = lastOf(cur); continue; }
+      if (Array.isArray(cur)) { cur = canLastOf(cur); continue; }
       if (cur.snapshot) { cur = cur.snapshot; continue; }
       if (cur.data) { cur = cur.data; continue; }
       if (cur.payload) { cur = cur.payload; continue; }
@@ -570,15 +684,47 @@
       inst?.canSnapshot ||
       inst?.can?.snapshot_latest ||
       inst?.can?.snapshot ||
-      (Array.isArray(inst?.can?.snapshots) ? inst.can.snapshots[inst.can.snapshots.length-1] : null) ||
+      (Array.isArray(inst?.can?.snapshots) ? inst.can.snapshots[0] : null) ||
+      (Array.isArray(inst?.can?.snapshots) ? inst.can.snapshots[inst.can.snapshots.length - 1] : null) ||
       null;
 
-    const snap = unwrapSnapshot(raw);
+    const snap = canUnwrapSnapshot(raw);
     return snap && typeof snap === "object" ? snap : null;
   }
 
+  function canExtractRowsFromSnapshot(snap){
+    const s = canUnwrapSnapshot(snap);
+    if (!s || typeof s !== "object") return { params: [], ms: [] };
+
+    const params = (
+      canPick(s, [["parameters"], ["params"], ["parameters_tab", "rows"], ["parametersTab", "rows"]]) ||
+      canPick(s, [["tabs", "parameters", "rows"], ["tabs", "parameters"]]) ||
+      []
+    );
+
+    const moduleState = (
+      canPick(s, [["moduleState"], ["module_state"], ["module_states"], ["moduleStates"], ["moduleStateTab", "rows"], ["module_state_tab", "rows"]]) ||
+      canPick(s, [["tabs", "module_state", "rows"], ["tabs", "moduleState", "rows"], ["tabs", "module_state"], ["tabs", "moduleState"]]) ||
+      []
+    );
+
+    return {
+      params: Array.isArray(params) ? params : [],
+      ms: Array.isArray(moduleState) ? moduleState : []
+    };
+  }
+
+  function canExtractHeaderObj(snap){
+    const s = canUnwrapSnapshot(snap);
+    if (!s || typeof s !== "object") return {};
+    const h = canPick(s, [["header", "raw"], ["headerLite", "raw"], ["meta", "header", "raw"], ["summary", "header", "raw"]]) ||
+              canPick(s, [["header"], ["headerLite"], ["meta", "header"], ["summary", "header"]]) ||
+              {};
+    return (h && typeof h === "object") ? h : {};
+  }
+
   function parsePacketAge(snapshot){
-    const header = snapshot?.header || snapshot?.meta || {};
+    const header = canExtractHeaderObj(snapshot);
     const ts =
       header.packet_ts || header.packetTs || header.last_packet_ts || header.lastPacketTs ||
       header.gprs_last || header.gprsLast || header.gps_gprs_last || header.gpsGprsLast ||
@@ -602,14 +748,15 @@
   }
 
   function parseSbProgress(inst, snapshot){
+    const h = canExtractHeaderObj(snapshot);
     const p =
       inst?.sb_progress ??
       inst?.sb?.progress ??
       inst?.sb?.progress_percent ??
       inst?.sbProgress ??
       snapshot?.sb_progress ??
-      snapshot?.header?.configuration_progress ??
-      snapshot?.header?.progress ??
+      h?.configuration_progress ??
+      h?.progress ??
       null;
 
     const n = Number(p);
@@ -619,69 +766,210 @@
     return Math.round(n);
   }
 
-  const MS_WANT = [
-    { id: 8,  key: "CAN0" },
-    { id: 9,  key: "CAN1" },
-    { id: 15, key: "J1708" },
-    { id: 19, key: "KEYPAD_DALLAS" },
-    { id: 20, key: "KEYPAD_RAMZOR" },
-  ];
+  function canToBool01(v){
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v === 1 || v === "1") return true;
+    if (v === 0 || v === "0") return false;
+    const s = String(v ?? "").trim().toLowerCase();
+    if (["true","yes","ok","on","active"].includes(s)) return true;
+    if (["false","no","fail","off","inactive"].includes(s)) return false;
+    return null;
+  }
 
+  function canStrictOkTriple(row){
+    if (!row) return false;
+    const a = canToBool01(row.active);
+    const o = canToBool01(row.ok ?? row.is_ok ?? row.isOk);
+    const w = canToBool01(row.was_ok ?? row.wasOk);
+    return a === true && o === true && w === true;
+  }
 
-  const KEY_PARAM_RULES = [
-    { key:"speed",           label:"Velocidade",             re:/^sys param speed$/i },
-    { key:"rpm",             label:"RPM",                    re:/^sys param rpm$/i },
-    { key:"distance",        label:"Distância",              re:/^sys param vehicle distance$/i },
-    { key:"engine_hours",    label:"Horas do motor",         re:/^sys param engine total hours of operation$/i },
-    { key:"fuel_level",      label:"Nível de combustível",   re:/^(sys param fuel level|tfl processed sys param fuel level)$/i },
-    { key:"fuel_rate",       label:"Consumo instantâneo",    re:/^sys param fuel rate$/i },
-    { key:"fuel_used",       label:"Combustível usado",      re:/^(sys param total fuel used|calc[_ ]?total fuel used from sys fuel rate)$/i },
-    { key:"coolant_temp",    label:"Temp. coolant",          re:/^sys param coolant temp$/i },
-    { key:"oil_temp",        label:"Temp. óleo",             re:/^sys param oil temp$/i },
-    { key:"oil_pressure",    label:"Pressão do óleo",        re:/^sys param oil pressure$/i },
-    { key:"air_pressure",    label:"Pressão do ar",          re:/^sys param brake 1 air pressure \(bar\)$/i },
-    { key:"battery_voltage", label:"Tensão da bateria",      re:/^(sys param battery voltage|mbu-v2 mtst battery voltage|arm analog input 4 - backup battery voltage)$/i },
-    { key:"ignition",        label:"Ignição",                re:/^sys param ignition( no delay)?$/i },
-  ];
+  function canPickErr(row){
+    if (!row) return null;
+    const cand = [row.message, row.msg, row.error_descr, row.error, row.err, row.error_code, row.errorCode, row.code, row.status_msg, row.statusMsg];
+    for (const v of cand){
+      if (v != null && String(v).trim() !== "") return String(v).trim();
+    }
+    return null;
+  }
 
-  function normMsId(it){
-    const v = it?.id ?? it?.module_state_id ?? it?.moduleStateId ?? it?.module_id ?? it?.moduleId ?? null;
+  function canRowModuleId(r){
+    const v = r?.id ?? r?.module_state_id ?? r?.moduleStateId ?? r?.module_id ?? r?.moduleId ?? r?.index ?? null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
 
-  function truthy(v){
-    if (typeof v === "boolean") return v;
-    if (typeof v === "number") return v !== 0;
-    return /^(1|true|yes|on)$/i.test(String(v || "").trim());
+  function canRowModuleName(r){ return r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? ""; }
+
+  function canFindModule(msRows, ids, names){
+    const rows = Array.isArray(msRows) ? msRows : [];
+    const idsSet = new Set((ids || []).map(Number).filter(Number.isFinite));
+    const nameKeys = (names || []).map(canNormKey).filter(Boolean);
+    return rows.find((r) => {
+      const id = canRowModuleId(r);
+      const nk = canNormKey(canRowModuleName(r));
+      if (id != null && idsSet.has(id)) return true;
+      if (nk && nameKeys.some((k) => nk.includes(k))) return true;
+      return false;
+    }) || null;
+  }
+
+  const CAN_MS_WANT = [
+    { key: "CAN0", ids: [8], names: ["can0"] },
+    { key: "CAN1", ids: [9], names: ["can1"] },
+    { key: "J1708", ids: [15], names: ["j1708"] },
+    { key: "KEYPAD_DALLAS_IBUTTON", ids: [19], names: ["dallas", "ibutton"] },
+    { key: "KEYPAD_RAMZOR", ids: [20], names: ["ramzor"] },
+  ];
+
+  const CAN_PARAM_RULES = [
+    { key: "speed",           label: "Velocidade",           ids: [],                                              aliases: ["sysparamspeed", "vehiclespeed", "speed"] },
+    { key: "rpm",             label: "RPM",                  ids: ["000000AD", "0000003A", "00002715"],       aliases: ["sysparamrpm", "enginerpm", "rpm"] },
+    { key: "distance",        label: "Distância",            ids: ["00002714"],                                   aliases: ["sysparamvehicledistance", "vehicledistance", "distance", "odometer"] },
+    { key: "engine_hours",    label: "Horas do motor",       ids: [],                                              aliases: ["sysparamenginetotalhoursofoperation", "enginetotalhoursofoperation", "enginehours"] },
+    { key: "fuel_level",      label: "Nível de combustível", ids: ["00000032", "000000C3", "0000879F", "00002717"], aliases: ["sysparamfuellevel", "tflprocessedsysparamfuellevel", "fuellevel"] },
+    { key: "fuel_rate",       label: "Consumo instantâneo",  ids: ["0000003C", "00002718"],                     aliases: ["sysparamfuelrate", "enginefuelrate", "fuelrate"] },
+    { key: "fuel_used",       label: "Combustível usado",    ids: ["00000031", "000000C5", "00002719"],       aliases: ["sysparamtotalfuelused", "calctotalfuelusedfromsysfuelrate", "enginetotalfuelused", "fuelused"] },
+    { key: "coolant_temp",    label: "Temp. coolant",        ids: ["0000002F", "0000010E", "0000271F"],       aliases: ["sysparamcoolanttemp", "enginecoolanttemperature", "coolanttemp"] },
+    { key: "oil_temp",        label: "Temp. óleo",           ids: ["0000168E", "0000271E"],                     aliases: ["sysparamoiltemp", "engineoiltemperature1", "oiltemp"] },
+    { key: "oil_pressure",    label: "Pressão do óleo",      ids: ["00000024", "0000010D", "00002723"],       aliases: ["sysparamoilpressure", "engineoilpressure", "oilpressure"] },
+    { key: "air_pressure",    label: "Pressão do ar",        ids: [],                                              aliases: ["sysparambrake1airpressurebar", "brake1airpressurebar", "airpressure"] },
+    { key: "battery_voltage", label: "Tensão da bateria",    ids: [],                                              aliases: ["sysparambatteryvoltage", "mbuv2mtstbatteryvoltage", "armanaloginput4backupbatteryvoltage", "batteryvoltage"] },
+    { key: "ignition",        label: "Ignição",              ids: [],                                              aliases: ["sysparamignitionnodelay", "sysparamignition", "ignitionstatus", "ignition"] },
+  ];
+
+  function canFindParam(rows, rule){
+    const wantIds = new Set();
+    for (const id of (rule?.ids || [])) {
+      for (const v of canNormIdVariants(id)) wantIds.add(v);
+    }
+    const wantKeys = (rule?.aliases || []).map(canNormKey).filter(Boolean);
+    let best = null;
+    let bestScore = -1;
+
+    for (const p of (rows || [])){
+      const pid = canRowParamId(p);
+      const name = canRowParamName(p);
+      const nk = canNormKey(name);
+      let idHit = false;
+      if (pid != null) {
+        for (const v of canNormIdVariants(pid)) {
+          if (wantIds.has(v)) { idHit = true; break; }
+        }
+      }
+      const aliasHit = !!(nk && wantKeys.some((k) => nk.includes(k)));
+      if (!idHit && !aliasHit) continue;
+
+      const raw = canRowParamRaw(p);
+      const val = canRowParamValue(p);
+      const hasRaw = canHasValue(raw);
+      const hasVal = canHasValue(val);
+      const last = String(canRowParamLastUpdate(p) || "").trim();
+      let score = 0;
+      if (idHit) score += 1000;
+      if (aliasHit) score += 100;
+      if (hasRaw) score += 50;
+      if (hasVal) score += 20;
+      if (last) score += 10;
+      if (/^sysparam/.test(nk)) score += 5;
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  function canToIgnitionBool(v){
+    const b = canToBool01(v);
+    if (b != null) return b;
+    const s = String(v ?? "").trim();
+    if (!s) return null;
+    if (canLooksHexLike(s)) {
+      try {
+        let hex = s.toLowerCase();
+        if (hex.startsWith("0x")) hex = hex.slice(2);
+        const n = BigInt("0x" + hex);
+        return n > 0n;
+      } catch {}
+    }
+    const n = Number(s);
+    if (Number.isFinite(n)) return n > 0;
+    return null;
+  }
+
+  function canGetHeaderLite(inst, snap){
+    const h = canExtractHeaderObj(snap);
+    const vehicle = inst?.vehicle || inst?.vhcl || inst?.data?.vehicle || null;
+    const cfgStatus = canFirstNonEmpty([
+      h.configuration_status, h.configurationStatus, h.config_status, h.configStatus, h.configuration_state, h.configurationState
+    ], "—");
+    const cfgType = canFirstNonEmpty([
+      h.configuration_type, h.configurationType, h.config_type, h.configType, h.configuration_kind, h.configurationKind
+    ], "—");
+    const cfgProgress = canFirstNonEmpty([
+      h.configuration_progress, h.configurationProgress, h.config_progress, h.configProgress, h.progress
+    ], "—");
+    const cfgError = canFirstNonEmpty([
+      h.configuration_error, h.configurationError, h.config_error, h.configError, h.error, h.err
+    ], "");
+    return {
+      ignitionRaw: canFirstNonEmpty([h.ignition, h.ignition_status, h.sys_param_ignition], "—"),
+      communication: canSafeDecode(canFirstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—")),
+      config_status: canSafeDecode(cfgStatus),
+      config_type: canSafeDecode(cfgType),
+      config_progress: canSafeDecode(cfgProgress),
+      config_error: canSafeDecode(cfgError),
+      driver_code: canSafeDecode(canFirstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—")),
+      license_number: canSafeDecode(canFirstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
+      serial: canSafeDecode(canFirstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
+      client: canSafeDecode(canFirstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
+      model: canSafeDecode(canFirstNonEmpty([h.vcl_model, h.model, h.manufacturer_model, h.vehicle_model], "—"))
+    };
+  }
+
+  function renderCanHeader(inst, snapshot){
+    const host = $("canHeader");
+    if (!host) return;
+    host.innerHTML = "";
+    const h = canGetHeaderLite(inst, snapshot);
+    const ign = canToIgnitionBool(h.ignitionRaw);
+    const ignShown = canFmtAny(h.ignitionRaw || "—");
+    const ignText = ign === true ? `Ligada (${ignShown})` : ign === false ? `Desligada (${ignShown})` : ignShown;
+    const cfg = [h.config_status, h.config_type !== "—" ? `type ${h.config_type}` : "", h.config_progress !== "—" ? `progress ${h.config_progress}` : "", h.config_error || ""].filter(Boolean).join(" • ") || "—";
+    const items = [
+      ["Ignição", ignText],
+      ["Comunicação", h.communication],
+      ["Configuração", cfg],
+      ["Driver", h.driver_code],
+      ["Placa", h.license_number],
+      ["Serial", h.serial],
+      ["Cliente", h.client],
+      ["Modelo", h.model],
+    ];
+    for (const [k, v] of items){
+      const li = document.createElement("div");
+      li.className = "li";
+      li.innerHTML = `<div class="k">${canEsc(k)}</div><div class="v">${canEsc(v || "—")}</div>`;
+      host.appendChild(li);
+    }
   }
 
   function renderModuleState(snapshot){
-    const ms = snapshot?.module_state || snapshot?.moduleState || snapshot?.module_states || snapshot?.moduleStates || [];
-    const arr = Array.isArray(ms) ? ms : [];
-
-    const byId = new Map();
-    for (const it of arr){
-      const id = normMsId(it);
-      if (id != null && !byId.has(id)) byId.set(id, it);
-    }
-
+    const x = canExtractRowsFromSnapshot(snapshot);
     const host = $("msChips");
     host.innerHTML = "";
-
-    for (const w of MS_WANT){
-      const it = byId.get(w.id) || null;
-      const active = truthy(it?.active);
-      const ok = truthy(it?.ok);
-      const wasOk = truthy(it?.was_ok ?? it?.wasOk);
-      const msg = norm(it?.message || it?.msg || it?.error_descr || "");
-
+    for (const w of CAN_MS_WANT){
+      const it = canFindModule(x.ms, w.ids, w.names);
+      const ok = canStrictOkTriple(it);
+      const msg = canSafeDecode(canPickErr(it));
       let kind = "bad";
-      if (it && active && ok && wasOk) kind = "good";
+      if (ok) kind = "good";
       else if (!it) kind = "warn";
-
       const chip = document.createElement("div");
       chip.className = "chip";
+      if (msg) chip.title = msg;
       const d = document.createElement("span");
       d.className = "dot " + kind;
       const n = document.createElement("span");
@@ -691,8 +979,7 @@
       m.className = "msg";
       if (!it) m.textContent = "sem dados";
       else if (msg) m.textContent = msg;
-      else m.textContent = (kind === "good") ? "OK" : "falha";
-
+      else m.textContent = ok ? "OK" : "falha";
       chip.appendChild(d);
       chip.appendChild(n);
       chip.appendChild(m);
@@ -700,104 +987,60 @@
     }
   }
 
-  function hasValue(v){
-    if (v === 0) return true;
-    if (v === false) return true;
-    if (v == null) return false;
-    const s = String(v).trim();
-    return s !== "" && s.toLowerCase() !== "null" && s.toLowerCase() !== "nan";
-  }
-
-  function pickKeyParams(snapshot, maxN){
-    const params = snapshot?.parameters || snapshot?.params || [];
-    const arr = Array.isArray(params) ? params : [];
-
+  function canBuildKeyParamItems(inst, snapshot){
+    const x = canExtractRowsFromSnapshot(snapshot);
     const out = [];
     const seen = new Set();
-
-    for (const rule of KEY_PARAM_RULES){
-      let best = null;
-      let bestScore = -1;
-
-      for (const p of arr){
-        const name = String(p?.original_name || p?.name || p?.param_name || p?.paramName || "");
-        if (!name || !rule.re.test(name)) continue;
-
-        const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
-        if (!hasValue(val)) continue;
-
-        const last = String(p?.last_update || p?.lastUpdate || p?.orig_time || "").trim();
-        const score = (hasValue(val) ? 100 : 0) + (last ? 10 : 0) + (/^sys param /i.test(name) ? 5 : 0);
-        if (score >= bestScore) {
-          bestScore = score;
-          best = { name: rule.label, val };
+    for (const rule of CAN_PARAM_RULES){
+      if (seen.has(rule.key)) continue;
+      if (rule.key === "ignition") {
+        const hdr = canGetHeaderLite(inst, snapshot);
+        const p = canFindParam(x.params, rule);
+        const text = p ? canDisplayValue(p) : (hdr.ignitionRaw ? canFmtAny(hdr.ignitionRaw) : "—");
+        if (text !== "—") {
+          out.push({ name: rule.label, val: text });
+          seen.add(rule.key);
         }
+        continue;
       }
-
-      if (best && !seen.has(rule.key)) {
-        seen.add(rule.key);
-        out.push(best);
-        if (out.length >= maxN) break;
-      }
+      const p = canFindParam(x.params, rule);
+      if (!p) continue;
+      const shown = canDisplayValue(p);
+      if (shown === "—") continue;
+      out.push({ name: rule.label, val: shown });
+      seen.add(rule.key);
     }
-
-    if (!out.length){
-      for (const p of arr){
-        const name = String(p?.name || p?.param_name || p?.paramName || "");
-        const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
-        if (!hasValue(val)) continue;
-        out.push({ name: name || ("id " + String(p?.id || "?")), val });
-        if (out.length >= maxN) break;
-      }
-    }
-
-    return out;
+    return { rows: x.params, picked: out };
   }
 
-  function renderKeyParams(snapshot){
+  function renderKeyParams(inst, snapshot){
     const host = $("keyParams");
     host.innerHTML = "";
-
-    const params = snapshot?.parameters || snapshot?.params || [];
-    const arr = Array.isArray(params) ? params : [];
-    const total = Number(snapshot?.counts?.params_total ?? snapshot?.counts?.parameters_total ?? arr.length) || 0;
-
+    const x = canExtractRowsFromSnapshot(snapshot);
+    const total = Number(snapshot?.counts?.params_total ?? snapshot?.counts?.parameters_total ?? x.params.length) || 0;
     let withVal = Number(snapshot?.counts?.params_with_value ?? snapshot?.counts?.parameters_with_value ?? NaN);
     if (!Number.isFinite(withVal)) {
-      withVal = 0;
-      for (const p of arr){
-        const v = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
-        if (hasValue(v)) withVal++;
-      }
+      withVal = x.params.filter((p) => canDisplayValue(p) !== "—").length;
     }
-
     const top = document.createElement("div");
     top.className = "li";
     top.innerHTML = `<div class="k">Parameters</div><div class="v">${withVal}/${total}</div>`;
     host.appendChild(top);
-
-    const picked = pickKeyParams(snapshot, 8);
-    for (const it of picked){
+    const built = canBuildKeyParamItems(inst, snapshot);
+    for (const it of built.picked){
       const li = document.createElement("div");
       li.className = "li";
-      const k = document.createElement("div");
-      k.className = "k";
-      k.textContent = it.name;
-      const v = document.createElement("div");
-      v.className = "v";
-      v.textContent = String(it.val);
-      li.appendChild(k);
-      li.appendChild(v);
+      li.innerHTML = `<div class="k">${canEsc(it.name)}</div><div class="v">${canEsc(it.val)}</div>`;
       host.appendChild(li);
     }
-
-    if (!picked.length){
+    if (!built.picked.length){
       const li = document.createElement("div");
       li.className = "li";
       li.innerHTML = `<div class="k">Sem parâmetros principais</div><div class="v">—</div>`;
       host.appendChild(li);
     }
   }
+
 
   function statusToLabel(s){
     const x = String(s || "").trim();
@@ -945,8 +1188,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     const pa = parsePacketAge(snap);
     $("pktAge").textContent = pa.ageText;
 
+    renderCanHeader(inst, snap || {});
     renderModuleState(snap || {});
-    renderKeyParams(snap || {});
+    renderKeyParams(inst, snap || {});
 
     if (state.debug){
       $("detailsDebug").classList.remove("hidden");
@@ -965,6 +1209,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
   function renderEmpty(){
     const empty = { status: "", plate_real: "—", serial: "—" };
+    $("canHeader").innerHTML = "";
     $("msChips").innerHTML = "";
     $("keyParams").innerHTML = "";
     $("sbPct").textContent = "—";
@@ -981,7 +1226,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
   // ====== polling ======
   function stopPoll(){
-    if (state.pollTimer) clearInterval(state.pollTimer);
+    if (state.pollTimer) clearTimeout(state.pollTimer);
     state.pollTimer = null;
   }
 
@@ -999,13 +1244,25 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     if (st.includes("COMPLETED")) stopPoll();
   }
 
+  function nextPollDelay(inst){
+    const st = String(inst?.status || "").toUpperCase();
+    if (st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT")) return 1500;
+    if (st.includes("SB_RUNNING")) return 1800;
+    if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 2000;
+    return state.pollMs;
+  }
+
   function startPoll(){
     stopPoll();
-    state.pollTimer = setInterval(async () => {
+    const tick = async () => {
       const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
       if (!id) return;
       try { await loadInstallation(id); } catch {}
-    }, state.pollMs);
+      const st = String(state?.inst?.status || "").toUpperCase();
+      if (st.includes("COMPLETED")) { stopPoll(); return; }
+      state.pollTimer = setTimeout(tick, nextPollDelay(state.inst));
+    };
+    state.pollTimer = setTimeout(tick, 300);
   }
 
   // ====== actions ======
@@ -1115,6 +1372,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       }
       showToast("Snapshot solicitado.", "good");
       await loadInstallation(id);
+      startPoll();
     } catch (e) {
       showToast("Falha: " + fmtErr(e), "bad");
     } finally {
