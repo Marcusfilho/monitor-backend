@@ -19,7 +19,7 @@
       border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
     header .title{display:flex;flex-direction:column;gap:2px}
     header h1{margin:0;font-size:14px;letter-spacing:.2px}
-    header .sub{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+    header .sub{font-size:12px;color:var(--muted)}
 
     .wrap{max-width:980px;margin:0 auto;padding:14px 12px 96px}
 
@@ -98,19 +98,13 @@
       .wrap{padding:12px 10px 98px}
       .chip .msg{max-width:160px}
     }
-  
-
-@keyframes pulse{0%{transform:scale(1);opacity:.55}50%{transform:scale(1.6);opacity:1}100%{transform:scale(1);opacity:.55}}
-@keyframes spin{to{transform:rotate(360deg)}}
-.dot.pulse{animation:pulse 1.1s ease-in-out infinite}
-.spin{display:inline-block;animation:spin 1s linear infinite}
-</style>
+  </style>
 </head>
 <body>
 <header>
   <div class="title">
     <h1>APP V1 — Instalações <span class="pill" style="margin-left:8px">v1.5</span></h1>
-    <div class="sub" id="subline"><span class="dot" id="liveDot"></span><span id="subText">Pronto</span></div>
+    <div class="sub" id="subline">Pronto</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center">
     <div class="kv" id="topKv"></div>
@@ -253,32 +247,16 @@
   const $ = (id) => document.getElementById(id);
 
   // ====== state ======
-const state = {
-  inst: null,
-  lastSnapshot: null,
-  pollTimer: null,
-  pollMs: 5000,
-  debug: false,
-  isLoading: false,
-  bestSnapshot: null,
-  bestSnapshotScore: 0,
-  bestSnapshotAt: 0,
-};
+  const state = {
+    inst: null,
+    lastSnapshot: null,
+    pollTimer: null,
+    pollMs: 5000,
+    debug: false,
+  };
 
   // ====== ui helpers ======
-
-function setLive(kind, pulse){
-  const d = $("liveDot");
-  if (!d) return;
-  d.className = "dot" + (kind ? (" " + kind) : "");
-  if (pulse) d.classList.add("pulse");
-}
-function setSubline(msg, kind="", pulse=false){
-  const t = $("subText") || $("subline");
-  if (t) t.textContent = msg || "";
-  setLive(kind, pulse);
-}
-
+  function setSubline(msg){ $("subline").textContent = msg || ""; }
 
   function pill(text, kind){
     const s = document.createElement("span");
@@ -583,93 +561,21 @@ function setSubline(msg, kind="", pulse=false){
   }
 
   function extractSnapshot(inst){
-  // IMPORTANTE:
-  // - can_snapshot = "melhor snapshot" (persistido apenas quando tem dados)
-  // - can_snapshot_latest = último ciclo (pode vir parcial e não deve apagar UI)
-  const raw =
-    inst?.can_snapshot ||
-    inst?.canSnapshot ||
-    inst?.can_snapshot_best ||
-    inst?.canSnapshotBest ||
-    inst?.can?.snapshot ||
-    inst?.can?.snapshot_best ||
-    inst?.can_snapshot_latest ||
-    inst?.canSnapshotLatest ||
-    inst?.can?.snapshot_latest ||
-    (Array.isArray(inst?.can?.snapshots) ? inst.can.snapshots[0] : null) ||
-    null;
+    const raw =
+      inst?.can_snapshot_latest ||
+      inst?.canSnapshotLatest ||
+      inst?.can_snapshot_best ||
+      inst?.canSnapshotBest ||
+      inst?.can_snapshot ||
+      inst?.canSnapshot ||
+      inst?.can?.snapshot_latest ||
+      inst?.can?.snapshot ||
+      (Array.isArray(inst?.can?.snapshots) ? inst.can.snapshots[inst.can.snapshots.length-1] : null) ||
+      null;
 
-  const snap = unwrapSnapshot(raw);
-  return snap && typeof snap === "object" ? snap : null;
-}
-
-
-
-function snapshotCounts(snapshot){
-  const c = (snapshot && snapshot.counts && typeof snapshot.counts === "object") ? snapshot.counts : {};
-  const params = Array.isArray(snapshot?.parameters) ? snapshot.parameters : (Array.isArray(snapshot?.params) ? snapshot.params : []);
-  const ms = Array.isArray(snapshot?.moduleState) ? snapshot.moduleState :
-             (Array.isArray(snapshot?.module_state) ? snapshot.module_state :
-              (Array.isArray(snapshot?.moduleStates) ? snapshot.moduleStates : []));
-  const paramsTotal = Number(c.params_total ?? c.parameters_total ?? params.length ?? 0) || 0;
-  const paramsWith = Number(c.params_with_value ?? c.parameters_with_value ?? 0) || 0;
-  const msKey = Number(c.module_state_key ?? c.moduleStateKey ?? 0) || 0;
-  const msTotal = Number(c.module_state_total ?? c.moduleStateTotal ?? ms.length ?? 0) || 0;
-  return { paramsTotal, paramsWith, msKey, msTotal };
-}
-
-function snapshotScore(snapshot){
-  if (!snapshot || typeof snapshot !== "object") return -1;
-  const { paramsTotal, paramsWith, msKey, msTotal } = snapshotCounts(snapshot);
-  const header = snapshot?.header || {};
-  const hasHdr = !!(header && (header.communication || header.server_time || header.license_nmbr || header.license_number || header.inner_id || header.serial || header.client || header.model || header.manufacturer));
-  // score forte para manter snapshot "bom" (evita flicker quando vier parcial)
-  return (hasHdr ? 100000 : 0) + (msKey * 5000) + (paramsWith * 50) + (paramsTotal) + (msTotal * 10);
-}
-
-function pickStableSnapshot(inst){
-  const best = extractSnapshot(inst);
-  const latest = unwrapSnapshot(inst?.can_snapshot_latest || inst?.canSnapshotLatest || inst?.can?.snapshot_latest || null);
-  const candidates = [best, latest].filter(Boolean);
-
-  // mantém o melhor na tela (não apaga por snapshot parcial)
-  let chosen = candidates.length ? candidates[0] : null;
-  let chosenScore = chosen ? snapshotScore(chosen) : -1;
-
-  for (const s of candidates.slice(1)){
-    const sc = snapshotScore(s);
-    if (sc > chosenScore) { chosen = s; chosenScore = sc; }
+    const snap = unwrapSnapshot(raw);
+    return snap && typeof snap === "object" ? snap : null;
   }
-
-  // se vier um snapshot muito fraco, não derruba o último válido
-  if (state.bestSnapshot){
-    const prevScore = state.bestSnapshotScore || snapshotScore(state.bestSnapshot);
-    if (chosenScore < 1 && prevScore > 0) {
-      chosen = state.bestSnapshot;
-      chosenScore = prevScore;
-    } else if (chosen && chosenScore >= prevScore) {
-      state.bestSnapshot = chosen;
-      state.bestSnapshotScore = chosenScore;
-      state.bestSnapshotAt = Date.now();
-    }
-  } else if (chosen && chosenScore > 0) {
-    state.bestSnapshot = chosen;
-    state.bestSnapshotScore = chosenScore;
-    state.bestSnapshotAt = Date.now();
-  }
-
-  return chosen || state.bestSnapshot || null;
-}
-
-
-function canReadyByData(snapshot){
-  const { paramsWith, msKey } = snapshotCounts(snapshot || {});
-  // regra simples e auditável (ajuste fino depois):
-  // - >= 3 módulos chave presentes
-  // - >= 6 parâmetros com valor (raw_value/value)
-  return (msKey >= 3) && (paramsWith >= 6);
-}
-
 
   function parsePacketAge(snapshot){
     const header = snapshot?.header || snapshot?.meta || {};
@@ -721,6 +627,23 @@ function canReadyByData(snapshot){
     { id: 20, key: "KEYPAD_RAMZOR" },
   ];
 
+
+  const KEY_PARAM_RULES = [
+    { key:"speed",           label:"Velocidade",             re:/^sys param speed$/i },
+    { key:"rpm",             label:"RPM",                    re:/^sys param rpm$/i },
+    { key:"distance",        label:"Distância",              re:/^sys param vehicle distance$/i },
+    { key:"engine_hours",    label:"Horas do motor",         re:/^sys param engine total hours of operation$/i },
+    { key:"fuel_level",      label:"Nível de combustível",   re:/^(sys param fuel level|tfl processed sys param fuel level)$/i },
+    { key:"fuel_rate",       label:"Consumo instantâneo",    re:/^sys param fuel rate$/i },
+    { key:"fuel_used",       label:"Combustível usado",      re:/^(sys param total fuel used|calc[_ ]?total fuel used from sys fuel rate)$/i },
+    { key:"coolant_temp",    label:"Temp. coolant",          re:/^sys param coolant temp$/i },
+    { key:"oil_temp",        label:"Temp. óleo",             re:/^sys param oil temp$/i },
+    { key:"oil_pressure",    label:"Pressão do óleo",        re:/^sys param oil pressure$/i },
+    { key:"air_pressure",    label:"Pressão do ar",          re:/^sys param brake 1 air pressure \(bar\)$/i },
+    { key:"battery_voltage", label:"Tensão da bateria",      re:/^(sys param battery voltage|mbu-v2 mtst battery voltage|arm analog input 4 - backup battery voltage)$/i },
+    { key:"ignition",        label:"Ignição",                re:/^sys param ignition( no delay)?$/i },
+  ];
+
   function normMsId(it){
     const v = it?.id ?? it?.module_state_id ?? it?.moduleStateId ?? it?.module_id ?? it?.moduleId ?? null;
     const n = Number(v);
@@ -733,70 +656,49 @@ function canReadyByData(snapshot){
     return /^(1|true|yes|on)$/i.test(String(v || "").trim());
   }
 
-  function normMsKey(s){
-  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
+  function renderModuleState(snapshot){
+    const ms = snapshot?.module_state || snapshot?.moduleState || snapshot?.module_states || snapshot?.moduleStates || [];
+    const arr = Array.isArray(ms) ? ms : [];
 
-function msKeyFromRow(it){
-  const s = normMsKey(it?.key || it?.sub || it?.sub_module_name || it?.subModuleName || it?.module_name || it?.moduleName || it?.name);
-  if (!s) return null;
-  if (s.includes("CAN0")) return "CAN0";
-  if (s.includes("CAN1")) return "CAN1";
-  if (s.includes("J1708")) return "J1708";
-  if (s.includes("KEYPADDALLAS") || s.includes("DALLAS") || s.includes("IBUTTON")) return "KEYPAD_DALLAS";
-  if (s.includes("KEYPADRAMZOR") || s.includes("RAMZOR")) return "KEYPAD_RAMZOR";
-  return null;
-}
+    const byId = new Map();
+    for (const it of arr){
+      const id = normMsId(it);
+      if (id != null && !byId.has(id)) byId.set(id, it);
+    }
 
-function renderModuleState(snapshot){
-  const ms = snapshot?.module_state || snapshot?.moduleState || snapshot?.module_states || snapshot?.moduleStates || snapshot?.moduleState || [];
-  const arr = Array.isArray(ms) ? ms : [];
+    const host = $("msChips");
+    host.innerHTML = "";
 
-  const byId = new Map();
-  const byKey = new Map();
-  for (const it of arr){
-    const id = normMsId(it);
-    if (id != null && !byId.has(id)) byId.set(id, it);
+    for (const w of MS_WANT){
+      const it = byId.get(w.id) || null;
+      const active = truthy(it?.active);
+      const ok = truthy(it?.ok);
+      const wasOk = truthy(it?.was_ok ?? it?.wasOk);
+      const msg = norm(it?.message || it?.msg || it?.error_descr || "");
 
-    const k = msKeyFromRow(it);
-    if (k && !byKey.has(k)) byKey.set(k, it);
+      let kind = "bad";
+      if (it && active && ok && wasOk) kind = "good";
+      else if (!it) kind = "warn";
+
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      const d = document.createElement("span");
+      d.className = "dot " + kind;
+      const n = document.createElement("span");
+      n.className = "name";
+      n.textContent = w.key;
+      const m = document.createElement("span");
+      m.className = "msg";
+      if (!it) m.textContent = "sem dados";
+      else if (msg) m.textContent = msg;
+      else m.textContent = (kind === "good") ? "OK" : "falha";
+
+      chip.appendChild(d);
+      chip.appendChild(n);
+      chip.appendChild(m);
+      host.appendChild(chip);
+    }
   }
-
-  const host = $("msChips");
-  host.innerHTML = "";
-
-  for (const w of MS_WANT){
-    const it = byKey.get(w.key) || byId.get(w.id) || null;
-
-    const active = truthy(it?.active);
-    const ok = truthy(it?.ok);
-    const wasOk = truthy(it?.was_ok ?? it?.wasOk);
-    const msg = norm(it?.message || it?.msg || it?.error_descr || it?.errorDescr || "");
-
-    let kind = "bad";
-    if (it && active && ok && wasOk) kind = "good";
-    else if (!it) kind = "";
-
-    const chip = document.createElement("div");
-    chip.className = "chip";
-    const d = document.createElement("span");
-    d.className = "dot " + (kind || "");
-    const n = document.createElement("span");
-    n.className = "name";
-    n.textContent = w.key;
-    const m = document.createElement("span");
-    m.className = "msg";
-    if (!it) m.textContent = "—";
-    else if (msg) m.textContent = msg;
-    else m.textContent = (kind === "good") ? "OK" : "falha";
-
-    chip.appendChild(d);
-    chip.appendChild(n);
-    chip.appendChild(m);
-    host.appendChild(chip);
-  }
-}
-
 
   function hasValue(v){
     if (v === 0) return true;
@@ -806,80 +708,51 @@ function renderModuleState(snapshot){
     return s !== "" && s.toLowerCase() !== "null" && s.toLowerCase() !== "nan";
   }
 
-  const KEY_PARAM_RULES = [
-  { key: "speed",       label: "Speed",           re: /(vehicle\s*speed|\bspeed\b|veloc)/i },
-  { key: "rpm",         label: "RPM",             re: /(engine\s*speed|\brpm\b)/i },
-  { key: "fuel_level",  label: "Fuel level",      re: /(fuel\s*level|fuel\s*percent|nivel\s*comb|combust)/i },
-  { key: "fuel_used",   label: "Fuel used",       re: /(fuel\s*used|consumption|consumo|liter|l\/100|km\/?l)/i },
-  { key: "coolant",     label: "Coolant temp",    re: /(coolant|engine\s*temp|temp.*agua|temper)/i },
-  { key: "oil_press",   label: "Oil pressure",    re: /(oil\s*press|press.*oleo|engine\s*oil)/i },
-  { key: "brake_press", label: "Brake pressure",  re: /(brake\s*press|air\s*press|freio\s*press)/i },
-  { key: "battery",     label: "Battery voltage", re: /(battery\s*voltage|batt|tensao|voltag)/i },
-  { key: "mileage",     label: "Mileage / Odo",   re: /(gps\s*odo|odo|odomet|mileage|total\s*distance|km)/i },
-  { key: "hours",       label: "Engine hours",    re: /(engine\s*hours|\bhours\b|horimetro|hora)/i },
-];
+  function pickKeyParams(snapshot, maxN){
+    const params = snapshot?.parameters || snapshot?.params || [];
+    const arr = Array.isArray(params) ? params : [];
 
-function pickKeyParams(snapshot, maxN){
-  const params = snapshot?.parameters || snapshot?.params || [];
-  const arr = Array.isArray(params) ? params : [];
+    const out = [];
+    const seen = new Set();
 
-  const picked = [];
-  const used = new Set();
+    for (const rule of KEY_PARAM_RULES){
+      let best = null;
+      let bestScore = -1;
 
-  // 1) Regras (fuel/press/temp/etc)
-  for (const rule of KEY_PARAM_RULES){
-    for (const p of arr){
-      const name = String(p?.name || p?.param_name || p?.paramName || "");
-      if (!name) continue;
-      if (!rule.re.test(name)) continue;
+      for (const p of arr){
+        const name = String(p?.original_name || p?.name || p?.param_name || p?.paramName || "");
+        if (!name || !rule.re.test(name)) continue;
 
-      const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
-      if (!hasValue(val)) continue;
+        const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
+        if (!hasValue(val)) continue;
 
-      const k = String(rule.key) + "|" + name;
-      if (used.has(k)) continue;
-      used.add(k);
+        const last = String(p?.last_update || p?.lastUpdate || p?.orig_time || "").trim();
+        const score = (hasValue(val) ? 100 : 0) + (last ? 10 : 0) + (/^sys param /i.test(name) ? 5 : 0);
+        if (score >= bestScore) {
+          bestScore = score;
+          best = { name: rule.label, val };
+        }
+      }
 
-      picked.push({ name, val });
-      break;
+      if (best && !seen.has(rule.key)) {
+        seen.add(rule.key);
+        out.push(best);
+        if (out.length >= maxN) break;
+      }
     }
-    if (picked.length >= maxN) break;
+
+    if (!out.length){
+      for (const p of arr){
+        const name = String(p?.name || p?.param_name || p?.paramName || "");
+        const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
+        if (!hasValue(val)) continue;
+        out.push({ name: name || ("id " + String(p?.id || "?")), val });
+        if (out.length >= maxN) break;
+      }
+    }
+
+    return out;
   }
-
-  // 2) Complemento: ranking geral (quando faltou algo)
-  if (picked.length < maxN){
-    const scored = [];
-    for (const p of arr){
-      const name = String(p?.name || p?.param_name || p?.paramName || "");
-      const val = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
-      if (!hasValue(val)) continue;
-
-      const n = name.toLowerCase();
-      let score = 0;
-      if (/(speed|veloc)/.test(n)) score += 50;
-      if (/(rpm|engine\s*speed)/.test(n)) score += 45;
-      if (/(mile|odo|odomet|km)/.test(n)) score += 35;
-      if (/(fuel|comb|diesel|gas)/.test(n)) score += 30;
-      if (/(press)/.test(n)) score += 28;
-      if (/(temp|temper|coolant)/.test(n)) score += 25;
-      if (/(hour|hora)/.test(n)) score += 20;
-      scored.push({ name, val, score });
-    }
-
-    scored.sort((a,b)=> (b.score - a.score) || String(a.name).localeCompare(String(b.name)));
-
-    for (const it of scored){
-      const k = it.name;
-      if (!k || used.has(k)) continue;
-      used.add(k);
-      picked.push({ name: it.name, val: it.val });
-      if (picked.length >= maxN) break;
-    }
-  }
-
-  return picked.slice(0, maxN);
-}
-
 
   function renderKeyParams(snapshot){
     const host = $("keyParams");
@@ -887,37 +760,21 @@ function pickKeyParams(snapshot, maxN){
 
     const params = snapshot?.parameters || snapshot?.params || [];
     const arr = Array.isArray(params) ? params : [];
-    const total = arr.length;
+    const total = Number(snapshot?.counts?.params_total ?? snapshot?.counts?.parameters_total ?? arr.length) || 0;
 
-    let withVal = 0;
-    for (const p of arr){
-      const v = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
-      if (hasValue(v)) withVal++;
+    let withVal = Number(snapshot?.counts?.params_with_value ?? snapshot?.counts?.parameters_with_value ?? NaN);
+    if (!Number.isFinite(withVal)) {
+      withVal = 0;
+      for (const p of arr){
+        const v = hasValue(p?.value) ? p.value : (hasValue(p?.raw_value) ? p.raw_value : null);
+        if (hasValue(v)) withVal++;
+      }
     }
 
     const top = document.createElement("div");
     top.className = "li";
     top.innerHTML = `<div class="k">Parameters</div><div class="v">${withVal}/${total}</div>`;
     host.appendChild(top);
-
-
-// Header "principais" (quando disponível)
-const hdr = (snapshot && snapshot.header && typeof snapshot.header === "object") ? snapshot.header : {};
-const hdrRows = [
-  ["Ignition", hdr.ignition ?? (hdr.raw && hdr.raw.ignition)],
-  ["Speed", hdr.speed],
-  ["Fuel", hdr.fuel],
-  ["Mileage", hdr.mileage],
-  ["Engine hours", hdr.engine_hours],
-];
-
-for (const [kName, vVal] of hdrRows){
-  if (!hasValue(vVal)) continue;
-  const li = document.createElement("div");
-  li.className = "li";
-  li.innerHTML = `<div class="k">${kName}</div><div class="v">${String(vVal)}</div>`;
-  host.appendChild(li);
-}
 
     const picked = pickKeyParams(snapshot, 8);
     for (const it of picked){
@@ -937,7 +794,7 @@ for (const [kName, vVal] of hdrRows){
     if (!picked.length){
       const li = document.createElement("div");
       li.className = "li";
-      li.innerHTML = `<div class="k">Sem parâmetros com valor</div><div class="v">—</div>`;
+      li.innerHTML = `<div class="k">Sem parâmetros principais</div><div class="v">—</div>`;
       host.appendChild(li);
     }
   }
@@ -961,68 +818,35 @@ for (const [kName, vVal] of hdrRows){
   }
 
   function renderStepper(status){
-  const steps = [
-    { b:"HTML5", s:"cadastro" },
-    { b:"SB", s:"atualizando" },
-    { b:"CAN", s:"coletando" },
-    { b:"Aprovar", s:"técnico" },
-    { b:"GS", s:"enviado" },
-    { b:"Fim", s:"ok" },
-  ];
+    const steps = [
+      { b:"HTML5", s:"cadastro" },
+      { b:"SB", s:"atualizando" },
+      { b:"CAN", s:"coletando" },
+      { b:"Aprovar", s:"técnico" },
+      { b:"GS", s:"enviado" },
+      { b:"Fim", s:"ok" },
+    ];
 
-  const st = String(status || "").toUpperCase();
-  const host = $("stepper");
-  host.innerHTML = "";
+    const idx = statusToStepIndex(status);
+    const host = $("stepper");
+    host.innerHTML = "";
 
-  const kinds = ["","","","","",""];
-  const pulse = [false,false,false,false,false,false];
-
-  // HTML5
-  if (st.includes("HTML5_ERROR")) { kinds[0] = "bad"; pulse[0] = true; }
-  else if (st.includes("HTML5_RUNNING") || st.includes("HTML5_QUEUED")) { kinds[0] = "warn"; pulse[0] = true; }
-  else if (st.includes("HTML5_DONE") || st.includes("SB") || st.includes("WAITING_REBOOT") || st.includes("CAN") || st.includes("GS") || st.includes("COMPLETED")) { kinds[0] = "good"; }
-
-  // SB
-  if (st.includes("SB_ERROR")) { kinds[1] = "bad"; pulse[1] = true; }
-  else if (st.includes("SB_RUNNING") || st.includes("SB_QUEUED")) { kinds[1] = "warn"; pulse[1] = true; }
-  else if (st.includes("SB_DONE") || st.includes("WAITING_REBOOT_CAN") || st.includes("CAN") || st.includes("GS") || st.includes("COMPLETED")) { kinds[1] = "good"; }
-
-  // CAN
-  if (st.includes("CAN_SNAPSHOT_ERROR")) { kinds[2] = "bad"; pulse[2] = true; }
-  else if (st.includes("CAN_RUNNING")) { kinds[2] = "good"; pulse[2] = true; }
-  else if (st.includes("CAN_SNAPSHOT_READY") || st.includes("CAN_APPROVED") || st.includes("GS") || st.includes("COMPLETED")) { kinds[2] = "good"; }
-  else if (st.includes("WAITING_REBOOT_CAN") || st.includes("SB_RUNNING")) { kinds[2] = ""; } // cinza
-
-  // Aprovar técnico
-  if (st.includes("CAN_APPROVED")) { kinds[3] = "good"; }
-  else if (st.includes("CAN_SNAPSHOT_READY")) { kinds[3] = "warn"; pulse[3] = true; }
-
-  // GS
-  if (st.includes("GS_ERROR")) { kinds[4] = "bad"; pulse[4] = true; }
-  else if (st.includes("GS_QUEUED") || st.includes("GS_RUNNING")) { kinds[4] = "warn"; pulse[4] = true; }
-  else if (st.includes("GS_DONE") || st.includes("COMPLETED")) { kinds[4] = "good"; }
-
-  // Fim
-  if (st.includes("COMPLETED")) { kinds[5] = "good"; }
-
-  for (let i=0;i<steps.length;i++){
-    const it = steps[i];
-    const el = document.createElement("div");
-    el.className = "step";
-    const d = document.createElement("span");
-    d.className = "dot " + (kinds[i] || "");
-    if (pulse[i]) d.classList.add("pulse");
-    const b = document.createElement("b");
-    b.textContent = it.b;
-    const s = document.createElement("span");
-    s.textContent = it.s;
-    el.appendChild(d);
-    el.appendChild(b);
-    el.appendChild(s);
-    host.appendChild(el);
+    for (let i=0;i<steps.length;i++){
+      const it = steps[i];
+      const el = document.createElement("div");
+      el.className = "step";
+      const d = document.createElement("span");
+      d.className = "dot " + (i < idx ? "good" : (i === idx ? "warn" : ""));
+      const b = document.createElement("b");
+      b.textContent = it.b;
+      const s = document.createElement("span");
+      s.textContent = it.s;
+      el.appendChild(d);
+      el.appendChild(b);
+      el.appendChild(s);
+      host.appendChild(el);
+    }
   }
-}
-
 
   function renderTop(inst){
     const top = $("topKv");
@@ -1100,25 +924,19 @@ if (isErr) {
 const id = inst?.installation_id || inst?.id || "";
 const tok = inst?.installation_token || inst?.token || "";
 
-// buttons enabled/disabled after snapshot (v2)
-
-    // snapshot
-    const snap = pickStableSnapshot(inst);
-    state.lastSnapshot = snap;
-
-// enable buttons (v2): evita validar durante ciclos/WAITING_REBOOT e reduz corrida com finalize do worker
-const alreadyApproved = st.includes("CAN_APPROVED");
-const canApproveEnabled =
-  !!(id && tok) &&
-  !alreadyApproved &&
-  (st.includes("CAN_SNAPSHOT_READY") || (st.includes("CAN_RUNNING") && canReadyByData(snap)));
+// VALIDAR CAN: somente quando estivermos no estágio CAN+ (ou depois)
+const canApproveEnabled = !!(id && tok) && (st.includes("CAN") || st.includes("WAITING_REBOOT") || st.includes("GS") || st.includes("COMPLETED"));
 $("btnApprove").disabled = !canApproveEnabled;
 
+// Atualizar CAN: só quando CAN já iniciou em algum momento e não estiver coletando/aguardando reboot/SB
 const canRefreshEnabled =
   !!(id && tok) &&
-  (st.includes("CAN_SNAPSHOT_READY") || st.includes("CAN_SNAPSHOT_ERROR") || st.includes("GS_ERROR"));
+  (st.includes("CAN") || st.includes("WAITING_REBOOT")) &&
+  !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
 $("btnRefresh").disabled = !canRefreshEnabled;
-
+    // snapshot
+    const snap = extractSnapshot(inst);
+    state.lastSnapshot = snap;
 
     const sb = parseSbProgress(inst, snap);
     $("sbPct").textContent = (sb == null) ? "—" : (sb + "%");
@@ -1137,19 +955,12 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       $("detailsDebug").classList.add("hidden");
     }
 
-    // status line + indicador visual (rodando / ok / erro)
-if (!id) setSubline("Pronto", "", false);
-else {
-  const human = statusToLabel(status);
-  let k = "";
-  let p = false;
-  if (st.includes("ERROR") || st.includes("GS_ERROR") || st.includes("SB_ERROR") || st.includes("HTML5_ERROR")) { k = "bad"; p = true; }
-  else if (st.includes("CAN_RUNNING")) { k = "good"; p = true; }
-  else if (st.includes("SB_RUNNING") || st.includes("HTML5_RUNNING") || st.includes("HTML5_QUEUED") || st.includes("WAITING_REBOOT_CAN")) { k = "warn"; p = true; }
-  else if (st.includes("CAN_SNAPSHOT_READY") || st.includes("CAN_APPROVED") || st.includes("COMPLETED")) { k = "good"; p = false; }
-  setSubline(human, k, p);
-}
-
+    // status line
+    if (!id) setSubline("Pronto");
+    else {
+      const human = statusToLabel(status);
+      setSubline(human);
+    }
   }
 
   function renderEmpty(){
@@ -1175,11 +986,7 @@ else {
   }
 
   async function loadInstallation(id){
-  if (!id) return;
-  state.isLoading = true;
-  // feedback visual mesmo sem ações manuais
-  setLive("warn", true);
-  try {
+    if (!id) return;
     const r = await api("/api/installations/" + encodeURIComponent(id));
     if (!r.ok){
       showToast("Falha ao carregar instalação (HTTP " + r.status + ")", "bad");
@@ -1190,12 +997,9 @@ else {
     // stop auto poll on completed
     const st = String(r.data?.status || "").toUpperCase();
     if (st.includes("COMPLETED")) stopPoll();
-  } finally {
-    state.isLoading = false;
   }
-}
 
-function startPoll(){
+  function startPoll(){
     stopPoll();
     state.pollTimer = setInterval(async () => {
       const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";

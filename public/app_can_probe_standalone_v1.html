@@ -699,7 +699,42 @@
     }).join("");
   }
 
-  function renderProbeScreen(inst, snap, x) {
+  
+/* PATCH_LIVE_RENDER_CAN_PROBE_STANDALONE_v1 */
+  // escolhe o snapshot mais recente que tenha dados (params/module)
+  function _hasDataSnap(snap){
+    try {
+      if (!snap) return false;
+      const p = snap.parameters || snap.params || (snap.data && snap.data.parameters) || null;
+      const m = snap.module_state || snap.moduleState || (snap.data && (snap.data.module_state || snap.data.moduleState)) || null;
+      return (Array.isArray(p) && p.length > 0) || (Array.isArray(m) && m.length > 0);
+    } catch(_e) { return false; }
+  }
+
+  function pickBestSnapshot(snaps){
+    try {
+      if (!Array.isArray(snaps) || snaps.length === 0) return null;
+      const last = pickBestSnapshot(snaps);
+      if (_hasDataSnap(last)) return last;
+      for (let i = snaps.length - 1; i >= 0; i--) {
+        if (_hasDataSnap(snaps[i])) return snaps[i];
+      }
+      return last;
+    } catch(_e) { return null; }
+  }
+
+  window.__CAN_PROBE_LAST_GOOD = window.__CAN_PROBE_LAST_GOOD || { snap: null, at: null };
+
+  function rememberLastGood(snap){
+    try {
+      if (_hasDataSnap(snap)) {
+        window.__CAN_PROBE_LAST_GOOD = { snap, at: new Date().toISOString() };
+      }
+    } catch(_e) {}
+  }
+/* /PATCH_LIVE_RENDER_CAN_PROBE_STANDALONE_v1 */
+
+function renderProbeScreen(inst, snap, x) {
     if (!probeScreenEl) return;
 
     const params0 = (x && x.params) || [];
@@ -851,7 +886,7 @@
   async function requestSnapshot(id, vehicleId, runId) {
     const r = await api(`/api/can-probes/${encodeURIComponent(id)}/actions/request-can-snapshot`, {
       method: "POST",
-      json: { vehicle_id: vehicleId, vehicleId: vehicleId }
+      json: { cycles: 6, interval_ms: 5000,  vehicle_id: vehicleId, vehicleId: vehicleId 
     });
     if (runId !== RUN_SEQ) return null;
     return r;

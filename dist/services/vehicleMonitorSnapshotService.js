@@ -150,47 +150,41 @@ async function collectVehicleMonitorSnapshot(opts) {
     let unitParametersEvents = 0;
     let unitMessagesEvents = 0;
     let unitConnEvents = 0;
-    let firstParamEventAt = 0;
-    let lastParamEventAt = 0;
     const off = mux.onRefresh((props) => {
-        const ds = String(props?.data_source ?? "").toUpperCase();
-        const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
-        if (ds.includes("UNIT_PARAMETERS")) {
+        const ds = String(props?.data_source ?? "");
+        if (ds === "UNIT_PARAMETERS") {
             unitParametersEvents++;
-            const now = Date.now();
-            if (!firstParamEventAt)
-                firstParamEventAt = now;
-            lastParamEventAt = now;
+            const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
             for (const row of rows) {
-                const id = String(row?.id ?? row?.param_id ?? row?.paramId ?? "");
+                const id = String(row?.id ?? row?.param_id ?? "");
                 if (!id)
                     continue;
+                const rawValue = row?.param_value != null ? String(row.param_value)
+                    : (row?.paramvalue != null ? String(row.paramvalue)
+                        : (row?.raw_value != null ? String(row.raw_value)
+                            : (row?.value != null ? String(row.value) : null)));
+                const lastUpdate = row?.orig_time != null ? String(row.orig_time)
+                    : (row?.last_update != null ? String(row.last_update)
+                        : (row?.last_update_date != null ? String(row.last_update_date) : null));
+                const prev = latest.get(id);
                 latest.set(id, {
                     id,
-                    name: idToName.get(id) ?? null,
-                    raw_value: row?.raw_value != null ? String(row.raw_value) :
-                        row?.rawValue != null ? String(row.rawValue) :
-                            row?.param_value != null ? String(row.param_value) :
-                                row?.paramValue != null ? String(row.paramValue) :
-                                    row?.paramvalue != null ? String(row.paramvalue) :
-                                        row?.value != null ? String(row.value) :
-                                            null,
-                    source: row?.paramsource != null ? String(row.paramsource) : (row?.source != null ? String(row.source) : null),
-                    orig_time: row?.orig_time != null ? String(row.orig_time) :
-                        row?.last_update != null ? String(row.last_update) :
-                            row?.lastUpdate != null ? String(row.lastUpdate) :
-                                row?.last_update_date != null ? String(row.last_update_date) :
-                                    null,
-                    inner_id: row?.inner_id != null ? String(row.inner_id) : (row?.innerId != null ? String(row.innerId) : null),
+                    name: idToName.get(id) ?? (row?.param_type_descr != null ? safeDecodeURIComponent(String(row.param_type_descr)) : prev?.name ?? null),
+                    raw_value: rawValue ?? prev?.raw_value ?? null,
+                    value: rawValue ?? prev?.value ?? null,
+                    source: row?.paramsource != null ? String(row.paramsource) : (row?.source != null ? String(row.source) : prev?.source ?? null),
+                    orig_time: lastUpdate ?? prev?.orig_time ?? null,
+                    last_update: lastUpdate ?? prev?.last_update ?? null,
+                    inner_id: row?.inner_id != null ? String(row.inner_id) : prev?.inner_id ?? null,
                 });
             }
             return;
         }
-        if (ds.includes("UNIT_MESSAGES")) {
+        if (ds === "UNIT_MESSAGES") {
             unitMessagesEvents++;
             return;
         }
-        if (ds.includes("CONNECTION")) {
+        if (ds === "unit_connection_status") {
             unitConnEvents++;
             return;
         }
@@ -203,20 +197,7 @@ async function collectVehicleMonitorSnapshot(opts) {
         ack_needed: "0",
     });
     await sleep(waitAfterCmdMs);
-    const stopAtParams = Number(opts.stopAtParams ?? 120);
-    const quietMs = Number(opts.quietMs ?? 650);
-    const minCollectMs = Number(opts.minCollectMs ?? 900);
-    const startedAt = Date.now();
-    while ((Date.now() - startedAt) < windowMs) {
-        if (latest.size >= stopAtParams)
-            break;
-        if (firstParamEventAt &&
-            (Date.now() - firstParamEventAt) >= minCollectMs &&
-            (Date.now() - lastParamEventAt) >= quietMs) {
-            break;
-        }
-        await sleep(150);
-    }
+    await sleep(windowMs);
     off();
     // Module State (regra robusta: NÃO confiar em id fixo, usar module/sub)
     const ms = await mux.sendAction("get_monitor_module_state", {

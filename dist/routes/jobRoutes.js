@@ -238,22 +238,9 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                 summary: __summary || ((can && can.summary) ? can.summary : null),
                 last_snapshot_at: (__snap && (__snap.captured_at || __snap.capturedAt)) || ((can && (can.last_snapshot_at || can.lastSnapshotAt)) ? (can.last_snapshot_at || can.lastSnapshotAt) : null),
             });
-            const curStatus = String(inst?.status || "").toUpperCase();
-            const keepStatus = curStatus.includes("CAN_APPROVED") ||
-                curStatus.startsWith("GS_") ||
-                curStatus.includes("COMPLETED") ||
-                (curStatus.includes("ERROR") && !curStatus.startsWith("CAN_"));
-            const prevBest = inst.can_snapshot || inst.canSnapshot || null;
-            const nextStatus = (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR");
-            const patch = {
-                can: __canPatched,
+            installationsStore.patchInstallation(installationId, { can: __canPatched,
                 can_snapshot_latest: (__snap || null),
-                // não apagar o último snapshot "bom" quando vier um ciclo vazio
-                can_snapshot: (__hasData ? __snap : (prevBest || null)),
-            };
-            if (!keepStatus)
-                patch.status = nextStatus;
-            installationsStore.patchInstallation(installationId, patch);
+                can_snapshot: (__hasData ? __snap : null), status: (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
         }
         catch { }
         try {
@@ -434,8 +421,8 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             return;
         }
         // Post-SB CAN battery: o worker faz Gate B (reboot) e publica snapshots parciais
-        const cycles = _num(job?.payload?.can_cycles ?? job?.payload?.cycles) ?? 8;
-        const interval_ms = _num(job?.payload?.can_interval_ms ?? job?.payload?.interval_ms) ?? 8000;
+        const cycles = _num(job?.payload?.can_cycles ?? job?.payload?.cycles) ?? 12;
+        const interval_ms = _num(job?.payload?.can_interval_ms ?? job?.payload?.interval_ms) ?? 12000;
         const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
             installation_id: installationId,
             service,
@@ -443,9 +430,8 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             cycles,
             interval_ms,
             mode: "post_sb",
-            reboot_wait_max_ms: 240000,
-            reboot_poll_ms: 6000,
-            reboot_recent_sec: 180,
+            reboot_sleep_ms: 60000,
+            sb_poll_interval_ms: 60000,
         });
         try {
             installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
