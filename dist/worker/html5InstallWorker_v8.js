@@ -4423,6 +4423,65 @@ await finish("ok", {
   }
 }
 
+/* === APPENGINE3_FETCH_TOKEN_PATCH_V3 ===
+   Garante que chamadas AppEngine_3 / api_get_data / VHCLS carreguem session_token (query) + Cookie.
+   Evita VHCLS login="-1".
+*/
+(function(){
+  try {
+    const fs = require("fs");
+    const TOK_PATH = process.env.A3_SESSION_TOKEN_PATH || "/tmp/.session_token";
+
+    function readTok(){
+      try{
+        const t = String(fs.readFileSync(TOK_PATH, "utf8") || "").trim();
+        return t.replace(/[\r\n]+/g,"").trim();
+      }catch(e){ return ""; }
+    }
+
+    function looksA3(url){
+      return /appengine_3/i.test(url) || /AppEngine_3/i.test(url) || /api_get_data/i.test(url) || /VHCLS/i.test(url);
+    }
+
+    const origFetch = global.fetch;
+    if (!origFetch) { console.log("[A3_FETCH_PATCH_V3] no global.fetch"); return; }
+    if (global.__A3_FETCH_PATCH_V3) return;
+
+    global.fetch = async function(input, init){
+      let url = (typeof input === "string") ? input : (input && input.url ? input.url : String(input));
+      let i = init ? Object.assign({}, init) : {};
+      if (looksA3(url)){
+        const tok = readTok();
+        if (tok){
+          try{
+            const u = new URL(url);
+            if (!u.searchParams.get("session_token")) u.searchParams.set("session_token", tok);
+            url = u.toString();
+          }catch(e){}
+          try{
+            const headers = new Headers(i.headers || (input && input.headers) || {});
+            if (!headers.has("Cookie")) headers.set("Cookie", "session_token=" + tok);
+            i.headers = headers;
+          }catch(e){}
+        } else {
+          if (!global.__A3_TOKEN_MISS_LOG){
+            global.__A3_TOKEN_MISS_LOG = true;
+            console.log("[A3_FETCH_PATCH_V3] WARN token missing at " + TOK_PATH);
+          }
+        }
+      }
+      return origFetch(url, i);
+    };
+
+    global.__A3_FETCH_PATCH_V3 = true;
+    console.log("[A3_FETCH_PATCH_V3] installed tokenPath=" + (process.env.A3_SESSION_TOKEN_PATH || "/tmp/.session_token"));
+  } catch (e) {
+    console.log("[A3_FETCH_PATCH_V3] failed:", e && (e.message || String(e)));
+  }
+})();
+
+
+
 main().catch(err => { console.error("[html5_v8] fatal:", err && (err.stack || err.message || err)); process.exit(1); });
 
 
