@@ -161,6 +161,10 @@
     <div class="hidden" id="assetTypeWrap" style="margin-top:8px">
       <span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span>
     </div>
+    <div style="margin-top:10px">
+      <label>Comentário</label>
+      <input id="comment" placeholder="Comentário para os comandos no Monitor" />
+    </div>
 
     <details id="gsDetails">
       <summary>G‑Sensor (orientação)</summary>
@@ -196,17 +200,17 @@
   <section class="card" id="cardCan">
     <h2>2) Validação CAN</h2>
 
-    <div class="kv" id="instKv"></div>
+    <div class="kv hidden" id="instKv"></div>
 
     <div class="progressWrap">
       <div class="progressBar"><div class="progressFill" id="sbFill"></div></div>
       <div class="progressMeta">
         <div>SB: <b id="sbPct">—</b></div>
-        <div>Último pacote: <b id="pktAge">—</b></div>
+        <div class="hidden">Último pacote: <b id="pktAge">—</b></div>
       </div>
     </div>
 
-    <div class="stepper" id="stepper"></div>
+    <div class="stepper hidden" id="stepper"></div>
 
     <div class="list" id="canHeader"></div>
 
@@ -361,8 +365,7 @@
   function applyClientSelection(){
     const v = $("clientSelect").value || "";
     const [clientId, profileKey, vehicleSettingId] = v.split("|");
-    // prefill (permite override manual no input)
-    if (!norm($("vehicleSettingId").value)) $("vehicleSettingId").value = vehicleSettingId || "";
+    $("vehicleSettingId").value = vehicleSettingId || "";
     $("clientMeta").textContent = `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`;
     refreshAdvancedPreview();
   }
@@ -468,7 +471,8 @@
         label_pos: $("gs_label").value || null,
         harness_pos: $("gs_harness").value || null,
         command: gsCmd || null,
-      }
+      },
+      comment: norm($("comment")?.value || "") || null,
     };
 
     if (svc === "INSTALL"){
@@ -789,27 +793,23 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  function canRowModuleName(r){ return r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? ""; }
+  function canRowModuleName(r){ return r?.sub_name ?? r?.subName ?? r?.subname ?? r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? ""; }
 
-  function canFindModule(msRows, ids, names){
+  function canFindModule(msRows, names){
     const rows = Array.isArray(msRows) ? msRows : [];
-    const idsSet = new Set((ids || []).map(Number).filter(Number.isFinite));
     const nameKeys = (names || []).map(canNormKey).filter(Boolean);
     return rows.find((r) => {
-      const id = canRowModuleId(r);
       const nk = canNormKey(canRowModuleName(r));
-      if (id != null && idsSet.has(id)) return true;
-      if (nk && nameKeys.some((k) => nk.includes(k))) return true;
-      return false;
+      return !!(nk && nameKeys.some((k) => nk.includes(k)));
     }) || null;
   }
 
   const CAN_MS_WANT = [
-    { key: "CAN0", ids: [8], names: ["can0"] },
-    { key: "CAN1", ids: [9], names: ["can1"] },
-    { key: "J1708", ids: [15], names: ["j1708"] },
-    { key: "KEYPAD_DALLAS_IBUTTON", ids: [19], names: ["dallas", "ibutton"] },
-    { key: "KEYPAD_RAMZOR", ids: [20], names: ["ramzor"] },
+    { key: "CAN0", names: ["can0"] },
+    { key: "CAN1", names: ["can1"] },
+    { key: "J1708", names: ["j1708"] },
+    { key: "KEYPAD_DALLAS_IBUTTON", names: ["keypaddallasibutton", "dallas", "ibutton"] },
+    { key: "KEYPAD_RAMZOR", names: ["keypadramzor", "ramzor"] },
   ];
 
   const CAN_PARAM_RULES = [
@@ -888,6 +888,19 @@
     return null;
   }
 
+  function canFmtCommShort(v){
+    const raw = String(v ?? "").trim();
+    if (!raw || raw === "—") return "—";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw.length > 19 ? raw.slice(0, 19) : raw;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${dd}/${mm} ${hh}:${mi}:${ss}`;
+  }
+
   function canGetHeaderLite(inst, snap){
     const h = canExtractHeaderObj(snap);
     const vehicle = inst?.vehicle || inst?.vhcl || inst?.data?.vehicle || null;
@@ -905,7 +918,7 @@
     ], "");
     return {
       ignitionRaw: canFirstNonEmpty([h.ignition, h.ignition_status, h.sys_param_ignition], "—"),
-      communication: canSafeDecode(canFirstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—")),
+      communication: canFmtCommShort(canSafeDecode(canFirstNonEmpty([h.server_time, h.serverTime, h.captured_at, snap?.captured_at], "—"))),
       config_status: canSafeDecode(cfgStatus),
       config_type: canSafeDecode(cfgType),
       config_progress: canSafeDecode(cfgProgress),
@@ -924,23 +937,24 @@
     host.innerHTML = "";
     const h = canGetHeaderLite(inst, snapshot);
     const ign = canToIgnitionBool(h.ignitionRaw);
-    const ignShown = canFmtAny(h.ignitionRaw || "—");
-    const ignText = ign === true ? `Ligada (${ignShown})` : ign === false ? `Desligada (${ignShown})` : ignShown;
-    const cfg = [h.config_status, h.config_type !== "—" ? `type ${h.config_type}` : "", h.config_progress !== "—" ? `progress ${h.config_progress}` : "", h.config_error || ""].filter(Boolean).join(" • ") || "—";
+    const ignHtml = ign === true
+      ? `<span class="pill"><span class="dot good"></span>Ligada</span>`
+      : ign === false
+        ? `<span class="pill"><span class="dot bad"></span>Desligada</span>`
+        : `<span class="pill"><span class="dot warn"></span>—</span>`;
     const items = [
-      ["Ignição", ignText],
-      ["Comunicação", h.communication],
-      ["Configuração", cfg],
-      ["Driver", h.driver_code],
-      ["Placa", h.license_number],
-      ["Serial", h.serial],
-      ["Cliente", h.client],
-      ["Modelo", h.model],
+      ["Ignição", ignHtml, true],
+      ["Comunicação", h.communication || "—", false],
+      ["Driver ID", h.driver_code || "—", false],
+      ["Placa", h.license_number || "—", false],
+      ["Serial", h.serial || "—", false],
+      ["Cliente", h.client || "—", false],
+      ["Modelo", h.model || "—", false],
     ];
-    for (const [k, v] of items){
+    for (const [k, v, isHtml] of items){
       const li = document.createElement("div");
       li.className = "li";
-      li.innerHTML = `<div class="k">${canEsc(k)}</div><div class="v">${canEsc(v || "—")}</div>`;
+      li.innerHTML = `<div class="k">${canEsc(k)}</div><div class="v">${isHtml ? v : canEsc(v || "—")}</div>`;
       host.appendChild(li);
     }
   }
@@ -950,7 +964,7 @@
     const host = $("msChips");
     host.innerHTML = "";
     for (const w of CAN_MS_WANT){
-      const it = canFindModule(x.ms, w.ids, w.names);
+      const it = canFindModule(x.ms, w.names);
       const ok = canStrictOkTriple(it);
       const msg = canSafeDecode(canPickErr(it));
       let kind = "bad";
@@ -1276,6 +1290,12 @@
     const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
     const tok = state?.inst?.installation_token || state?.inst?.token || (loadLs().tok) || "";
     if (!id || !tok){ showToast("Falta installation_id/token", "bad"); return; }
+    const svc = String(state?.inst?.service || $("service")?.value || "").toUpperCase();
+    const gsCmd = norm($("gs_command")?.value || "");
+    if ((svc === "INSTALL" || svc === "MAINT_WITH_SWAP") && !gsCmd){
+      showToast("Configure o G-Sensor antes de validar CAN", "bad");
+      return;
+    }
 
     try {
       $("btnApprove").disabled = true;
