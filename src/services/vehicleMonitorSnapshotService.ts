@@ -172,9 +172,13 @@ export async function collectVehicleMonitorSnapshot(opts: {
   windowMs?: number;
   waitAfterCmdMs?: number;
   urlEncode?: boolean;
+  // Callback chamado a cada pacote UNIT_PARAMETERS recebido durante a janela.
+  // Permite que o caller publique snapshots parciais sem aguardar o fim da janela.
+  onPartialParams?: (params: VmParam[], counts: { total: number; withValue: number; events: number }) => void;
 }): Promise<VmSnapshot> {
-  const windowMs = opts.windowMs ?? 8000;
-  const waitAfterCmdMs = opts.waitAfterCmdMs ?? 1000;
+  // PERF: janela padrão reduzida de 8s → 5s. Veículos respondem rápido; 8s era conservador demais.
+  const windowMs = opts.windowMs ?? 5000;
+  const waitAfterCmdMs = opts.waitAfterCmdMs ?? 800;
   const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
 
   // Header
@@ -272,6 +276,15 @@ export async function collectVehicleMonitorSnapshot(opts: {
           last_update: lastUpdate ?? prev?.last_update ?? null,
           inner_id: row?.inner_id != null ? String(row.inner_id) : prev?.inner_id ?? null,
         });
+      }
+
+      // STREAMING PROGRESSIVO: notifica caller com snapshot parcial a cada pacote
+      if (opts.onPartialParams) {
+        try {
+          const allParams = Array.from(latest.values());
+          const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
+          opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents });
+        } catch { /* best-effort */ }
       }
       return;
     }

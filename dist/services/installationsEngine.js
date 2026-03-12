@@ -10,6 +10,56 @@ const CAN_SNAPSHOT_DEFAULT_CYCLES = Number(process.env.CAN_SNAPSHOT_CYCLES || "1
 const CAN_SNAPSHOT_DEFAULT_INTERVAL_MS = Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000");
 const store = require("./installationsStore");
 
+// ============================================================
+// SB_SKIP: verifica ASSIGNED_VEHICLE_SETTING_ID atual no HTML5
+// POST https://html5.traffilog.com/AppEngine_2_1/default.aspx
+// Retorna o ID atual ou null em caso de falha.
+// ============================================================
+const _HTML5_ACTION_URL = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
+const SB_SKIP_TIMEOUT_MS = Number(process.env.SB_SKIP_TIMEOUT_MS || "8000");
+
+async function _getAssignedVehicleSettingId(vehicleId, clientId) {
+  return new Promise((resolve) => {
+    try {
+      const https = require("https");
+      const { URL } = require("url");
+      const u = new URL(_HTML5_ACTION_URL);
+      const body = Buffer.from(
+        `VEHICLE_ID=${encodeURIComponent(String(vehicleId))}&CLIENT_ID=${encodeURIComponent(String(clientId))}&action=GET_ASSIGNED_VEHICLE_SETTING&VERSION_ID=2`,
+        "utf8"
+      );
+      const req = https.request({
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port ? Number(u.port) : 443,
+        path: (u.pathname || "/") + (u.search || ""),
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "content-length": String(body.length),
+          "accept": "*/*",
+        },
+      }, (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(Buffer.from(c)));
+        res.on("end", () => {
+          try {
+            const txt = Buffer.concat(chunks).toString("utf8");
+            // Resposta: <DATA ASSIGNED_VEHICLE_SETTING_ID="5592" ... />
+            const m = txt.match(/ASSIGNED_VEHICLE_SETTING_ID\s*=\s*"(\d+)"/i);
+            resolve(m ? Number(m[1]) : null);
+          } catch (_) { resolve(null); }
+        });
+      });
+      req.setTimeout(SB_SKIP_TIMEOUT_MS, () => { req.destroy(); resolve(null); });
+      req.on("error", () => resolve(null));
+      req.write(body);
+      req.end();
+    } catch (_) { resolve(null); }
+  });
+}
+// ============================================================
+
 // IMPORTANTE: você JÁ tem /api/jobs (enqueue). Vamos chamar a mesma função que essa rota usa.
 // Aqui eu deixo um adaptador: você pluga seu "enqueueJob" real em 1 lugar.
 let enqueueJob = null;
@@ -127,8 +177,56 @@ async function onJobCompleted(job, result) {
       return;
     }
 
+    // SB_SKIP: verifica se o equipamento já está com o vehicleSettingId correto.
+    // Se sim, pula o SB e vai direto para CAN (economiza ~2-3 min por instalação).
+    const _sbSkipEnabled = (process.env.SB_SKIP_ENABLED || "1") !== "0";
+    if (_sbSkipEnabled) {
+      let _currentSettingId = null;
+      try {
+        _currentSettingId = await _getAssignedVehicleSettingId(vid, target_client_id || current_client_id);
+        console.log(`[engine] SB_SKIP check vehicleId=${vid} currentSettingId=${_currentSettingId} expectedSettingId=${vehicleSettingId}`);
+      } catch (_e) {
+        console.log(`[engine] SB_SKIP check falhou (ignora e segue com SB):`, _e && _e.message);
+      }
+
+      if (_currentSettingId !== null && _currentSettingId === vehicleSettingId) {
+        // Equipamento já está com o setting correto → pula SB
+        console.log(`[engine] SB_SKIP: SKIP! vehicleId=${vid} já tem settingId=${vehicleSettingId}. Pulando SB, indo direto para CAN.`);
+        store.patchInstallation(installationId, {
+          status: "SB_DONE",
+          sb: { skipped: true, reason: "already_configured", currentSettingId: _currentSettingId, expectedSettingId: vehicleSettingId }
+        });
+
+        if (service === "MAINT_NO_SWAP") {
+          store.patchInstallation(installationId, { status: "COMPLETED" });
+          return;
+        }
+
+        mustEnqueue();
+        const canJobSkip = await enqueueJob({
+          type: "monitor_can_snapshot",
+          payload: { installation_id: installationId, vehicleId: vid, cycles: CAN_SNAPSHOT_DEFAULT_CYCLES, interval_ms: CAN_SNAPSHOT_DEFAULT_INTERVAL_MS }
+        });
+        store.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJobSkip.id || canJobSkip.job_id || null, status: "queued" });
+        store.patchInstallation(installationId, { status: "CAN_RUNNING" });
+        return;
+      }
+    }
+
     // enqueue monitor SB
     mustEnqueue();
+    // REGRA SB: comentário = campo do app, ou data de instalação (dd/mm/aaaa) se vazio
+    const _sbCommentBase = String(inst.payload.comment || "").trim();
+    const _sbInstDate = (() => {
+      try {
+        const d = new Date();
+        const dd = String(d.getDate()).padStart(2,"0");
+        const mm = String(d.getMonth()+1).padStart(2,"0");
+        const yy = String(d.getFullYear());
+        return `${dd}/${mm}/${yy}`;
+      } catch(_) { return ""; }
+    })();
+    const _sbComment = _sbCommentBase || _sbInstDate;
     const sbJob = await enqueueJob({
       type: "monitor_sb",
       payload: {
@@ -137,7 +235,7 @@ async function onJobCompleted(job, result) {
         clientName: _clientName(target_client_id || current_client_id),
         vehicleId: vid,
         vehicleSettingId,
-        comment: inst.payload.comment || ("APP " + service)
+        comment: _sbComment
       }
     });
 
@@ -369,6 +467,14 @@ async function approveCan(installationId, { override, reason }) {
   });
 
   const clientName = _clientName(target_client_id);
+  // REGRA GS: comentário OBRIGATORIAMENTE inclui o comando enviado (ex: G-Sensor: FRONT-LEFT)
+  const _gsLabelPos  = String(inst.payload?.gsensor?.label_pos  || gs.label   || "").trim().toUpperCase();
+  const _gsHarnessPos = String(inst.payload?.gsensor?.harness_pos || gs.harness || "").trim().toUpperCase();
+  const _gsCommandLabel = (_gsLabelPos && _gsHarnessPos) ? `${_gsLabelPos}-${_gsHarnessPos}` : (_gsLabelPos || _gsHarnessPos || "");
+  const _gsCommentBase = String(inst.payload.comment || "").trim();
+  const _gsComment = _gsCommandLabel
+    ? (_gsCommentBase ? `${_gsCommentBase} | G-Sensor: ${_gsCommandLabel}` : `G-Sensor: ${_gsCommandLabel}`)
+    : (_gsCommentBase || ("APP GS " + service));
   const gsJob = await enqueueJob({
     type: "monitor_gs",
     payload: {
@@ -379,7 +485,7 @@ async function approveCan(installationId, { override, reason }) {
       vehicleSettingId,
       GS_ACTION_ID: gs.GS_ACTION_ID,
       GS_COMMAND_SYNTAX: gs.GS_COMMAND_SYNTAX,
-      comment: inst.payload.comment || ("APP GS " + service),
+      comment: _gsComment,
       canApproved: true,
       override: overrideBool,
       reason: reason || null

@@ -93,8 +93,9 @@ class TraffilogWsMux {
     }
 }
 async function collectVehicleMonitorSnapshot(opts) {
-    const windowMs = opts.windowMs ?? 8000;
-    const waitAfterCmdMs = opts.waitAfterCmdMs ?? 1000;
+    // PERF: janela padrão reduzida de 8s → 5s. Veículos respondem rápido; 8s era conservador demais.
+    const windowMs = opts.windowMs ?? 5000;
+    const waitAfterCmdMs = opts.waitAfterCmdMs ?? 800;
     const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
     // Header
     const vehicleInfo = await mux.sendAction("get_vehicle_info", {
@@ -159,13 +160,13 @@ async function collectVehicleMonitorSnapshot(opts) {
                 const id = String(row?.id ?? row?.param_id ?? "");
                 if (!id)
                     continue;
-                const rawValue = row?.param_value != null ? String(row.param_value)
-                    : (row?.paramvalue != null ? String(row.paramvalue)
-                        : (row?.raw_value != null ? String(row.raw_value)
-                            : (row?.value != null ? String(row.value) : null)));
-                const lastUpdate = row?.orig_time != null ? String(row.orig_time)
-                    : (row?.last_update != null ? String(row.last_update)
-                        : (row?.last_update_date != null ? String(row.last_update_date) : null));
+                const rawValue = row?.param_value != null ? String(row.param_value) :
+                    (row?.paramvalue != null ? String(row.paramvalue) :
+                        (row?.raw_value != null ? String(row.raw_value) :
+                            (row?.value != null ? String(row.value) : null)));
+                const lastUpdate = row?.orig_time != null ? String(row.orig_time) :
+                    (row?.last_update != null ? String(row.last_update) :
+                        (row?.last_update_date != null ? String(row.last_update_date) : null));
                 const prev = latest.get(id);
                 latest.set(id, {
                     id,
@@ -177,6 +178,15 @@ async function collectVehicleMonitorSnapshot(opts) {
                     last_update: lastUpdate ?? prev?.last_update ?? null,
                     inner_id: row?.inner_id != null ? String(row.inner_id) : prev?.inner_id ?? null,
                 });
+            }
+            // STREAMING PROGRESSIVO: notifica caller com snapshot parcial a cada pacote
+            if (opts.onPartialParams) {
+                try {
+                    const allParams = Array.from(latest.values());
+                    const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
+                    opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents });
+                }
+                catch { /* best-effort */ }
             }
             return;
         }

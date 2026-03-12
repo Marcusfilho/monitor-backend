@@ -751,6 +751,8 @@ async function takeSnapshotOnce(sessionToken, vehicleId, opt){
       windowMs: Number(opt.windowMs || opt.window_ms || VM_WINDOW_MS),
       waitAfterCmdMs: Number(opt.waitAfterCmdMs || opt.wait_after_cmd_ms || VM_WAIT_AFTER_CMD_MS),
       urlEncode: URL_ENCODE,
+      // STREAMING PROGRESSIVO: publica snapshot parcial ao backend a cada pacote recebido
+      onPartialParams: opt.onPartialParams || null,
     });
     // adiciona contexto (sem quebrar UI)
     snap.vehicleId = vehicleId;
@@ -930,7 +932,28 @@ for(let i=0;i<cycles;i++){
             break;
           }
         }
-        const snap = await takeSnapshotOnce(sessionToken, vehicleId);
+        const snap = await takeSnapshotOnce(sessionToken, vehicleId, {
+          // STREAMING PROGRESSIVO: publica no backend a cada pacote, sem esperar o fim da janela
+          onPartialParams: installationId ? async (params, counts) => {
+            try {
+              const partialSnap = {
+                capturedAt: new Date().toISOString(),
+                vehicleId,
+                isConnected: null,
+                header: {},
+                parameters: params,
+                moduleState: [],
+                rawCounts: { unitParametersEvents: counts.events, unitMessagesEvents: 0, unitConnEvents: 0 },
+                _partial: true,
+              };
+              const partialSum = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(partialSnap) || partialSnap) : partialSnap;
+              await postInstallationCanSnapshot(installationId, partialSum, {
+                status: "CAN_RUNNING", phase: "CAN_PARTIAL", cycle: i+1, cycles,
+                partial: true, params_total: counts.total, params_with_value: counts.withValue,
+              });
+            } catch(_) { /* best-effort */ }
+          } : null,
+        });
       // __lastSnap removed (was causing ReferenceError) /*__FIX_LASTSNAP__*/
         snapshots.unshift(snap); // newest first
         try {
