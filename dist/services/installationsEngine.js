@@ -56,7 +56,10 @@ async function startPipeline(installation) {
   // primeiro job sempre HTML5 (usa payload.service)
   const j1 = await enqueueJob({
     type: "html5_install",
-    payload: Object.assign({}, installation.payload, { installation_id: id })
+    payload: Object.assign({}, installation.payload, {
+      installation_id: id,
+      confirm_asset_load: false  // evita step de confirmação pós-CHANGE_COMPANY que causa timeout
+    })
   });
 
   store.pushJob(id, { type: "html5_install", job_id: j1.id || j1.job_id || j1.jobId || null, status: "queued" });

@@ -360,9 +360,8 @@
       sel.appendChild(o);
     }
 
-    // default: TransLima default (se existir), senão primeiro
-    const idx = items.findIndex(x => x.clientName === "TransLima" && x.profileKey === "default");
-    if (idx >= 0) sel.selectedIndex = idx;
+    // default: primeiro item (sem hardcode de cliente)
+    sel.selectedIndex = 0;
 
     applyClientSelection();
   }
@@ -370,8 +369,8 @@
   function applyClientSelection(){
     const v = $("clientSelect").value || "";
     const [clientId, profileKey, vehicleSettingId] = v.split("|");
-    // prefill (permite override manual no input)
-    if (!norm($("vehicleSettingId").value)) $("vehicleSettingId").value = vehicleSettingId || "";
+    // sempre atualiza o vehicleSettingId ao trocar cliente (não acumula valor antigo)
+    $("vehicleSettingId").value = vehicleSettingId || "";
     $("clientMeta").textContent = `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`;
     refreshAdvancedPreview();
   }
@@ -817,7 +816,8 @@
     return 0;
   }
 
-  function renderStepper(status){
+  function renderStepper(status, currentSt){
+    const st = currentSt || String(status || "").toUpperCase();
     const steps = [
       { b:"HTML5", s:"cadastro" },
       { b:"SB", s:"atualizando" },
@@ -836,11 +836,21 @@
       const el = document.createElement("div");
       el.className = "step";
       const d = document.createElement("span");
-      d.className = "dot " + (i < idx ? "good" : (i === idx ? "warn" : ""));
+      const isError = st && st.includes("ERROR");
+      let dotClass = "";
+      if (i < idx) dotClass = "good";
+      else if (i === idx) dotClass = isError ? "bad" : "warn";
+      d.className = "dot " + dotClass;
       const b = document.createElement("b");
       b.textContent = it.b;
       const s = document.createElement("span");
-      s.textContent = it.s;
+      // se este step for o atual, mostrar label dinâmico do status real
+      if (i === idx && st && !st.includes("ERROR")) {
+        const shortSt = st.replace(/_/g,' ').toLowerCase();
+        s.textContent = shortSt.length < 22 ? shortSt : it.s;
+      } else {
+        s.textContent = it.s;
+      }
       el.appendChild(d);
       el.appendChild(b);
       el.appendChild(s);
@@ -902,7 +912,7 @@ function renderAll(inst){
     
 const status = inst?.status || "";
 const st = String(status || "").toUpperCase();
-renderStepper(status);
+renderStepper(status, st);
 
 // erro da última etapa (ex.: HTML5_ERROR)
 const err = extractLastError(inst);
@@ -970,7 +980,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     $("sbPct").textContent = "—";
     $("sbFill").style.width = "0%";
     $("pktAge").textContent = "—";
-    renderStepper("");
+    renderStepper("", "");
     renderTop(empty);
     renderInstKv(empty);
     try { $("errRow").classList.add("hidden"); $("btnRetryHtml5").classList.add("hidden"); } catch {}
@@ -994,9 +1004,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     }
     renderAll(r.data);
 
-    // stop auto poll on completed
+    // stop auto poll em completed ou erro terminal
     const st = String(r.data?.status || "").toUpperCase();
-    if (st.includes("COMPLETED")) stopPoll();
+    if (st.includes("COMPLETED") || st.includes("ERROR")) stopPoll();
   }
 
   function startPoll(){
