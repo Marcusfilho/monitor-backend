@@ -366,7 +366,7 @@ function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
       clientName,
       vehicleId: String(vehicleId),
       vehicleSettingId: Number(vehicleSettingId),
-      comment: `APP ${service} inst=${installationId}`
+      comment: (() => { const _b = String((inst && inst.payload && inst.payload.comment) || "").trim(); if (_b) return _b; try { const d = new Date(); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`; } catch(_) { return ""; } })()
     });
 
     try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "scheme_builder", job_id: sb.id, status: "queued" }); } catch {}
