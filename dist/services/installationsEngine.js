@@ -471,7 +471,7 @@ async function approveCan(installationId, { override, reason }) {
   const _gsLabelPos  = String(inst.payload?.gsensor?.label_pos  || gs.label   || "").trim().toUpperCase();
   const _gsHarnessPos = String(inst.payload?.gsensor?.harness_pos || gs.harness || "").trim().toUpperCase();
   const _gsCommandLabel = (_gsLabelPos && _gsHarnessPos) ? `${_gsLabelPos}-${_gsHarnessPos}` : (_gsLabelPos || _gsHarnessPos || "");
-  const _gsCommentBase = String(inst.payload.comment || "").trim();
+  const _gsCommentBase = ""; // GS ignora texto do app — usa só G-Sensor: LABEL-HARNESS
   const _gsComment = _gsCommandLabel
     ? (_gsCommentBase ? `${_gsCommentBase} | G-Sensor: ${_gsCommandLabel}` : `G-Sensor: ${_gsCommandLabel}`)
     : (_gsCommentBase || ("APP GS " + service));
