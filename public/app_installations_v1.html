@@ -139,8 +139,12 @@
 
     <div class="row">
       <div>
+        <label>Frota <span style="font-size:10px;opacity:.7">(opcional)</span></label>
+        <input id="fleet" placeholder="ex.: 0042" />
+      </div>
+      <div>
         <label>Placa (real)</label>
-        <input id="plate_real" placeholder="ex.: ABC1D23" autocapitalize="characters" />
+        <input id="plate_real" placeholder="ex.: ABC1D23" autocapitalize="characters" style="text-transform:uppercase" />
       </div>
       <div id="rowSerial">
         <label>Serial</label>
@@ -185,6 +189,12 @@
       <div style="margin-top:8px;font-size:12px;color:var(--muted)">O comando é calculado automaticamente.</div>
     </details>
 
+    <div style="margin-top:12px">
+      <label>Fotos da instalação <span style="font-size:10px;opacity:.7">(em breve)</span></label>
+      <div style="border:1px dashed #2a3a52;border-radius:14px;padding:14px;text-align:center;color:var(--muted);font-size:12px;background:#0b1118;cursor:default">
+        📷 Tirar foto ou selecionar da galeria<br><span style="font-size:10px;opacity:.7">Funcionalidade em desenvolvimento</span>
+      </div>
+    </div>
     <div class="row" style="margin-top:12px">
       <button id="btnCreate">Criar instalação</button>
       <button class="secondary" id="btnReset">Limpar</button>
@@ -347,6 +357,7 @@
     renderManufacturers();
     renderGsSelectors();
     applyServiceUI();
+  updateBtnLabel();
     refreshAdvancedPreview();
   }
 
@@ -458,10 +469,25 @@
   }
   $("service").addEventListener("change", applyServiceUI);
 
+  function updateBtnLabel(){
+    const svc = $("service")?.value || "INSTALL";
+    const labels = {
+      "INSTALL":        "Criar instalação",
+      "MAINT_WITH_SWAP": "Criar manutenção",
+      "MAINT_NO_SWAP":   "Criar manutenção",
+      "UNINSTALL":       "Criar desinstalação",
+    };
+    const btn = $("btnCreate");
+    if (btn) btn.textContent = labels[svc] || "Criar instalação";
+  }
+  $("service").addEventListener("change", updateBtnLabel);
+
   function buildPayload(){
     const svc = $("service").value;
 
     const plateReal = up($("plate_real").value);
+    const fleet = ($("fleet")?.value || "").trim().toUpperCase();
+    const plateFull = fleet ? (fleet + " - " + plateReal) : plateReal;
     const serial = norm($("serial").value);
 
     const v = $("clientSelect").value || "";
@@ -474,10 +500,10 @@
       service: svc,
       target_client_id: clientId ? Number(clientId) : null,
       vehicleSettingId: vehicleSettingId ? Number(vehicleSettingId) : null,
-      plate_real: plateReal || null,
+      plate_real: plateFull || null,
       serial: serial || "",
       // compat: plate_lookup fica nulo (backend normaliza); plate usado p/ lookup
-      plate: (svc === "INSTALL") ? (serial || plateReal || null) : (plateReal || null),
+      plate: (svc === "INSTALL") ? (serial || plateFull || null) : (plateFull || null),
       gsensor: {
         label_pos: $("gs_label").value || null,
         harness_pos: $("gs_harness").value || null,
@@ -1193,18 +1219,25 @@ const canRefreshEnabled =
 $("btnRefresh").disabled = !canRefreshEnabled;
     // snapshot
     const snap = extractSnapshot(inst);
-    state.lastSnapshot = snap;
+    // Regra: nunca apagar lastSnapshot por snapshot vazio
+    const snapParams = canExtractRowsFromSnapshot(snap)?.params;
+    if (snap && snapParams && snapParams.length > 0) {
+      state.lastSnapshot = snap;
+    } else if (!state.lastSnapshot) {
+      state.lastSnapshot = snap;
+    }
+    const activeSnap = state.lastSnapshot;
 
-    const sb = parseSbProgress(inst, snap);
+    const sb = parseSbProgress(inst, activeSnap);
     $("sbPct").textContent = (sb == null) ? "—" : (sb + "%");
     $("sbFill").style.width = (sb == null) ? "0%" : (sb + "%");
 
-    const pa = parsePacketAge(snap);
+    const pa = parsePacketAge(activeSnap);
     $("pktAge").textContent = pa.ageText;
 
-    renderCanHeader(inst, snap || {});
-    renderModuleState(snap || {});
-    renderKeyParams(inst, snap || {});
+    renderCanHeader(inst, activeSnap || {});
+    renderModuleState(activeSnap || {});
+    renderKeyParams(inst, activeSnap || {});
 
     if (state.debug){
       $("detailsDebug").classList.remove("hidden");
