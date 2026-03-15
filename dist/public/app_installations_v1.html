@@ -110,6 +110,48 @@
       .wrap{padding:12px 10px 98px}
       .chip .msg{max-width:160px}
     }
+
+    /* === NOVO LAYOUT CAN HEADER === */
+    .hdr{padding:10px 0 6px;border-bottom:1px solid var(--line)}
+    .hdr-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:22px}
+    .hdr-row + .hdr-row{margin-top:4px}
+    .hdr-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap}
+    .hdr-right{flex-shrink:0}
+    .hdr-tag{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
+    .hdr-sep{color:var(--line);font-size:13px}
+    .hdr-muted{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+    .driver-box{background:#0b1118;border:1px solid #2a3a52;border-radius:10px;padding:4px 10px;font-size:11px;font-weight:800;color:var(--accent);font-family:var(--mono);white-space:nowrap}
+    .driver-box .driver-label{font-size:9px;color:var(--muted);font-weight:600;display:block;margin-bottom:1px}
+    .can-status-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid #223043;background:#0b1118;font-size:11px;font-weight:700;color:var(--muted)}
+    .can-status-chip.ok{border-color:#166534;background:#052e16;color:var(--good)}
+    .can-status-chip.warn{border-color:#854d0e;background:#1c1002;color:var(--warn)}
+    .can-status-chip.bad{border-color:#7f1d1d;background:#1c0505;color:var(--bad)}
+    @keyframes can-spin{to{transform:rotate(360deg)}}
+    .can-spin{display:inline-block;animation:can-spin .9s linear infinite;font-size:11px}
+
+    /* === GRID 2 COLUNAS PARÂMETROS === */
+    .param-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .param-card{background:#0b1118;border:1px solid #223043;border-radius:12px;padding:10px 12px;min-width:0}
+    .param-card.has-val{border-color:#166534}
+    .param-card .p-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .param-card .p-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .param-card .p-val.awaiting{color:#3a4a5c;font-size:12px;font-weight:400}
+    .param-summary{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+    .param-summary .ps-label{font-size:11px;color:var(--muted)}
+    .param-summary .ps-val{font-size:12px;font-family:var(--mono);font-weight:700;color:var(--accent)}
+
+    /* === STEPPER COMPACTO === */
+    .stepper-compact{display:flex;align-items:center;gap:0;margin-top:10px;overflow-x:auto;padding-bottom:2px}
+    .sc-step{display:flex;align-items:center;gap:0}
+    .sc-dot{width:28px;height:28px;border-radius:99px;border:2px solid #223043;background:#0b1118;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--muted);flex-shrink:0;position:relative}
+    .sc-dot.done{background:#052e16;border-color:#166534;color:var(--good)}
+    .sc-dot.active{background:#1c1002;border-color:#854d0e;color:var(--warn)}
+    .sc-line{width:20px;height:2px;background:#223043;flex-shrink:0}
+    .sc-line.done{background:#166534}
+    .sc-label{font-size:9px;color:var(--muted);font-weight:700;text-align:center;margin-top:3px;white-space:nowrap}
+    .sc-label.done{color:var(--good)}
+    .sc-label.active{color:var(--warn)}
+    .sc-wrap{display:flex;flex-direction:column;align-items:center}
   </style>
 </head>
 <body>
@@ -987,58 +1029,101 @@
   function renderCanHeader(inst, snapshot){
     const host = $("canHeader");
     if (!host) return;
-    host.innerHTML = "";
     const h = canGetHeaderLite(inst, snapshot);
     const ign = canToIgnitionBool(h.ignitionRaw);
-    const ignHtml = ign === true
-      ? `<span class="pill"><span class="dot good"></span>Ligada</span>`
-      : ign === false
-        ? `<span class="pill"><span class="dot bad"></span>Desligada</span>`
-        : `<span class="pill"><span class="dot warn"></span>—</span>`;
-    const items = [
-      ["Ignição", ignHtml, true],
-      ["Comunicação", h.communication || "—", false],
-      ["Driver ID", h.driver_code || "—", false],
-      ["Placa", h.license_number || "—", false],
-      ["Serial", h.serial || "—", false],
-      ["Cliente", h.client || "—", false],
-      ["Modelo", h.model || "—", false],
-    ];
-    for (const [k, v, isHtml] of items){
-      const li = document.createElement("div");
-      li.className = "li";
-      li.innerHTML = `<div class="k">${canEsc(k)}</div><div class="v">${isHtml ? v : canEsc(v || "—")}</div>`;
-      host.appendChild(li);
+
+    // chip de ignição
+    const ignClass = ign === true ? "good" : ign === false ? "bad" : "warn";
+    const ignText = ign === true ? "Ligada" : ign === false ? "Desligada" : "—";
+
+    // chip CAN status (usa msChips para detectar se há módulo OK)
+    // apenas exibe estado geral da coleta
+    const phase = snapshot?.phase || "";
+    let canChipClass = "warn";
+    let canChipIcon = `<span class="can-spin">⟳</span>`;
+    let canChipText = "aguardando";
+    if (phase === "CAN_DONE" || phase === "CAN_APPROVED") {
+      canChipClass = "ok"; canChipIcon = "✓"; canChipText = "coletado";
+    } else if (phase === "CAN_PARTIAL") {
+      canChipClass = "warn"; canChipIcon = `<span class="can-spin">⟳</span>`; canChipText = "coletando";
+    } else if (phase && phase.includes("ERROR")) {
+      canChipClass = "bad"; canChipIcon = "✗"; canChipText = "erro CAN";
     }
+
+    const plate = canEsc(h.license_number || "—");
+    const serial = canEsc(h.serial || "—");
+    const client = canEsc(h.client || "—");
+    const model = canEsc(h.model || "—");
+    const gprs = canEsc(h.communication || "—");
+    const driverCode = h.driver_code && h.driver_code !== "—" ? h.driver_code : null;
+
+    host.innerHTML = `
+      <div class="hdr">
+        <div class="hdr-row">
+          <div class="hdr-left">
+            <span class="hdr-tag">${plate}</span>
+            <span class="hdr-sep">·</span>
+            <span class="hdr-tag" style="color:var(--accent)">${serial}</span>
+            <span class="hdr-sep">·</span>
+            <span class="hdr-muted">${client}</span>
+          </div>
+          <div class="hdr-right">
+            ${driverCode
+              ? `<div class="driver-box"><span class="driver-label">DRIVER</span>${canEsc(driverCode)}</div>`
+              : `<div class="driver-box" style="color:var(--muted);border-color:#1f2a38"><span class="driver-label">DRIVER</span>—</div>`
+            }
+          </div>
+        </div>
+        <div class="hdr-row" style="margin-top:6px">
+          <div class="hdr-left">
+            <span class="hdr-muted">${model}</span>
+            <span class="hdr-sep">·</span>
+            <span class="pill" style="font-size:10px;padding:2px 8px">
+              <span class="dot ${ignClass}"></span>${ignText}
+            </span>
+            <span class="hdr-sep">·</span>
+            <span class="hdr-muted">GPRS: ${gprs}</span>
+          </div>
+          <div class="hdr-right">
+            <span class="can-status-chip ${canChipClass}">${canChipIcon} ${canChipText}</span>
+          </div>
+        </div>
+      </div>`;
   }
 
   function renderModuleState(snapshot){
     const x = canExtractRowsFromSnapshot(snapshot);
     const host = $("msChips");
     host.innerHTML = "";
+    let hasAny = false;
     for (const w of CAN_MS_WANT){
       const it = canFindModule(x.ms, w.names);
       const ok = canStrictOkTriple(it);
-      const msg = canSafeDecode(canPickErr(it));
-      let kind = "bad";
-      if (ok) kind = "good";
-      else if (!it) kind = "warn";
+      // NOVO: só exibe módulos que estão OK
+      if (!ok) continue;
+      hasAny = true;
       const chip = document.createElement("div");
       chip.className = "chip";
-      if (msg) chip.title = msg;
+      chip.style.borderColor = "#166534";
+      chip.style.background = "#052e16";
       const d = document.createElement("span");
-      d.className = "dot " + kind;
+      d.className = "dot good";
       const n = document.createElement("span");
       n.className = "name";
       n.textContent = w.key;
       const m = document.createElement("span");
       m.className = "msg";
-      if (!it) m.textContent = "sem dados";
-      else if (msg) m.textContent = msg;
-      else m.textContent = ok ? "OK" : "falha";
+      m.textContent = "OK";
+      m.style.color = "var(--good)";
       chip.appendChild(d);
       chip.appendChild(n);
       chip.appendChild(m);
+      host.appendChild(chip);
+    }
+    if (!hasAny) {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.innerHTML = `<span class="dot warn"></span><span class="name" style="color:var(--muted)">Nenhum módulo OK</span>`;
       host.appendChild(chip);
     }
   }
@@ -1078,23 +1163,49 @@
     if (!Number.isFinite(withVal)) {
       withVal = x.params.filter((p) => canDisplayValue(p) !== "—").length;
     }
-    const top = document.createElement("div");
-    top.className = "li";
-    top.innerHTML = `<div class="k">Parameters</div><div class="v">${withVal}/${total}</div>`;
-    host.appendChild(top);
-    const built = canBuildKeyParamItems(inst, snapshot);
-    for (const it of built.picked){
-      const li = document.createElement("div");
-      li.className = "li";
-      li.innerHTML = `<div class="k">${canEsc(it.name)}</div><div class="v">${canEsc(it.val)}</div>`;
-      host.appendChild(li);
+
+    // Cabeçalho resumo
+    const summary = document.createElement("div");
+    summary.className = "param-summary";
+    summary.innerHTML = `<span class="ps-label">Parâmetros CAN</span><span class="ps-val">${withVal}/${total}</span>`;
+    host.appendChild(summary);
+
+    // Grid 2 colunas — todos os parâmetros das regras
+    const grid = document.createElement("div");
+    grid.className = "param-grid";
+
+    for (const rule of CAN_PARAM_RULES) {
+      const p = rule.key === "ignition"
+        ? (() => {
+            const hdr = canGetHeaderLite(inst, snapshot);
+            const found = canFindParam(x.params, rule);
+            if (found) return { _label: rule.label, _val: canDisplayValue(found) };
+            if (hdr.ignitionRaw) return { _label: rule.label, _val: canFmtAny(hdr.ignitionRaw) };
+            return null;
+          })()
+        : (() => {
+            const found = canFindParam(x.params, rule);
+            if (!found) return null;
+            const shown = canDisplayValue(found);
+            if (shown === "—") return null;
+            return { _label: rule.label, _val: shown };
+          })();
+
+      const hasVal = p !== null;
+      const card = document.createElement("div");
+      card.className = "param-card" + (hasVal ? " has-val" : "");
+      const label = document.createElement("div");
+      label.className = "p-label";
+      label.textContent = rule.label;
+      const val = document.createElement("div");
+      val.className = "p-val" + (hasVal ? "" : " awaiting");
+      val.textContent = hasVal ? (p._val || "—") : "aguardando...";
+      card.appendChild(label);
+      card.appendChild(val);
+      grid.appendChild(card);
     }
-    if (!built.picked.length){
-      const li = document.createElement("div");
-      li.className = "li";
-      li.innerHTML = `<div class="k">Sem parâmetros principais</div><div class="v">—</div>`;
-      host.appendChild(li);
-    }
+
+    host.appendChild(grid);
   }
 
 
@@ -1106,8 +1217,7 @@
 
   function statusToStepIndex(status){
     const s = String(status || "").toUpperCase();
-    if (s.includes("COMPLETED")) return 5;
-    if (s.includes("GS")) return 4;
+    if (s.includes("COMPLETED") || s.includes("GS")) return 3;
     if (s.includes("CAN_APPROVED")) return 3;
     if (s.includes("CAN_")) return 2;
     if (s.includes("WAITING_REBOOT")) return 2;
@@ -1119,10 +1229,8 @@
   function renderStepper(status){
     const steps = [
       { b:"HTML5", s:"cadastro" },
-      { b:"SB", s:"atualizando" },
+      { b:"SB", s:"configurando" },
       { b:"CAN", s:"coletando" },
-      { b:"Aprovar", s:"técnico" },
-      { b:"GS", s:"enviado" },
       { b:"Fim", s:"ok" },
     ];
 
@@ -1130,21 +1238,37 @@
     const host = $("stepper");
     host.innerHTML = "";
 
-    for (let i=0;i<steps.length;i++){
+    const wrap = document.createElement("div");
+    wrap.className = "stepper-compact";
+
+    for (let i = 0; i < steps.length; i++){
       const it = steps[i];
-      const el = document.createElement("div");
-      el.className = "step";
-      const d = document.createElement("span");
-      d.className = "dot " + (i < idx ? "good" : (i === idx ? "warn" : ""));
-      const b = document.createElement("b");
-      b.textContent = it.b;
-      const s = document.createElement("span");
-      s.textContent = it.s;
-      el.appendChild(d);
-      el.appendChild(b);
-      el.appendChild(s);
-      host.appendChild(el);
+      const isDone = i < idx;
+      const isActive = i === idx;
+
+      const scWrap = document.createElement("div");
+      scWrap.className = "sc-wrap";
+
+      const dot = document.createElement("div");
+      dot.className = "sc-dot" + (isDone ? " done" : isActive ? " active" : "");
+      dot.textContent = isDone ? "✓" : String(i + 1);
+
+      const lbl = document.createElement("div");
+      lbl.className = "sc-label" + (isDone ? " done" : isActive ? " active" : "");
+      lbl.textContent = it.b;
+
+      scWrap.appendChild(dot);
+      scWrap.appendChild(lbl);
+      wrap.appendChild(scWrap);
+
+      if (i < steps.length - 1){
+        const line = document.createElement("div");
+        line.className = "sc-line" + (isDone ? " done" : "");
+        line.style.marginBottom = "14px"; // alinha com o centro dos dots
+        wrap.appendChild(line);
+      }
     }
+    host.appendChild(wrap);
   }
 
   function renderTop(inst){
