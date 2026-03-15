@@ -91,6 +91,8 @@
     .bottomBar button{flex:1}
 
     .hidden{display:none !important}
+    @keyframes pulse-bad{ 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse-bad{ animation:pulse-bad 1.2s ease-in-out infinite }
 
     @media (max-width:520px){
       .row > *{min-width: 100%}
@@ -109,6 +111,10 @@
   <div style="display:flex;gap:10px;align-items:center">
     <div class="kv" id="topKv"></div>
     <button id="btnNew" class="secondary" style="padding:8px 10px;border-radius:12px;font-weight:800;font-size:12px">Nova</button>
+    <div id="sessionPill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid #2a3a52;background:#0b1118;color:var(--muted)">
+      <span id="sessionDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0"></span>
+      <span id="sessionTxt">sessão...</span>
+    </div>
   </div>
 </header>
 
@@ -1270,6 +1276,39 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     $("btnRefresh").disabled = true;
     setSubline("Pronto");
   }
+
+  // ====== session status ======
+  async function checkSessionStatus(){
+    try {
+      const r = await fetch("/api/session-status", { cache: "no-store" });
+      if (!r.ok) throw new Error("http " + r.status);
+      const d = await r.json();
+      const pill = document.getElementById("sessionPill");
+      const dot  = document.getElementById("sessionDot");
+      const txt  = document.getElementById("sessionTxt");
+      if (!pill || !dot || !txt) return;
+      if (d.hasToken && d.tokenLen >= 20) {
+        dot.style.background = "var(--good)";
+        dot.classList.remove("pulse-bad");
+        txt.textContent = "sessão OK";
+        pill.style.borderColor = "#1a3a1a";
+        pill.style.color = "var(--good)";
+        pill.title = "";
+      } else {
+        dot.style.background = "var(--bad)";
+        dot.classList.add("pulse-bad");
+        txt.textContent = "⚠ sessão expirada";
+        pill.style.borderColor = "var(--bad)";
+        pill.style.color = "var(--bad)";
+        pill.title = "Token inválido — reconecte à VPN e atualize o token";
+      }
+    } catch(e) {
+      const txt = document.getElementById("sessionTxt");
+      if (txt) txt.textContent = "sessão ?";
+    }
+  }
+  checkSessionStatus();
+  setInterval(checkSessionStatus, 60000);
 
   // ====== polling ======
   function stopPoll(){

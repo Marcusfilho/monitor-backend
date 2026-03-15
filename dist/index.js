@@ -105,6 +105,11 @@ app.get("/health", (_req, res) => {
     });
 });
 // Rotas
+// Rota pública: status da sessão (sem expor token ou admin key)
+app.get("/api/session-status", (_req, res) => {
+    const s = (0, sessionTokenStore_1.getSessionTokenStatus)();
+    res.json({ hasToken: s.hasToken, tokenLen: s.tokenLen });
+});
 app.use("/api/admin/catalogs", adminCatalogRoutes_1.default);
 app.use("/api/auth", authRoutes_1.default);
 app.use("/api/monitor", monitorRoutes_1.default);

@@ -9,7 +9,7 @@ import jobRoutes from "./routes/jobRoutes";
 import adminCatalogRoutes from "./routes/adminCatalogRoutes";
 
 import installationsRoutes from "./routes/installationsRoutes";
-import { initSessionTokenStore } from "./services/sessionTokenStore";
+import { initSessionTokenStore, getSessionTokenStatus } from "./services/sessionTokenStore";
 import { migrateIfNeeded } from "./db/migrate";
 import cors from "cors";
 
@@ -117,6 +117,11 @@ app.get("/health", (_req, res) => {
 });
 
 // Rotas
+// Rota pública: status da sessão (sem expor token ou admin key)
+app.get("/api/session-status", (_req, res) => {
+  const s = getSessionTokenStatus();
+  res.json({ hasToken: s.hasToken, tokenLen: s.tokenLen });
+});
 app.use("/api/admin/catalogs", adminCatalogRoutes);
 
 app.use("/api/auth", authRoutes);
