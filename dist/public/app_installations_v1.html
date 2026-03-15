@@ -93,6 +93,16 @@
     .hidden{display:none !important}
     @keyframes pulse-bad{ 0%,100%{opacity:1} 50%{opacity:.4} }
     .pulse-bad{ animation:pulse-bad 1.2s ease-in-out infinite }
+    .csel-trigger{width:100%;padding:10px 12px;border-radius:14px;border:1px solid #273245;background:#0b1118;color:var(--text);font-size:14px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+    .csel-trigger .csel-arrow{color:var(--muted);font-size:11px}
+    .csel-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);align-items:flex-end}
+    .csel-overlay.open{display:flex}
+    .csel-sheet{width:100%;background:#0f1620;border-radius:20px 20px 0 0;max-height:70vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,12px)}
+    .csel-sheet-title{padding:16px 16px 8px;font-size:13px;color:var(--muted);font-weight:700;border-bottom:1px solid #1f2a38}
+    .csel-item{padding:14px 16px;font-size:15px;color:var(--text);border-bottom:1px solid #1a2535;cursor:pointer}
+    .csel-item:active{background:#1a2535}
+    .csel-item.selected{color:var(--accent)}
+    .csel-cancel{padding:14px 16px;font-size:14px;color:var(--muted);text-align:center;cursor:pointer;margin-top:4px}
 
     @media (max-width:520px){
       .row > *{min-width: 100%}
@@ -1319,6 +1329,64 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       if (txt) txt.textContent = "sessão ?";
     }
   }
+  // ====== custom select (UX mobile) ======
+  function initCustomSelect(selectEl){
+    if (!selectEl || selectEl.dataset.cselInit) return;
+    selectEl.dataset.cselInit = "1";
+    selectEl.style.display = "none";
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "csel-trigger";
+    trigger.innerHTML = '<span class="csel-val"></span><span class="csel-arrow">▼</span>';
+    selectEl.parentNode.insertBefore(trigger, selectEl.nextSibling);
+
+    const overlay = document.createElement("div");
+    overlay.className = "csel-overlay";
+    overlay.innerHTML = '<div class="csel-sheet"><div class="csel-sheet-title" id="csel-title-'+selectEl.id+'"></div><div class="csel-items"></div><div class="csel-cancel">Cancelar</div></div>';
+    document.body.appendChild(overlay);
+
+    function syncTrigger(){
+      const opt = selectEl.options[selectEl.selectedIndex];
+      trigger.querySelector(".csel-val").textContent = opt ? (opt.textContent || opt.value) : "—";
+    }
+    function buildItems(){
+      const host = overlay.querySelector(".csel-items");
+      host.innerHTML = "";
+      const title = overlay.querySelector(".csel-sheet-title");
+      title.textContent = selectEl.closest("div")?.querySelector("label")?.textContent?.replace(/\(.*\)/g,"").trim() || "";
+      for (let i=0;i<selectEl.options.length;i++){
+        const opt = selectEl.options[i];
+        const item = document.createElement("div");
+        item.className = "csel-item" + (i === selectEl.selectedIndex ? " selected" : "");
+        item.textContent = opt.textContent || opt.value;
+        item.addEventListener("click", () => {
+          selectEl.selectedIndex = i;
+          selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+          syncTrigger();
+          overlay.classList.remove("open");
+        });
+        host.appendChild(item);
+      }
+    }
+    trigger.addEventListener("click", () => { buildItems(); overlay.classList.add("open"); });
+    overlay.querySelector(".csel-cancel").addEventListener("click", () => overlay.classList.remove("open"));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.remove("open"); });
+
+    // observer para quando as options mudarem dinamicamente
+    new MutationObserver(() => syncTrigger()).observe(selectEl, { childList: true, subtree: true });
+    syncTrigger();
+  }
+
+  function initAllCustomSelects(){
+    ["service","clientSelect","cat_manufacturer","cat_model","gs_label","gs_harness"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) initCustomSelect(el);
+    });
+  }
+  // inicializar após o DOM estar pronto
+  setTimeout(initAllCustomSelects, 100);
+
   checkSessionStatus();
   setInterval(checkSessionStatus, 60000);
 
