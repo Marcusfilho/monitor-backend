@@ -226,7 +226,7 @@ async function fetchNextJobOfType(type) {
             job.payload.sessionToken = tok;
         }
         // garante tag do job no comment
-        job.payload.comment = appendJobTag(job.payload.comment, job.id);
+        // job.payload.comment = appendJobTag(job.payload.comment, job.id); // removido: não poluir comment visível
         return job;
     }
     catch (e) {

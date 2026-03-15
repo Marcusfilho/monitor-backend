@@ -240,7 +240,7 @@ async function fetchNextJobOfType(type: string): Promise<SchemeBuilderJob | null
     }
 
     // garante tag do job no comment
-    job.payload.comment = appendJobTag(job.payload.comment, job.id);
+    // job.payload.comment = appendJobTag(job.payload.comment, job.id); // removido: não poluir comment visível
 
     return job as SchemeBuilderJob;
   } catch (e: any) {
