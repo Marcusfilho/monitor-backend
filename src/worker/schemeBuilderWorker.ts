@@ -20,11 +20,18 @@ try {
     workerId,
     workerKey,
     intervalMs,
-    getState: () => ({
-      status: "running",
-      checks: { backend_ok: true },
-      meta: { uptime_s: Math.round(process.uptime()) },
-    }),
+    getState: () => {
+      let session_ok = false;
+      try {
+        const tok = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
+        session_ok = tok.length >= 20;
+      } catch {}
+      return {
+        status: "running",
+        checks: { backend_ok: true, session_ok },
+        meta: { uptime_s: Math.round(process.uptime()) },
+      };
+    },
   });
 
   console.log("[hb] enabled (src):", { workerId, intervalMs });

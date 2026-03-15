@@ -1280,27 +1280,39 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   // ====== session status ======
   async function checkSessionStatus(){
     try {
-      const r = await fetch("/api/session-status", { cache: "no-store" });
+      const r = await fetch("/api/worker/status", { cache: "no-store" });
       if (!r.ok) throw new Error("http " + r.status);
       const d = await r.json();
       const pill = document.getElementById("sessionPill");
       const dot  = document.getElementById("sessionDot");
       const txt  = document.getElementById("sessionTxt");
       if (!pill || !dot || !txt) return;
-      if (d.hasToken && d.tokenLen >= 20) {
+      // pega o worker principal (vm-tunel-01 ou o primeiro disponível)
+      const workers = d.workers || [];
+      const w = workers.find(x => x.checks?.session_ok !== undefined) || workers[0];
+      const sessionOk = w?.checks?.session_ok === true;
+      const workerOk  = !!w && (Date.now() - new Date(w.ts).getTime()) < 120000;
+      if (sessionOk && workerOk) {
         dot.style.background = "var(--good)";
         dot.classList.remove("pulse-bad");
         txt.textContent = "sessão OK";
         pill.style.borderColor = "#1a3a1a";
         pill.style.color = "var(--good)";
         pill.title = "";
+      } else if (!workerOk) {
+        dot.style.background = "var(--warn)";
+        dot.classList.remove("pulse-bad");
+        txt.textContent = "⚠ worker offline";
+        pill.style.borderColor = "var(--warn)";
+        pill.style.color = "var(--warn)";
+        pill.title = "Worker não responde há mais de 2 minutos";
       } else {
         dot.style.background = "var(--bad)";
         dot.classList.add("pulse-bad");
         txt.textContent = "⚠ sessão expirada";
         pill.style.borderColor = "var(--bad)";
         pill.style.color = "var(--bad)";
-        pill.title = "Token inválido — reconecte à VPN e atualize o token";
+        pill.title = "Token inválido — reconecte à VPN";
       }
     } catch(e) {
       const txt = document.getElementById("sessionTxt");
