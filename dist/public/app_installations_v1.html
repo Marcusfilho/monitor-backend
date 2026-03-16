@@ -35,7 +35,7 @@
     textarea{min-height:70px;resize:vertical}
 
     .row{display:flex;gap:10px;flex-wrap:wrap}
-    .row > *{flex:1;min-width:220px}
+    .row > *{flex:1;min-width:140px}
 
     button{
       cursor:pointer;border:1px solid #2a3a52;background:#122033;color:var(--text);
@@ -130,13 +130,15 @@
     .can-spin{display:inline-block;animation:can-spin .9s linear infinite;font-size:11px}
 
     /* === GRID 2 COLUNAS PARÂMETROS === */
-    .param-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-    .param-card{background:#0b1118;border:1px solid #223043;border-radius:12px;padding:10px 12px;min-width:0}
-    .param-card.has-val{border-color:#166534}
-    .param-card .p-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .param-card .p-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .param-card .p-val.awaiting{color:#3a4a5c;font-size:12px;font-weight:400}
-    .param-summary{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+    .param-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+    .param-card{background:transparent;border:1px solid #1a2535;border-radius:10px;padding:8px 10px;min-width:0}
+    .param-card.has-val{border-color:#1a3a28;background:#040e08}
+    .param-card .p-label{font-size:9px;color:#4a5a6e;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .param-card .p-val{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .param-card.has-val .p-label{color:#2d6a44}
+    .param-card.has-val .p-val{color:#4ade80}
+    .param-card .p-val.awaiting{color:#232f3e;font-size:11px;font-weight:400}
+    .param-summary{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:5px 0;border-bottom:1px solid var(--line)}
     .param-summary .ps-label{font-size:11px;color:var(--muted)}
     .param-summary .ps-val{font-size:12px;font-family:var(--mono);font-weight:700;color:var(--accent)}
 
@@ -155,14 +157,17 @@
   </style>
 </head>
 <body>
-<header>
-  <div class="title">
-    <h1>APP V1 — Instalações <span class="pill" style="margin-left:8px">v1.5</span></h1>
-    <div class="sub" id="subline">Pronto</div>
+<header style="padding:10px 14px;gap:8px">
+  <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:13px;font-weight:700;color:var(--text)">App Instalador</span>
+      <span style="font-size:10px;color:#3a4a5c;font-weight:600">v1.5</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted)" id="subline">Pronto</div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
     <div class="kv" id="topKv"></div>
-    <button id="btnNew" class="secondary" style="padding:8px 10px;border-radius:12px;font-weight:800;font-size:12px">Nova</button>
+    <button id="btnNew" class="secondary" style="padding:7px 12px;border-radius:12px;font-weight:700;font-size:12px">Nova</button>
     <div id="sessionPill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid #2a3a52;background:#0b1118;color:var(--muted)">
       <span id="sessionDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0"></span>
       <span id="sessionTxt">sessão...</span>
@@ -175,67 +180,69 @@
   <section class="card" id="cardForm">
     <h2>1) Dados da instalação</h2>
 
-    <label>Serviço</label>
-    <select id="service">
-      <option value="INSTALL">INSTALL</option>
-      <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
-      <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
-      <option value="UNINSTALL">UNINSTALL</option>
-    </select>
-
-    <div class="row">
-      <div>
-        <label>Cliente</label>
-        <select id="clientSelect"></select>
-        <div class="hidden" id="clientMeta" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
-      </div>
-      <div>
-        <label>Setting (Monitor)</label>
-        <input id="vehicleSettingId" placeholder="ex.: 5592" inputmode="numeric" />
-      </div>
+    <!-- Serviço: sutil, inline -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:11px;color:var(--muted);flex-shrink:0">Serviço</span>
+      <select id="service" style="padding:5px 10px;font-size:12px;border-radius:10px;flex:1;min-width:0">
+        <option value="INSTALL">INSTALL</option>
+        <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
+        <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
+        <option value="UNINSTALL">UNINSTALL</option>
+      </select>
     </div>
 
-    <div class="row">
-      <div>
+    <!-- vehicleSettingId: preenchido automaticamente pelo select de cliente, não exibido -->
+    <input type="hidden" id="vehicleSettingId" />
+
+    <label>Cliente</label>
+    <select id="clientSelect"></select>
+    <div class="hidden" id="clientMeta" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+
+    <!-- Frota + Placa na mesma linha -->
+    <div class="row" style="margin-top:10px">
+      <div style="flex:0 0 35%;min-width:0">
         <label>Frota <span style="font-size:10px;opacity:.7">(opcional)</span></label>
         <input id="fleet" placeholder="ex.: 0042" />
       </div>
-      <div>
-        <label>Placa (real)</label>
+      <div style="flex:1;min-width:0">
+        <label>Placa</label>
         <input id="plate_real" placeholder="ex.: ABC1D23" autocapitalize="characters" style="text-transform:uppercase" />
-      </div>
-      <div id="rowSerial">
-        <label>Serial</label>
-        <input id="serial" placeholder="ex.: 913055459" inputmode="numeric" />
       </div>
     </div>
 
-    <div class="row" id="rowInstallModel">
-      <div>
+    <div id="rowSerial" style="margin-top:0">
+      <label>Serial</label>
+      <input id="serial" placeholder="ex.: 913055459" inputmode="numeric" />
+    </div>
+
+    <!-- Fabricante + Modelo na mesma linha -->
+    <div class="row" id="rowInstallModel" style="margin-top:0">
+      <div style="flex:1;min-width:0">
         <label>Fabricante</label>
-        <select id="cat_manufacturer"></select>
+        <select id="cat_manufacturer" style="font-size:13px"></select>
       </div>
-      <div>
+      <div style="flex:1;min-width:0">
         <label>Modelo</label>
-        <select id="cat_model"></select>
+        <select id="cat_model" style="font-size:13px"></select>
       </div>
     </div>
-    <div class="hidden" id="assetTypeWrap" style="margin-top:8px">
-      <span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span>
-    </div>
+
     <div style="margin-top:10px">
       <label>Comentário</label>
       <input id="comment" placeholder="Comentário para os comandos no Monitor" />
     </div>
+    <!-- assetType: mantido no DOM para o JS, mas nunca exibido ao usuário -->
+    <div class="hidden" id="assetTypeWrap"><span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span></div>
 
-    <details id="gsDetails">
-      <summary>G‑Sensor (orientação)</summary>
-      <div class="row" style="margin-top:6px">
-        <div>
+    <!-- G-Sensor: sempre visível, dois campos lado a lado -->
+    <div style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
+      <div class="row" style="margin-top:0">
+        <div style="flex:1;min-width:0">
           <label>Etiqueta (label)</label>
           <select id="gs_label"></select>
         </div>
-        <div>
+        <div style="flex:1;min-width:0">
           <label>Chicote (harness)</label>
           <select id="gs_harness"></select>
         </div>
@@ -244,8 +251,7 @@
         <label>Comando (auto)</label>
         <input id="gs_command" readonly />
       </div>
-      <div style="margin-top:8px;font-size:12px;color:var(--muted)">O comando é calculado automaticamente.</div>
-    </details>
+    </div>
 
     <div style="margin-top:12px">
       <label>Fotos da instalação <span style="font-size:10px;opacity:.7">(em breve)</span></label>
@@ -908,19 +914,21 @@
   ];
 
   const CAN_PARAM_RULES = [
-    { key: "speed",           label: "Velocidade",           ids: [],                                              aliases: ["sysparamspeed", "vehiclespeed", "speed"] },
-    { key: "rpm",             label: "RPM",                  ids: ["000000AD", "0000003A", "00002715"],       aliases: ["sysparamrpm", "enginerpm", "rpm"] },
-    { key: "distance",        label: "Distância",            ids: ["00002714"],                                   aliases: ["sysparamvehicledistance", "vehicledistance", "distance", "odometer"] },
-    { key: "engine_hours",    label: "Horas do motor",       ids: [],                                              aliases: ["sysparamenginetotalhoursofoperation", "enginetotalhoursofoperation", "enginehours"] },
-    { key: "fuel_level",      label: "Nível de combustível", ids: ["00000032", "000000C3", "0000879F", "00002717"], aliases: ["sysparamfuellevel", "tflprocessedsysparamfuellevel", "fuellevel"] },
-    { key: "fuel_rate",       label: "Consumo instantâneo",  ids: ["0000003C", "00002718"],                     aliases: ["sysparamfuelrate", "enginefuelrate", "fuelrate"] },
-    { key: "fuel_used",       label: "Combustível usado",    ids: ["00000031", "000000C5", "00002719"],       aliases: ["sysparamtotalfuelused", "calctotalfuelusedfromsysfuelrate", "enginetotalfuelused", "fuelused"] },
-    { key: "coolant_temp",    label: "Temp. coolant",        ids: ["0000002F", "0000010E", "0000271F"],       aliases: ["sysparamcoolanttemp", "enginecoolanttemperature", "coolanttemp"] },
-    { key: "oil_temp",        label: "Temp. óleo",           ids: ["0000168E", "0000271E"],                     aliases: ["sysparamoiltemp", "engineoiltemperature1", "oiltemp"] },
-    { key: "oil_pressure",    label: "Pressão do óleo",      ids: ["00000024", "0000010D", "00002723"],       aliases: ["sysparamoilpressure", "engineoilpressure", "oilpressure"] },
-    { key: "air_pressure",    label: "Pressão do ar",        ids: [],                                              aliases: ["sysparambrake1airpressurebar", "brake1airpressurebar", "airpressure"] },
-    { key: "battery_voltage", label: "Tensão da bateria",    ids: [],                                              aliases: ["sysparambatteryvoltage", "mbuv2mtstbatteryvoltage", "armanaloginput4backupbatteryvoltage", "batteryvoltage"] },
-    { key: "ignition",        label: "Ignição",              ids: [],                                              aliases: ["sysparamignitionnodelay", "sysparamignition", "ignitionstatus", "ignition"] },
+    // 1) Combustível (prioridade máxima)
+    { key: "fuel_level",      label: "Nível combustível",    ids: ["00000032", "000000C3", "0000879F", "00002717"], aliases: ["sysparamfuellevel", "tflprocessedsysparamfuellevel", "fuellevel"] },
+    { key: "fuel_rate",       label: "Consumo instantâneo",  ids: ["0000003C", "00002718"],                         aliases: ["sysparamfuelrate", "enginefuelrate", "fuelrate"] },
+    { key: "fuel_used",       label: "Combustível usado",    ids: ["00000031", "000000C5", "00002719"],             aliases: ["sysparamtotalfuelused", "calctotalfuelusedfromsysfuelrate", "enginetotalfuelused", "fuelused"] },
+    // 2) Odômetro
+    { key: "distance",        label: "Odômetro",             ids: ["00002714"],                                     aliases: ["sysparamvehicledistance", "vehicledistance", "distance", "odometer"] },
+    { key: "rpm",             label: "RPM",                  ids: ["000000AD", "0000003A", "00002715"],             aliases: ["sysparamrpm", "enginerpm", "rpm"] },
+    // 3) Pressão
+    { key: "oil_pressure",    label: "Pressão do óleo",      ids: ["00000024", "0000010D", "00002723"],             aliases: ["sysparamoilpressure", "engineoilpressure", "oilpressure"] },
+    { key: "air_pressure",    label: "Pressão do ar",        ids: [],                                               aliases: ["sysparambrake1airpressurebar", "brake1airpressurebar", "airpressure"] },
+    // 4) Temperatura
+    { key: "coolant_temp",    label: "Temp. coolant",        ids: ["0000002F", "0000010E", "0000271F"],             aliases: ["sysparamcoolanttemp", "enginecoolanttemperature", "coolanttemp"] },
+    { key: "oil_temp",        label: "Temp. óleo",           ids: ["0000168E", "0000271E"],                         aliases: ["sysparamoiltemp", "engineoiltemperature1", "oiltemp"] },
+    // 5) Limpador
+    { key: "wiper",           label: "Limpador",             ids: [],                                               aliases: ["sysparamwiperstatus", "wiperstatus", "wiper", "wiperactive", "wiper_status"] },
   ];
 
   function canFindParam(rows, rule){
@@ -1032,16 +1040,11 @@
     const h = canGetHeaderLite(inst, snapshot);
     const ign = canToIgnitionBool(h.ignitionRaw);
 
-    // chip de ignição
     const ignClass = ign === true ? "good" : ign === false ? "bad" : "warn";
-    const ignText = ign === true ? "Ligada" : ign === false ? "Desligada" : "—";
+    const ignText  = ign === true ? "Ligada" : ign === false ? "Desligada" : "—";
 
-    // chip CAN status (usa msChips para detectar se há módulo OK)
-    // apenas exibe estado geral da coleta
     const phase = snapshot?.phase || "";
-    let canChipClass = "warn";
-    let canChipIcon = `<span class="can-spin">⟳</span>`;
-    let canChipText = "aguardando";
+    let canChipClass = "warn", canChipIcon = `<span class="can-spin">⟳</span>`, canChipText = "aguardando";
     if (phase === "CAN_DONE" || phase === "CAN_APPROVED") {
       canChipClass = "ok"; canChipIcon = "✓"; canChipText = "coletado";
     } else if (phase === "CAN_PARTIAL") {
@@ -1050,43 +1053,30 @@
       canChipClass = "bad"; canChipIcon = "✗"; canChipText = "erro CAN";
     }
 
-    const plate = canEsc(h.license_number || "—");
-    const serial = canEsc(h.serial || "—");
-    const client = canEsc(h.client || "—");
-    const model = canEsc(h.model || "—");
-    const gprs = canEsc(h.communication || "—");
-    const driverCode = h.driver_code && h.driver_code !== "—" ? h.driver_code : null;
+    const plate   = canEsc(h.license_number || "—");
+    const serial  = canEsc(h.serial || "—");
+    const client  = canEsc(h.client || "—");
+    const model   = canEsc(h.model || "—");
+    const gprs    = canEsc(h.communication || "—");
+    const driver  = h.driver_code && h.driver_code !== "—" ? canEsc(h.driver_code) : "—";
 
     host.innerHTML = `
-      <div class="hdr">
-        <div class="hdr-row">
-          <div class="hdr-left">
-            <span class="hdr-tag">${plate}</span>
-            <span class="hdr-sep">·</span>
-            <span class="hdr-tag" style="color:var(--accent)">${serial}</span>
-            <span class="hdr-sep">·</span>
-            <span class="hdr-muted">${client}</span>
-          </div>
-          <div class="hdr-right">
-            ${driverCode
-              ? `<div class="driver-box"><span class="driver-label">DRIVER</span>${canEsc(driverCode)}</div>`
-              : `<div class="driver-box" style="color:var(--muted);border-color:#1f2a38"><span class="driver-label">DRIVER</span>—</div>`
-            }
-          </div>
+      <div class="hdr" style="display:flex;gap:10px;align-items:flex-start">
+        <!-- coluna esquerda: dados do veículo -->
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${plate}</div>
+          <div style="font-size:11px;color:var(--accent);font-family:var(--mono);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${serial}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${client}</div>
+          <div style="font-size:10px;color:#3a4a5c;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${model}</div>
+          <div style="font-size:10px;color:#3a4a5c;margin-top:1px">GPRS: ${gprs}</div>
         </div>
-        <div class="hdr-row" style="margin-top:6px">
-          <div class="hdr-left">
-            <span class="hdr-muted">${model}</span>
-            <span class="hdr-sep">·</span>
-            <span class="pill" style="font-size:10px;padding:2px 8px">
-              <span class="dot ${ignClass}"></span>${ignText}
-            </span>
-            <span class="hdr-sep">·</span>
-            <span class="hdr-muted">GPRS: ${gprs}</span>
-          </div>
-          <div class="hdr-right">
-            <span class="can-status-chip ${canChipClass}">${canChipIcon} ${canChipText}</span>
-          </div>
+        <!-- coluna direita: chips empilhados -->
+        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0">
+          <span class="can-status-chip ${canChipClass}">${canChipIcon} ${canChipText}</span>
+          <div class="driver-box"><span class="driver-label">DRIVER</span>${driver}</div>
+          <span class="pill" style="font-size:10px;padding:3px 8px">
+            <span class="dot ${ignClass}"></span>${ignText}
+          </span>
         </div>
       </div>`;
   }
@@ -1170,38 +1160,20 @@
     summary.innerHTML = `<span class="ps-label">Parâmetros CAN</span><span class="ps-val">${withVal}/${total}</span>`;
     host.appendChild(summary);
 
-    // Grid 2 colunas — todos os parâmetros das regras
+    // Grid 2 colunas
     const grid = document.createElement("div");
     grid.className = "param-grid";
 
     for (const rule of CAN_PARAM_RULES) {
-      const p = rule.key === "ignition"
-        ? (() => {
-            const hdr = canGetHeaderLite(inst, snapshot);
-            const found = canFindParam(x.params, rule);
-            if (found) return { _label: rule.label, _val: canDisplayValue(found) };
-            if (hdr.ignitionRaw) return { _label: rule.label, _val: canFmtAny(hdr.ignitionRaw) };
-            return null;
-          })()
-        : (() => {
-            const found = canFindParam(x.params, rule);
-            if (!found) return null;
-            const shown = canDisplayValue(found);
-            if (shown === "—") return null;
-            return { _label: rule.label, _val: shown };
-          })();
+      const found = canFindParam(x.params, rule);
+      const shown = found ? canDisplayValue(found) : null;
+      const hasVal = !!(shown && shown !== "—");
 
-      const hasVal = p !== null;
       const card = document.createElement("div");
       card.className = "param-card" + (hasVal ? " has-val" : "");
-      const label = document.createElement("div");
-      label.className = "p-label";
-      label.textContent = rule.label;
-      const val = document.createElement("div");
-      val.className = "p-val" + (hasVal ? "" : " awaiting");
-      val.textContent = hasVal ? (p._val || "—") : "aguardando...";
-      card.appendChild(label);
-      card.appendChild(val);
+      card.innerHTML = `
+        <div class="p-label">${canEsc(rule.label)}</div>
+        <div class="p-val${hasVal ? "" : " awaiting"}">${hasVal ? canEsc(shown) : "aguardando..."}</div>`;
       grid.appendChild(card);
     }
 
@@ -1272,12 +1244,13 @@
   }
 
   function renderTop(inst){
+    // DEV: chips de status e inst_id ocultos no header (úteis só para debug)
+    // Para reativar: remover o "return" abaixo
     const top = $("topKv");
     top.innerHTML = "";
-
+    // return; // descomente para ocultar em produção
     const st = statusToLabel(inst?.status);
     top.appendChild(pill("status: " + st, ""));
-
     const id = inst?.installation_id || inst?.id || null;
     if (id) top.appendChild(pill(String(id), ""));
   }
@@ -1325,6 +1298,7 @@ function renderAll(inst){
     
 const status = inst?.status || "";
 const st = String(status || "").toUpperCase();
+$("stepper").classList.remove("hidden");
 renderStepper(status);
 
 // erro da última etapa (ex.: HTML5_ERROR)
