@@ -446,47 +446,36 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             return;
         }
         // =====================================================================
-        // SB_SKIP_V2: verifica se o veículo já tem o mesmo scheme E mesmo modelo.
-        // Ambos devem bater para pular o SB — se qualquer um diferir, envia SB normalmente.
+        // SB_SKIP_V3: decisão vem do worker HTML5 via result.meta.sb_skip
+        // O worker já tem cookie fresco e consultou GET_VHCL_ACTIVATION_DATA_NEW.
         // =====================================================================
-        const _sbSkipEnabled = (process.env.SB_SKIP_ENABLED || "1") !== "0";
-        if (_sbSkipEnabled) {
+        const _sbSkip = result?.meta?.sb_skip === true;
+        if (_sbSkip) {
+            const _detail = result?.meta?.sb_skip_detail || {};
+            console.log(`[jobs] SB_SKIP_V3: PULANDO SB vehicleId=${vehicleId} detail=${JSON.stringify(_detail)}`);
             try {
-                const expectedAssetType = Number(inst?.payload?.assetType || inst?.assetType || 0) || null;
-                const expectedSettingId = Number(vehicleSettingId);
-                const current = await _getVhclActivationData(vehicleId, clientId);
-                console.log(`[jobs] SB_SKIP check vehicleId=${vehicleId} current={settingId=${current.settingId},assetType=${current.assetType}} expected={settingId=${expectedSettingId},assetType=${expectedAssetType}}`);
-                const settingMatch = current.settingId !== null && current.settingId === expectedSettingId;
-                const assetMatch   = current.assetType  !== null && expectedAssetType !== null && current.assetType === expectedAssetType;
-                if (settingMatch && assetMatch) {
-                    console.log(`[jobs] SB_SKIP: PULANDO SB! vehicleId=${vehicleId} settingId=${expectedSettingId} assetType=${expectedAssetType} já corretos`);
-                    try {
-                        installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, {
-                            status: "SB_DONE",
-                            sb: { skipped: true, reason: "already_configured", currentSettingId: current.settingId, currentAssetType: current.assetType }
-                        });
-                    } catch { }
-                    if (service === "MAINT_NO_SWAP") {
-                        try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
-                        console.log(`[jobs] SB_SKIP: MAINT_NO_SWAP → COMPLETED.`);
-                        return;
-                    }
-                    // INSTALL / MAINT_WITH_SWAP → enfileira CAN diretamente
-                    const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
-                        installation_id: installationId,
-                        service,
-                        vehicleId: String(vehicleId),
-                        cycles:      Number(process.env.CAN_SNAPSHOT_CYCLES      || "12"),
-                        interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
-                    });
-                    try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" }); } catch {}
-                    try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" }); } catch {}
-                    console.log(`[jobs] SB_SKIP: CAN enfileirado job=${canJob.id} installation=${installationId}`);
-                    return;
-                }
-            } catch (_e) {
-                console.log(`[jobs] SB_SKIP check falhou (ignora, segue com SB):`, _e && _e.message);
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, {
+                    status: "SB_DONE",
+                    sb: { skipped: true, reason: "already_configured", ..._detail }
+                });
+            } catch { }
+            if (service === "MAINT_NO_SWAP") {
+                try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
+                console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
+                return;
             }
+            // INSTALL / MAINT_WITH_SWAP → enfileira CAN diretamente
+            const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
+                installation_id: installationId,
+                service,
+                vehicleId: String(vehicleId),
+                cycles:      Number(process.env.CAN_SNAPSHOT_CYCLES      || "12"),
+                interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+            });
+            try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" }); } catch {}
+            try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" }); } catch {}
+            console.log(`[jobs] SB_SKIP_V3: CAN enfileirado job=${canJob.id} installation=${installationId}`);
+            return;
         }
         // =====================================================================
         const c = catalogs?.getClient ? catalogs.getClient(clientId) : null;
