@@ -333,6 +333,22 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
 const _HTML5_ACTION_URL_JR = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
 const _SB_SKIP_TIMEOUT_MS  = Number(process.env.SB_SKIP_TIMEOUT_MS || "8000");
 
+function _readHtml5CookieHeader(): string {
+  try {
+    const fs = require("fs");
+    const path = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
+    if (!fs.existsSync(path)) return "";
+    const raw = fs.readFileSync(path, "utf8");
+    if (!raw) return "";
+    let j: any = null;
+    try { j = JSON.parse(raw); } catch { j = raw; }
+    if (!j) return "";
+    if (typeof j === "string") return j.trim();
+    if (typeof j.cookieHeader === "string") return j.cookieHeader.trim();
+    if (typeof j.cookie === "string") return j.cookie.trim();
+    return "";
+  } catch (_) { return ""; }
+}
 function _getVhclActivationData(vehicleId: string|number, clientId: string|number): Promise<{ settingId: number|null; assetType: number|null }> {
   return new Promise((resolve) => {
     try {
@@ -343,23 +359,29 @@ function _getVhclActivationData(vehicleId: string|number, clientId: string|numbe
         `VEHICLE_ID=${encodeURIComponent(String(vehicleId))}&CLIENT_ID=${encodeURIComponent(String(clientId))}&action=GET_VHCL_ACTIVATION_DATA_NEW&VERSION_ID=2`,
         "utf8"
       );
+      const cookieHeader = _readHtml5CookieHeader();
+      const headers: Record<string,string> = {
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "content-length": String(body.length),
+        "accept": "*/*",
+        "origin": "https://html5.traffilog.com",
+        "referer": "https://html5.traffilog.com/appv2/index.htm",
+      };
+      if (cookieHeader) headers["cookie"] = cookieHeader;
       const req = https.request({
         protocol: u.protocol,
         hostname: u.hostname,
         port: u.port ? Number(u.port) : 443,
         path: (u.pathname || "/") + (u.search || ""),
         method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "content-length": String(body.length),
-          "accept": "*/*",
-        },
+        headers,
       }, (res: any) => {
         const chunks: Buffer[] = [];
         res.on("data", (c: any) => chunks.push(Buffer.from(c)));
         res.on("end", () => {
           try {
             const txt = Buffer.concat(chunks).toString("utf8");
+            console.log(`[jobs] SB_SKIP_V2 GET_VHCL_ACTIVATION_DATA_NEW vehicleId=${vehicleId} len=${txt.length} head=${txt.slice(0,120)}`);
             const mSetting = txt.match(/ASSIGNED_VEHICLE_SETTING_ID\s*=\s*"(\d+)"/i);
             const mAsset   = txt.match(/ASSET_TYPE\s*=\s*"(\d+)"/i);
             resolve({
@@ -370,7 +392,7 @@ function _getVhclActivationData(vehicleId: string|number, clientId: string|numbe
         });
       });
       req.setTimeout(_SB_SKIP_TIMEOUT_MS, () => { req.destroy(); resolve({ settingId: null, assetType: null }); });
-      req.on("error", () => resolve({ settingId: null, assetType: null }));
+      req.on("error", () => resolve({ settingId: null, assetType: null })); 
       req.write(body);
       req.end();
     } catch (_) { resolve({ settingId: null, assetType: null }); }
