@@ -325,7 +325,60 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
   }
 }
 
-function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
+// =============================================================================
+// SB_SKIP_V2: consulta GET_VHCL_ACTIVATION_DATA_NEW para ler o estado atual
+// do veículo no Monitor (ASSIGNED_VEHICLE_SETTING_ID + ASSET_TYPE).
+// Não precisa de cookie/sessão — endpoint público do HTML5.
+// =============================================================================
+const _HTML5_ACTION_URL_JR = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
+const _SB_SKIP_TIMEOUT_MS  = Number(process.env.SB_SKIP_TIMEOUT_MS || "8000");
+
+function _getVhclActivationData(vehicleId: string|number, clientId: string|number): Promise<{ settingId: number|null; assetType: number|null }> {
+  return new Promise((resolve) => {
+    try {
+      const https = require("https");
+      const { URL } = require("url");
+      const u = new URL(_HTML5_ACTION_URL_JR);
+      const body = Buffer.from(
+        `VEHICLE_ID=${encodeURIComponent(String(vehicleId))}&CLIENT_ID=${encodeURIComponent(String(clientId))}&action=GET_VHCL_ACTIVATION_DATA_NEW&VERSION_ID=2`,
+        "utf8"
+      );
+      const req = https.request({
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port ? Number(u.port) : 443,
+        path: (u.pathname || "/") + (u.search || ""),
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "content-length": String(body.length),
+          "accept": "*/*",
+        },
+      }, (res: any) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: any) => chunks.push(Buffer.from(c)));
+        res.on("end", () => {
+          try {
+            const txt = Buffer.concat(chunks).toString("utf8");
+            const mSetting = txt.match(/ASSIGNED_VEHICLE_SETTING_ID\s*=\s*"(\d+)"/i);
+            const mAsset   = txt.match(/ASSET_TYPE\s*=\s*"(\d+)"/i);
+            resolve({
+              settingId: mSetting ? Number(mSetting[1]) : null,
+              assetType: mAsset   ? Number(mAsset[1])   : null,
+            });
+          } catch (_) { resolve({ settingId: null, assetType: null }); }
+        });
+      });
+      req.setTimeout(_SB_SKIP_TIMEOUT_MS, () => { req.destroy(); resolve({ settingId: null, assetType: null }); });
+      req.on("error", () => resolve({ settingId: null, assetType: null }));
+      req.write(body);
+      req.end();
+    } catch (_) { resolve({ settingId: null, assetType: null }); }
+  });
+}
+// =============================================================================
+
+async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
   try {
     if (!job || String(job.type || "") !== "html5_install") return;
     if (!_resultOk(result)) return;
@@ -356,6 +409,54 @@ function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
       return;
     }
 
+    // =========================================================================
+    // SB_SKIP_V2: verifica se o veículo já tem o mesmo scheme E mesmo modelo.
+    // Ambos devem bater para pular o SB — se qualquer um diferir, envia SB normalmente.
+    // =========================================================================
+    const _sbSkipEnabled = (process.env.SB_SKIP_ENABLED || "1") !== "0";
+    if (_sbSkipEnabled) {
+      try {
+        const expectedAssetType = Number(inst?.payload?.assetType || inst?.assetType || 0) || null;
+        const expectedSettingId = Number(vehicleSettingId);
+
+        const current = await _getVhclActivationData(vehicleId, clientId);
+        console.log(`[jobs] SB_SKIP check vehicleId=${vehicleId} current={settingId=${current.settingId},assetType=${current.assetType}} expected={settingId=${expectedSettingId},assetType=${expectedAssetType}}`);
+
+        const settingMatch = current.settingId !== null && current.settingId === expectedSettingId;
+        const assetMatch   = current.assetType  !== null && expectedAssetType !== null && current.assetType === expectedAssetType;
+
+        if (settingMatch && assetMatch) {
+          console.log(`[jobs] SB_SKIP: PULANDO SB! vehicleId=${vehicleId} settingId=${expectedSettingId} assetType=${expectedAssetType} já corretos`);
+          try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, {
+            status: "SB_DONE",
+            sb: { skipped: true, reason: "already_configured", currentSettingId: current.settingId, currentAssetType: current.assetType }
+          }); } catch {}
+
+          if (service === "MAINT_NO_SWAP") {
+            try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
+            console.log(`[jobs] SB_SKIP: MAINT_NO_SWAP → COMPLETED.`);
+            return;
+          }
+
+          // INSTALL / MAINT_WITH_SWAP → enfileira CAN diretamente
+          const canJob = createJob("monitor_can_snapshot", {
+            installation_id: installationId,
+            service,
+            vehicleId: String(vehicleId),
+            cycles:      Number(process.env.CAN_SNAPSHOT_CYCLES      || "12"),
+            interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+          });
+          try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" }); } catch {}
+          try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" }); } catch {}
+          console.log(`[jobs] SB_SKIP: CAN enfileirado job=${canJob.id} installation=${installationId}`);
+          return;
+        }
+      } catch (_e: any) {
+        console.log(`[jobs] SB_SKIP check falhou (ignora, segue com SB):`, _e && _e.message);
+      }
+    }
+    // =========================================================================
+
     const c = catalogs?.getClient ? catalogs.getClient(clientId) : null;
     const clientName = String((c && c.clientName) ? c.clientName : clientId);
 
@@ -377,6 +478,7 @@ function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
     console.log("[jobs] [PIPELINE] enqueue SB failed:", e && (e.message || String(e)));
   }
 }
+
 
 function _enqueueCanAfterSchemeBuilder(job: any, result: any) {
   try {
