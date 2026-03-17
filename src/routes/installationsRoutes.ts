@@ -405,6 +405,10 @@ router.post("/", async (req, res) => {
 
 
 
+      vehicleSettingId: payload.vehicleSettingId || payload.vehicle_setting_id || payload.vehicleSettingID || null,
+
+
+
       installedBy,
 
 

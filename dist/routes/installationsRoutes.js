@@ -141,6 +141,7 @@ router.post("/", async (req, res) => {
             plate_lookup: plateLookup,
             target_client_id: targetClientId,
             assetType,
+            vehicleSettingId: payload.vehicleSettingId || payload.vehicle_setting_id || payload.vehicleSettingID || null,
             installedBy,
             comments,
             installationDate,
