@@ -905,7 +905,13 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  function canRowModuleName(r){ return r?.sub_name ?? r?.subName ?? r?.subname ?? r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? ""; }
+  function canRowModuleName(r){
+    // Usa sub se for descritivo; se for "other"/vazio, usa module
+    const sub = r?.sub_name ?? r?.subName ?? r?.sub ?? r?.subname ?? "";
+    const subNorm = String(sub).toLowerCase().replace(/[^a-z0-9]/g,"");
+    if (sub && subNorm !== "other" && subNorm !== "") return sub;
+    return r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? "";
+  }
 
   function canFindModule(msRows, names){
     const rows = Array.isArray(msRows) ? msRows : [];
@@ -917,11 +923,34 @@
   }
 
   const CAN_MS_WANT = [
-    { key: "CAN0", names: ["can0"] },
-    { key: "CAN1", names: ["can1"] },
-    { key: "J1708", names: ["j1708"] },
-    { key: "KEYPAD_DALLAS_IBUTTON", names: ["keypaddallasibutton", "dallas", "ibutton"] },
-    { key: "KEYPAD_RAMZOR", names: ["keypadramzor", "ramzor"] },
+    // Barramento CAN / J1708
+    { key: "CAN0",             names: ["can0"] },
+    { key: "CAN1",             names: ["can1"] },
+    { key: "J1708",            names: ["j1708"] },
+    // Posicionamento / sensores
+    { key: "GPS",              names: ["gps"] },
+    { key: "G-Sensor",         names: ["gsensor", "g_sensor", "gsensor3d"] },
+    { key: "Colisão",          names: ["collision"] },
+    // Identificação motorista
+    { key: "KEYPAD_RAMZOR",    names: ["keypadramzor", "ramzor"] },
+    { key: "KEYPAD_DALLAS",    names: ["keypaddallasibutton", "dallas", "ibutton"] },
+    { key: "KEYPAD_3x2",       names: ["keypad3x2", "keypad3x2module"] },
+    { key: "KEYPAD_4x3",       names: ["keypad4x3"] },
+    // Comunicação
+    { key: "Modem",            names: ["modem", "modemquectel", "modemsiemens"] },
+    // Alimentação
+    { key: "Power",            names: ["powersystem", "power_system", "batterycharger"] },
+    // Blackbox / dados
+    { key: "Blackbox",         names: ["blackbox", "blackboxmodule"] },
+    // Detecção
+    { key: "Bumper",           names: ["bumperdetection", "bumper_detection"] },
+    // Temperatura
+    { key: "Temp0",            names: ["temp0"] },
+    { key: "Temp1",            names: ["temp1"] },
+    // Outros opcionais
+    { key: "TPMS",             names: ["tpms"] },
+    { key: "OBD",              names: ["obd", "obdcanbusiso15765"] },
+    { key: "Alcolock",         names: ["alcolock", "alco_lock", "alcolockmouldetype"] },
   ];
 
   const CAN_PARAM_RULES = [
