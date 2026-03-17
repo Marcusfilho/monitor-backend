@@ -308,6 +308,17 @@
       <pre id="debugJson">{}</pre>
     </details>
   </section>
+
+  <!-- Card de conclusão — exibido quando COMPLETED -->
+  <section class="card hidden" id="cardCompleted" style="text-align:center;padding:32px 20px">
+    <div style="font-size:48px;margin-bottom:12px">&#x2705;</div>
+    <h2 style="margin:0 0 8px 0;font-size:20px;color:var(--ok)">Instalação concluída!</h2>
+    <p id="completedPlate" style="margin:0 0 6px 0;font-size:14px;color:var(--text)">—</p>
+    <p id="completedSerial" style="margin:0 0 24px 0;font-size:12px;color:var(--muted);font-family:var(--mono)">—</p>
+    <button id="btnNewFromCompletion" style="padding:12px 28px;border-radius:14px;font-weight:700;font-size:14px;background:var(--accent);color:#000;border:none;cursor:pointer">
+      + Nova instalação
+    </button>
+  </section>
 </div>
 
 <div class="toast" id="toast">
@@ -1182,20 +1193,52 @@
 
 
   function statusToLabel(s){
-    const x = String(s || "").trim();
-    if (!x) return "CRIADA";
-    return x;
+    const x = String(s || "").trim().toUpperCase();
+    if (!x) return "criada";
+    const MAP = {
+      "CREATED":          "criada",
+      "HTML5_QUEUED":     "aguardando cadastro",
+      "HTML5_RUNNING":    "cadastrando...",
+      "HTML5_DONE":       "cadastrado",
+      "SB_QUEUED":        "aguardando config.",
+      "SB_RUNNING":       "configurando...",
+      "SB_DONE":          "configurado",
+      "CAN_RUNNING":      "coletando CAN...",
+      "CAN_APPROVED":     "CAN aprovado",
+      "GS_QUEUED":        "aguardando envio GS",
+      "GS_RUNNING":       "enviando GS...",
+      "GS_DONE":          "GS enviado",
+      "COMPLETED":        "concluído ✓",
+      "WAITING_REBOOT":   "aguardando reboot",
+    };
+    if (MAP[x]) return MAP[x];
+    // fallback: retorna o status em minúsculo para não poluir a UI
+    return x.toLowerCase();
   }
 
   function statusToStepIndex(status){
+    // Retorna quantos steps estão concluídos (i < idx → verde)
+    // HTML5(0) SB(1) CAN(2) FIM(3)
     const s = String(status || "").toUpperCase();
-    if (s.includes("COMPLETED") || s.includes("GS")) return 3;
-    if (s.includes("CAN_APPROVED")) return 3;
-    if (s.includes("CAN_")) return 2;
-    if (s.includes("WAITING_REBOOT")) return 2;
-    if (s.includes("SB")) return 1;
-    if (s.includes("HTML5")) return 0;
-    return 0;
+
+    // Flag HTML5: verde a partir de HTML5_DONE (SB ou posterior)
+    const html5Done = s.startsWith("SB") || s.startsWith("CAN") || s.startsWith("GS")
+                   || s === "COMPLETED" || s === "SB_DONE" || s === "HTML5_DONE";
+
+    // Flag SB: verde SOMENTE em SB_DONE ou posterior (não em SB_QUEUED nem SB_RUNNING)
+    const sbDone = s === "SB_DONE" || s.startsWith("CAN") || s.startsWith("GS") || s === "COMPLETED";
+
+    // Flag CAN: verde ao clicar "Validar CAN" (CAN_APPROVED ou GS ou COMPLETED)
+    const canDone = s === "CAN_APPROVED" || s.startsWith("GS") || s === "COMPLETED";
+
+    // Flag FIM: verde quando GS foi enviado (GS_RUNNING, GS_DONE ou COMPLETED)
+    const fimDone = s === "GS_RUNNING" || s === "GS_DONE" || s === "COMPLETED";
+
+    if (fimDone)  return 4; // todos verdes
+    if (canDone)  return 3; // HTML5+SB+CAN verdes, FIM ativo
+    if (sbDone)   return 2; // HTML5+SB verdes, CAN ativo
+    if (html5Done)return 1; // HTML5 verde, SB ativo
+    return 0; // nenhum verde ainda
   }
 
   function renderStepper(status){
@@ -1272,6 +1315,26 @@
 
   
 
+// Mapa de mensagens amigáveis para erros do Monitor Traffilog
+const ERROR_MESSAGES = [
+  { match: "Editing unit number is not allowed",  friendly: "Veículo já possui rastreador. Faça o UNINSTALL primeiro." },
+  { match: "not found",                            friendly: "Veículo não encontrado no Monitor. Verifique o serial." },
+  { match: "job_exception_or_timeout",             friendly: "Falha na comunicação. Verifique a sessão VPN." },
+  { match: "html5_install_job_exception",          friendly: "Falha na comunicação. Verifique a sessão VPN." },
+  { match: "unauthorized",                         friendly: "Sessão expirada — reconecte à VPN." },
+  { match: "Failed to link unit",                  friendly: "Falha ao vincular rastreador. Verifique o serial e tente novamente." },
+  { match: "timeout",                              friendly: "Tempo esgotado. Verifique a conexão VPN e tente novamente." },
+];
+
+function friendlyError(msg) {
+  if (!msg) return "Erro desconhecido";
+  const lower = String(msg).toLowerCase();
+  for (const entry of ERROR_MESSAGES) {
+    if (lower.includes(entry.match.toLowerCase())) return entry.friendly;
+  }
+  return String(msg).slice(0, 240);
+}
+
 function extractLastError(inst){
   const e =
     inst?.last_error ||
@@ -1280,14 +1343,14 @@ function extractLastError(inst){
     inst?.html5?.lastError ||
     null;
   if (!e) return null;
-  if (typeof e === "string") return { title: "ERRO", message: e };
+  if (typeof e === "string") return { title: "ERRO", message: friendlyError(e) };
   if (typeof e === "object"){
     const msg = e.message || e.error || e.detail || e.hint || "";
     const title = e.job_type ? String(e.job_type) : "ERRO";
-    const message = String(msg || "job_failed").slice(0, 240);
+    const message = friendlyError(msg || "job_failed");
     return { title: title.toUpperCase(), message, raw: e };
   }
-  return { title: "ERRO", message: String(e).slice(0, 240) };
+  return { title: "ERRO", message: friendlyError(String(e)) };
 }
 
 function renderAll(inst){
@@ -1298,6 +1361,22 @@ function renderAll(inst){
     
 const status = inst?.status || "";
 const st = String(status || "").toUpperCase();
+
+// --- Tela de conclusão: exibe card especial quando COMPLETED ---
+if (st === "COMPLETED") {
+  const plate  = inst?.plate_real || inst?.plateReal || inst?.plate || "—";
+  const serial = inst?.serial || inst?.inner_id || inst?.innerId || "—";
+  $("completedPlate").textContent  = "Placa: " + plate;
+  $("completedSerial").textContent = "Serial: " + serial;
+  $("cardCompleted").classList.remove("hidden");
+  $("cardCan").classList.add("hidden");
+  stopPoll();
+  return;
+} else {
+  $("cardCompleted").classList.add("hidden");
+}
+// --- fim tela de conclusão ---
+
 $("stepper").classList.remove("hidden");
 renderStepper(status);
 
@@ -1530,6 +1609,18 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   }
 
   // ====== actions ======
+  $("btnNewFromCompletion").onclick = () => {
+    stopPoll();
+    state.inst = null;
+    state.lastSnapshot = null;
+    $("cardCompleted").classList.add("hidden");
+    $("cardCan").classList.remove("hidden");
+    $("cardForm").classList.remove("hidden");
+    renderEmpty();
+    showToast("Nova instalação", "warn");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   $("btnNew").onclick = () => {
     stopPoll();
     state.inst = null;
