@@ -923,34 +923,11 @@
   }
 
   const CAN_MS_WANT = [
-    // Barramento CAN / J1708
-    { key: "CAN0",             names: ["can0"] },
-    { key: "CAN1",             names: ["can1"] },
-    { key: "J1708",            names: ["j1708"] },
-    // Posicionamento / sensores
-    { key: "GPS",              names: ["gps"] },
-    { key: "G-Sensor",         names: ["gsensor", "g_sensor", "gsensor3d"] },
-    { key: "Colisão",          names: ["collision"] },
-    // Identificação motorista
-    { key: "KEYPAD_RAMZOR",    names: ["keypadramzor", "ramzor"] },
-    { key: "KEYPAD_DALLAS",    names: ["keypaddallasibutton", "dallas", "ibutton"] },
-    { key: "KEYPAD_3x2",       names: ["keypad3x2", "keypad3x2module"] },
-    { key: "KEYPAD_4x3",       names: ["keypad4x3"] },
-    // Comunicação
-    { key: "Modem",            names: ["modem", "modemquectel", "modemsiemens"] },
-    // Alimentação
-    { key: "Power",            names: ["powersystem", "power_system", "batterycharger"] },
-    // Blackbox / dados
-    { key: "Blackbox",         names: ["blackbox", "blackboxmodule"] },
-    // Detecção
-    { key: "Bumper",           names: ["bumperdetection", "bumper_detection"] },
-    // Temperatura
-    { key: "Temp0",            names: ["temp0"] },
-    { key: "Temp1",            names: ["temp1"] },
-    // Outros opcionais
-    { key: "TPMS",             names: ["tpms"] },
-    { key: "OBD",              names: ["obd", "obdcanbusiso15765"] },
-    { key: "Alcolock",         names: ["alcolock", "alco_lock", "alcolockmouldetype"] },
+    { key: "CAN0",              names: ["can0"] },
+    { key: "CAN1",              names: ["can1"] },
+    { key: "J1708",             names: ["j1708"] },
+    { key: "KEYPAD_RAMZOR",     names: ["keypadramzor", "ramzor"] },
+    { key: "KEYPAD_DALLAS",     names: ["keypaddallasibutton", "dallas", "ibutton"] },
   ];
 
   const CAN_PARAM_RULES = [
@@ -1066,7 +1043,7 @@
       config_type: canSafeDecode(cfgType),
       config_progress: canSafeDecode(cfgProgress),
       config_error: canSafeDecode(cfgError),
-      driver_code: canSafeDecode(canFirstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—")),
+      driver_code: canSafeDecode(canFirstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code, inst?.driver_code, inst?.driverCode], "—")),
       license_number: canSafeDecode(canFirstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
       serial: canSafeDecode(canFirstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
       client: canSafeDecode(canFirstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
@@ -1250,9 +1227,11 @@
     // HTML5(0) SB(1) CAN(2) FIM(3)
     const s = String(status || "").toUpperCase();
 
-    // Flag HTML5: verde a partir de HTML5_DONE (SB ou posterior)
-    const html5Done = s.startsWith("SB") || s.startsWith("CAN") || s.startsWith("GS")
-                   || s === "COMPLETED" || s === "SB_DONE" || s === "HTML5_DONE";
+    // Flag HTML5: verde em HTML5_DONE ou qualquer status posterior
+    // Inclui qualquer variação de SB/CAN/GS para cobrir status intermediários
+    const html5Done = s.includes("SB") || s.includes("CAN") || s.includes("GS")
+                   || s === "COMPLETED" || s === "HTML5_DONE" || s === "WAITING_REBOOT"
+                   || s === "CAN_SNAPSHOT_READY";
 
     // Flag SB: verde SOMENTE em SB_DONE ou posterior (não em SB_QUEUED nem SB_RUNNING)
     const sbDone = s === "SB_DONE" || s.startsWith("CAN") || s.startsWith("GS") || s === "COMPLETED";
@@ -1393,10 +1372,12 @@ const st = String(status || "").toUpperCase();
 
 // --- Tela de conclusão: exibe card especial quando COMPLETED ---
 if (st === "COMPLETED") {
-  const plate  = inst?.plate_real || inst?.plateReal || inst?.plate || "—";
-  const serial = inst?.serial || inst?.inner_id || inst?.innerId || "—";
-  $("completedPlate").textContent  = "Placa: " + plate;
-  $("completedSerial").textContent = "Serial: " + serial;
+  const plate  = inst?.payload?.plate_real || inst?.plate_real || inst?.plateReal || inst?.plate || "—";
+  const serial = inst?.payload?.serial || inst?.serial || inst?.inner_id || inst?.innerId || "—";
+  const model  = inst?.payload?.vehicle?.manufacturer && inst?.payload?.vehicle?.model
+    ? inst.payload.vehicle.manufacturer + " " + inst.payload.vehicle.model : "";
+  $("completedPlate").textContent  = plate !== "—" ? plate : (inst?.payload?.plate || "—");
+  $("completedSerial").textContent = "Serial: " + serial + (model ? " • " + model : "");
   $("cardCompleted").classList.remove("hidden");
   $("cardCan").classList.add("hidden");
   stopPoll();
@@ -1436,7 +1417,7 @@ $("btnApprove").disabled = !canApproveEnabled;
 // Atualizar CAN: só quando CAN já iniciou em algum momento e não estiver coletando/aguardando reboot/SB
 const canRefreshEnabled =
   !!(id && tok) &&
-  (st.includes("CAN") || st.includes("WAITING_REBOOT")) &&
+  (st === "SB_DONE" || st.includes("CAN") || st.includes("WAITING_REBOOT") || st.includes("GS") || st === "COMPLETED" || st === "CAN_SNAPSHOT_READY") &&
   !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
 $("btnRefresh").disabled = !canRefreshEnabled;
     // snapshot
@@ -1619,7 +1600,8 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   function nextPollDelay(inst){
     const st = String(inst?.status || "").toUpperCase();
     if (st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT")) return 1500;
-    if (st.includes("SB_RUNNING")) return 1800;
+    if (st.includes("SB_RUNNING")) return 800;   // mais rápido para detectar fim do SB
+    if (st.includes("SB_QUEUED"))  return 1000;
     if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 2000;
     return state.pollMs;
   }
