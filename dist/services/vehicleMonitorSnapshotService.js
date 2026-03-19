@@ -114,7 +114,7 @@ async function collectVehicleMonitorSnapshot(opts) {
         unit_version: vi.unit_version != null ? String(vi.unit_version) : null,
         configuration_key_db: vi.configuration_key_db != null ? String(vi.configuration_key_db) : null,
         configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit) : null,
-        raw: vi,
+        raw: { ...vi, driver_code: driverCodeFromRedis ?? vi.driver_code ?? null },
     };
     // Redis (no seu log: is_connected = "2")
     const redis = await mux.sendAction("get_vehicle_data_from_redis", {
@@ -122,6 +122,9 @@ async function collectVehicleMonitorSnapshot(opts) {
     });
     const isConnectedRaw = redis?.data?.[0]?.is_connected;
     const isConnected = isConnectedRaw == null ? null : Number(isConnectedRaw);
+    // __FIX_DRIVER_CODE__: driver_code vem do redis (estado em tempo real), não do get_vehicle_info
+    const redisData = redis?.data?.[0] ?? {};
+    const driverCodeFromRedis = redisData.driver_code != null ? String(redisData.driver_code) : null;
     // Subs (igual monitor)
     await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" });
     await mux.sendAction("vehicle_subscribe", { vehicle_id: String(opts.vehicleId), object_type: "UNIT_MESSAGES" });
