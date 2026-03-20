@@ -339,24 +339,39 @@ function _handleHtml5CompleteToInstallation(job, result, finalStatus, jobId) {
 // =============================================================================
 // SB_SKIP_V2: consulta GET_VHCL_ACTIVATION_DATA_NEW para ler o estado atual
 // do veículo no Monitor (ASSIGNED_VEHICLE_SETTING_ID + ASSET_TYPE).
+// Não precisa de cookie/sessão — endpoint público do HTML5.
 // =============================================================================
 const _HTML5_ACTION_URL_JR = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
-const _SB_SKIP_TIMEOUT_MS  = Number(process.env.SB_SKIP_TIMEOUT_MS || "8000");
+const _SB_SKIP_TIMEOUT_MS = Number(process.env.SB_SKIP_TIMEOUT_MS || "8000");
 function _readHtml5CookieHeader() {
     try {
         const fs = require("fs");
         const path = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
-        if (!fs.existsSync(path)) return "";
+        if (!fs.existsSync(path))
+            return "";
         const raw = fs.readFileSync(path, "utf8");
-        if (!raw) return "";
+        if (!raw)
+            return "";
         let j = null;
-        try { j = JSON.parse(raw); } catch { j = raw; }
-        if (!j) return "";
-        if (typeof j === "string") return j.trim();
-        if (typeof j.cookieHeader === "string") return j.cookieHeader.trim();
-        if (typeof j.cookie === "string") return j.cookie.trim();
+        try {
+            j = JSON.parse(raw);
+        }
+        catch {
+            j = raw;
+        }
+        if (!j)
+            return "";
+        if (typeof j === "string")
+            return j.trim();
+        if (typeof j.cookieHeader === "string")
+            return j.cookieHeader.trim();
+        if (typeof j.cookie === "string")
+            return j.cookie.trim();
         return "";
-    } catch (_) { return ""; }
+    }
+    catch (_) {
+        return "";
+    }
 }
 function _getVhclActivationData(vehicleId, clientId) {
     return new Promise((resolve) => {
@@ -364,10 +379,7 @@ function _getVhclActivationData(vehicleId, clientId) {
             const https = require("https");
             const { URL } = require("url");
             const u = new URL(_HTML5_ACTION_URL_JR);
-            const body = Buffer.from(
-                `VEHICLE_ID=${encodeURIComponent(String(vehicleId))}&CLIENT_ID=${encodeURIComponent(String(clientId))}&action=GET_VHCL_ACTIVATION_DATA_NEW&VERSION_ID=2`,
-                "utf8"
-            );
+            const body = Buffer.from(`VEHICLE_ID=${encodeURIComponent(String(vehicleId))}&CLIENT_ID=${encodeURIComponent(String(clientId))}&action=GET_VHCL_ACTIVATION_DATA_NEW&VERSION_ID=2`, "utf8");
             const cookieHeader = _readHtml5CookieHeader();
             const headers = {
                 "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -376,7 +388,8 @@ function _getVhclActivationData(vehicleId, clientId) {
                 "origin": "https://html5.traffilog.com",
                 "referer": "https://html5.traffilog.com/appv2/index.htm",
             };
-            if (cookieHeader) headers["cookie"] = cookieHeader;
+            if (cookieHeader)
+                headers["cookie"] = cookieHeader;
             const req = https.request({
                 protocol: u.protocol,
                 hostname: u.hostname,
@@ -390,21 +403,27 @@ function _getVhclActivationData(vehicleId, clientId) {
                 res.on("end", () => {
                     try {
                         const txt = Buffer.concat(chunks).toString("utf8");
-                        console.log(`[jobs] SB_SKIP_V2 GET_VHCL_ACTIVATION_DATA_NEW vehicleId=${vehicleId} len=${txt.length} head=${txt.slice(0,120)}`);
+                        console.log(`[jobs] SB_SKIP_V2 GET_VHCL_ACTIVATION_DATA_NEW vehicleId=${vehicleId} len=${txt.length} head=${txt.slice(0, 120)}`);
                         const mSetting = txt.match(/ASSIGNED_VEHICLE_SETTING_ID\s*=\s*"(\d+)"/i);
-                        const mAsset   = txt.match(/ASSET_TYPE\s*=\s*"(\d+)"/i);
+                        const mAsset = txt.match(/ASSET_TYPE\s*=\s*"(\d+)"/i);
                         resolve({
                             settingId: mSetting ? Number(mSetting[1]) : null,
-                            assetType: mAsset   ? Number(mAsset[1])   : null,
+                            assetType: mAsset ? Number(mAsset[1]) : null,
                         });
-                    } catch (_) { resolve({ settingId: null, assetType: null }); }
+                    }
+                    catch (_) {
+                        resolve({ settingId: null, assetType: null });
+                    }
                 });
             });
             req.setTimeout(_SB_SKIP_TIMEOUT_MS, () => { req.destroy(); resolve({ settingId: null, assetType: null }); });
             req.on("error", () => resolve({ settingId: null, assetType: null }));
             req.write(body);
             req.end();
-        } catch (_) { resolve({ settingId: null, assetType: null }); }
+        }
+        catch (_) {
+            resolve({ settingId: null, assetType: null });
+        }
     });
 }
 // =============================================================================
@@ -445,10 +464,10 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             console.log(`[jobs] [PIPELINE] skip SB: missing fields installation=${installationId} service=${service} vehicleId=${vehicleId} clientId=${clientId} vehicleSettingId=${vehicleSettingId}`);
             return;
         }
-        // =====================================================================
+        // =========================================================================
         // SB_SKIP_V3: decisão vem do worker HTML5 via result.meta.sb_skip
         // O worker já tem cookie fresco e consultou GET_VHCL_ACTIVATION_DATA_NEW.
-        // =====================================================================
+        // =========================================================================
         const _sbSkip = result?.meta?.sb_skip === true;
         if (_sbSkip) {
             const _detail = result?.meta?.sb_skip_detail || {};
@@ -458,26 +477,35 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
                     status: "SB_DONE",
                     sb: { skipped: true, reason: "already_configured", ..._detail }
                 });
-            } catch { }
+            }
+            catch { }
             if (service === "MAINT_NO_SWAP") {
-                try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
+                }
+                catch { }
                 console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
                 return;
             }
-            // INSTALL / MAINT_WITH_SWAP → enfileira CAN diretamente
             const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
                 installation_id: installationId,
                 service,
                 vehicleId: String(vehicleId),
-                cycles:      Number(process.env.CAN_SNAPSHOT_CYCLES      || "12"),
+                cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
                 interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
             });
-            try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" }); } catch {}
-            try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" }); } catch {}
+            try {
+                installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
+            }
+            catch { }
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" });
+            }
+            catch { }
             console.log(`[jobs] SB_SKIP_V3: CAN enfileirado job=${canJob.id} installation=${installationId}`);
             return;
         }
-        // =====================================================================
+        // =========================================================================
         const c = catalogs?.getClient ? catalogs.getClient(clientId) : null;
         const clientName = String((c && c.clientName) ? c.clientName : clientId);
         const sb = (0, jobStore_1.createJob)("scheme_builder", {
@@ -510,8 +538,6 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
         console.log("[jobs] [PIPELINE] enqueue SB failed:", e && (e.message || String(e)));
     }
 }
-
-
 function _enqueueCanAfterSchemeBuilder(job, result) {
     try {
         if (!job || String(job.type || "") !== "scheme_builder")

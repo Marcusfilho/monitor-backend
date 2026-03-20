@@ -294,6 +294,10 @@ async function processJob(job) {
             MONITOR_WS_COOKIE: "", // ✅ cookie não é necessário (net-export mostrou)
             MONITOR_WS_ORIGIN: origin,
             // monitor_gs => roda APENAS GS (sem SB)
+            SB_JOB_ID: String(job.id || ""),
+            SB_JOB_SERVER_URL: JOB_SERVER_BASE_URL,
+            SB_WORKER_KEY: WORKER_KEY,
+            SB_INSTALLATION_ID: installationId,
             ...(isGs ? {
                 GS_ENABLE: "1",
                 GS_ONLY: "1",

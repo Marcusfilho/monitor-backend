@@ -335,29 +335,6 @@ function waitRowByMtkn(ws, mtkn, timeoutMs=15000){
   });
 }
 
-// === REPORT PROGRESS AO BACKEND ==========================================
-const __SB_JOB_ID          = process.env.SB_JOB_ID || "";
-const __SB_JOB_SERVER_URL  = process.env.SB_JOB_SERVER_URL || "";
-const __SB_WORKER_KEY      = process.env.SB_WORKER_KEY || "";
-const __SB_INSTALLATION_ID = process.env.SB_INSTALLATION_ID || "";
-
-async function __reportSbProgress(pct, stage, detail) {
-  if (!__SB_JOB_ID || !__SB_JOB_SERVER_URL) return;
-  try {
-    const fetch = globalThis.fetch || require("node-fetch");
-    await fetch(`${__SB_JOB_SERVER_URL}/api/jobs/${__SB_JOB_ID}/progress`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...__SB_WORKER_KEY ? { "x-worker-key": __SB_WORKER_KEY } : {}
-      },
-      body: JSON.stringify({ percent: Math.round(Math.min(100, Math.max(0, pct))), stage: stage || "sb", detail: detail || "" }),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined,
-    });
-  } catch (_) { /* ignora falhas de telemetria */ }
-}
-// =========================================================================
-
 (async () => {
   let url = process.env.MONITOR_WS_URL || "";
 let sessionToken = process.env.MONITOR_SESSION_TOKEN || "";
@@ -790,31 +767,7 @@ try {
 }
   console.log("[sb] process_id =", processId);
 
-  // 6) Subscrever ANTES do execute para não perder nenhum push
-  // Primeiro get_vehicle_info para registrar contexto no servidor (necessário para receber pushes)
-  console.log("[sb] SB_WAIT_V1: get_vehicle_info para registrar contexto...");
-  sendFrame(ws, "get_vehicle_info", {
-    vehicle_id: String(vehicleId),
-    client_id: String(clientId),
-  }, sessionToken);
-  await sleep(800);
-
-  // Subscrever UNIT_MESSAGES (servidor exige para liberar UNIT_CONFIG_STATUS)
-  sendFrame(ws, "vehicle_subscribe", {
-    vehicle_id: String(vehicleId),
-    object_type: "UNIT_MESSAGES",
-  }, sessionToken);
-  await sleep(300);
-
-  // Subscrever UNIT_CONFIG_STATUS
-  console.log("[sb] SB_WAIT_V1: subscribing UNIT_CONFIG_STATUS ANTES do execute...");
-  sendFrame(ws, "vehicle_subscribe", {
-    vehicle_id: String(vehicleId),
-    object_type: "UNIT_CONFIG_STATUS",
-  }, sessionToken);
-  await sleep(500);
-
-  // 6b) execute
+  // 6) execute
   sendFrame(ws, "execute_action_opr", { ...( (typeof __unit_key !== "undefined" && __unit_key) ? { unit_key: String(__unit_key) } : {} ), ...( (typeof __inner_id !== "undefined" && __inner_id) ? { inner_id: String(__inner_id) } : {} ), 
     tag: "loading_screen",
     client_id: String(clientId),
@@ -825,142 +778,97 @@ try {
   }, sessionToken);
 
   console.log("[sb] execute_action_opr enviado.");
+  await sleep(2000);
 
-  // === SB_WAIT_V1: aguarda conclusão real via UNIT_CONFIG_STATUS ===============
-  // O Monitor envia push_3_data com { status, progress, type, error, retries }
-  // quando o veículo está em processo de configuração.
-  // Estrutura confirmada pelo sniffer v7:
-  //   { "status": "In Progress", "progress": "60", "type": "Scheme Builder", "error": " ", "retries": "0" }
-  // Fim do SB: status === "Completed" || status === "Done" || parseInt(progress) >= 100
-  await (async function waitForSBCompletion() {
-    const SB_MAX_WAIT_MS     = Number(process.env.SB_MAX_WAIT_MS     || 720000); // 12 min
-    const SB_POLL_INTERVAL_MS = Number(process.env.SB_POLL_INTERVAL_MS || 2000);  // 2s entre polls
-    const SB_SUBSCRIBE_RETRY_MS = Number(process.env.SB_SUBSCRIBE_RETRY_MS || 3000);
+  // === SB_PROGRESS_WAIT_V2: nova conexão WS para monitorar progresso ===
+  // O Monitor fecha a WS após execute_action_opr.
+  // Abrimos nova conexão e pedimos get_vcls_action_review_opr periodicamente.
+  try {
+    const SB_WAIT_TIMEOUT_MS = Number(process.env.SB_WAIT_TIMEOUT_MS || 600000); // 10min max
+    const SB_POLL_INTERVAL_MS = Number(process.env.SB_POLL_INTERVAL_MS || 15000); // 15s entre polls
+    const SB_REBOOT_WAIT_MS   = Number(process.env.SB_REBOOT_WAIT_MS   || 60000); // 60s esperando reboot
+    let sbProgress = 0;
+    const deadline = Date.now() + SB_WAIT_TIMEOUT_MS;
 
-    // Escutar pushes do UNIT_CONFIG_STATUS (subscription já feita antes do execute)
-    console.log(`[sb] SB_WAIT_V1: escutando pushes UNIT_CONFIG_STATUS vehicleId=${vehicleId}`);
+    console.log("[sb] SB_PROGRESS_WAIT_V2: monitorando progresso via nova WS...");
 
-    // Resubscrever a cada 15s para manter o servidor enviando pushes
-    const resubInterval = setInterval(() => {
-      if (resolved) { clearInterval(resubInterval); return; }
-      sendFrame(ws, "vehicle_subscribe", {
-        vehicle_id: String(vehicleId),
-        object_type: "UNIT_CONFIG_STATUS",
-      }, sessionToken);
-      console.log(`[sb] SB_WAIT_V1: resubscribe keepalive`);
-    }, 15000);
-
-    // Escutar mensagens push e aguardar conclusão
-    let resolved = false;
-    let lastProgress = "";
-    let lastStatus   = "";
-    const deadline = Date.now() + SB_MAX_WAIT_MS;
-
-    await new Promise((resolve) => {
-      function onMessage(raw) {
-        try {
-          const txt = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw ?? "");
-          const dec = txt.startsWith("%7B") ? decodeURIComponent(txt) : txt;
-          const msg = JSON.parse(dec);
-
-          // LOG DIAGNÓSTICO: mostrar TODOS os frames para identificar o push real
-          const an = msg?.response?.properties?.action_name || "";
-          const av = msg?.response?.properties?.action_value || "";
-          // Mostra tudo exceto frames de outras actions já conhecidas
-          const skipActions = ["get_client_vehicles_opr","vcls_check_opr","associate_vehicles_actions_opr",
-                               "review_process_attributes","get_vcls_action_review_opr","execute_action_opr",
-                               "vehicle_subscribe"];
-          if (!skipActions.includes(an)) {
-            console.log(`[sb] SB_WAIT_V1 FRAME action="${an}" av="${av}" raw=${dec.slice(0,300)}`);
-          }
-
-          // O push chega como objeto direto (não aninhado em response.properties)
-          // Formato confirmado: { status, progress, type, error, retries }
-          // Pode chegar no topo ou dentro de response.properties.data[0]
-          // Formato confirmado: action="refresh", data_source="UNIT_CONFIG_STATUS"
-          // data: [{ status, progress, type, error, retries }]
-          const rp = msg?.response?.properties;
-          if (!rp) return;
-          if (rp.action_name !== "refresh") return;
-          if (rp.data_source !== "UNIT_CONFIG_STATUS") return;
-          const push = Array.isArray(rp.data) ? rp.data[0] : null;
-          if (!push) return;
-
-          const status   = String(push.status   ?? "").trim();
-          const progress = String(push.progress  ?? "").trim();
-          const type     = String(push.type      ?? "").trim();
-          const error    = String(push.error     ?? "").trim();
-          const retries  = String(push.retries   ?? "").trim();
-
-          // Só logar quando mudar (evitar spam)
-          const key = `${status}|${progress}`;
-          if (key !== `${lastStatus}|${lastProgress}`) {
-            lastStatus   = status;
-            lastProgress = progress;
-            console.log(`[sb] SB_WAIT_V1: status="${status}" progress="${progress}%" type="${type}" retries=${retries} error="${error}"`);
-            // Reportar ao backend para o app exibir em tempo real
-            __reportSbProgress(pct, "sb_running", `${type} ${progress}%`);
-          }
-
-          // Fim detectado
-          const pct = parseFloat(progress) || 0;
-          // Completed: status explícito OU progress >= 99.9
-          const isDone = status === "Completed" || status === "Done" ||
-                         status === "completed" || status === "done" ||
-                         pct >= 99.9;
-          // Erro real: status="error" ou campo error preenchido com mensagem real
-          const isError = status === "error" || status === "Error" ||
-                         (error && error.trim().length > 0 &&
-                          error.trim() !== " " && error.trim() !== "");
-
-          if ((isDone || isError) && !resolved) {
-            resolved = true;
-            clearInterval(resubInterval);
-            ws.off("message", onMessage);
-            if (isError && !isDone) {
-              console.log(`[sb] SB_WAIT_V1: ERRO no SB: status="${status}" error="${error}" progress="${progress}%" — reportando falha`);
-              // Guardar erro para o worker reportar ao backend
-              ws.__sbError = `SB error: status="${status}" error="${error}"`;
-            } else {
-              console.log(`[sb] SB_WAIT_V1: CONCLUÍDO status="${status}" progress="${progress}%"`);
+    // Função para abrir nova WS e consultar progresso uma vez
+    async function pollSbProgress() {
+      const wsUrl2 = process.env.MONITOR_WS_URL || "";
+      if (!wsUrl2) return -1;
+      // __unit_key e __inner_id podem não existir neste escopo — usa typeof seguro
+      const _ukey = (typeof __unit_key !== "undefined" && __unit_key) ? String(__unit_key) : null;
+      const _iid  = (typeof __inner_id !== "undefined" && __inner_id) ? String(__inner_id) : null;
+      return await new Promise((resolve) => {
+        const ws2 = new WebSocket(wsUrl2, {
+          headers: { Origin: __WS_ORIGIN },
+          rejectUnauthorized: false,
+        });
+        const t = setTimeout(() => { try { ws2.close(); } catch {} resolve(-1); }, 12000);
+        ws2.on("error", () => { clearTimeout(t); resolve(-1); });
+        ws2.on("open", () => {
+          const mtkn2 = String(Date.now()) + String(Math.floor(Math.random()*1e6));
+          const frame = { tag: "loading_screen", _action_name: "get_vcls_action_review_opr",
+            parameters: { client_id: String(clientId), action_source: "0",
+              ...(_ukey ? { unit_key: _ukey } : {}),
+              ...(_iid  ? { inner_id: _iid  } : {}) },
+            mtkn: mtkn2, session_token: sessionToken };
+          ws2.send(encodeURIComponent(JSON.stringify(frame)));
+        });
+        ws2.on("message", (data) => {
+          try {
+            const txt = typeof data === "string" ? data : data.toString();
+            const decoded = txt.startsWith("%") ? (() => { try { return decodeURIComponent(txt); } catch { return txt; } })() : txt;
+            const msg = (() => { try { return JSON.parse(decoded); } catch { return null; } })();
+            if (!msg) return;
+            const props = msg?.response?.properties || msg?.properties || msg || {};
+            const rows = Array.isArray(props.data) ? props.data : [];
+            const row = rows[0] || props;
+            const prog = Number(row?.configuration_progress ?? props?.configuration_progress ?? msg?.configuration_progress ?? -1);
+            if (Number.isFinite(prog) && prog >= 0) {
+              clearTimeout(t);
+              try { ws2.close(); } catch {}
+              resolve(prog);
             }
-            resolve();
-          }
-        } catch (_) {
-          // ignora frames inválidos
+          } catch {}
+        });
+        ws2.on("close", () => { clearTimeout(t); resolve(-1); });
+      });
+    }
+
+    // Loop de polling
+    let rebootWaitStart = null;
+    while (Date.now() < deadline) {
+      await sleep(SB_POLL_INTERVAL_MS);
+      const prog = await pollSbProgress();
+      console.log("[sb] SB_PROGRESS_WAIT_V2 poll progress=" + prog);
+      if (prog >= 0) {
+        // Conseguiu resposta — equipamento não está em reboot
+        rebootWaitStart = null;
+        sbProgress = prog;
+        console.log("[sb] SB_PROGRESS progress=" + prog);
+        if (prog >= 100) {
+          console.log("[sb] SB_PROGRESS_WAIT_V2: progress=100, SB concluído!");
+          break;
+        }
+      } else {
+        // Sem resposta — pode ser reboot
+        if (!rebootWaitStart) {
+          rebootWaitStart = Date.now();
+          console.log("[sb] SB_PROGRESS_WAIT_V2: sem resposta, equipamento pode estar em reboot...");
+        }
+        const rebootElapsed = Date.now() - rebootWaitStart;
+        if (sbProgress >= 80 && rebootElapsed > SB_REBOOT_WAIT_MS) {
+          console.log("[sb] SB_PROGRESS_WAIT_V2: progress estava em " + sbProgress + "%, reboot concluído, seguindo...");
+          break;
         }
       }
-
-      ws.on("message", onMessage);
-
-      // Timeout de segurança
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          clearInterval(resubInterval);
-          ws.off("message", onMessage);
-          const lastPct = parseFloat(lastProgress) || 0;
-          if (lastPct < 50) {
-            // Timeout com progress baixo = SB provavelmente nem começou
-            ws.__sbError = `SB timeout após ${SB_MAX_WAIT_MS/1000}s com progress=${lastProgress}% — equipamento pode estar offline`;
-            console.log(`[sb] SB_WAIT_V1: TIMEOUT (progress baixo=${lastProgress}%) — equipamento offline?`);
-          } else {
-            console.log(`[sb] SB_WAIT_V1: TIMEOUT após ${SB_MAX_WAIT_MS / 1000}s (último status="${lastStatus}" progress="${lastProgress}%") — continuando`);
-          }
-          resolve();
-        }
-      }, SB_MAX_WAIT_MS);
-
-      // Limpar timer se resolver antes
-      void timer; // referência para o GC não coletar
-    });
-  })();
-  // === /SB_WAIT_V1 ============================================================
-
-  // Se o SB reportou erro, encerrar com falha para o worker reportar ao backend
-  if (ws.__sbError) {
-    throw new Error(ws.__sbError);
+    }
+    console.log("[sb] SB_PROGRESS_WAIT_V2: fim. progresso final=" + sbProgress);
+  } catch(e) {
+    console.log("[sb] SB_PROGRESS_WAIT_V2 erro (ignora):", e && e.message ? e.message : String(e));
   }
+  // === /SB_PROGRESS_WAIT_V2 ===
 
   } // /SB
 

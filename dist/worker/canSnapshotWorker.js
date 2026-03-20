@@ -608,7 +608,7 @@ function __cs_summarizeSnapshot(snap){
   if (!snap || typeof snap !== "object") return null;
   const params = Array.isArray(snap.parameters) ? snap.parameters : [];
   const ms = Array.isArray(snap.moduleState) ? snap.moduleState : [];
-  const idsKeep = new Set(["8","9","15","19","20"]);
+  const idsKeep = new Set(["8","9","15","18","19","20"]); // 18=KEYPAD_DALLAS
 
   const pickedMs = ms.filter(function(r){
     const id = String((r && (r.id || r.module_id || r.moduleId)) || "").trim();
@@ -870,7 +870,7 @@ async function pollOnce(){
       }
 
       // sleep 60s (reboot)
-      const __sleepMs = clampInt(p.reboot_sleep_ms, 0, 300000, 60000);
+      const __sleepMs = clampInt(p.reboot_sleep_ms, 0, 300000, 10000); // DEV: reduzido de 60s para 10s
       if (__sleepMs > 0) {
         try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "SLEEP_REBOOT", sleep_ms: __sleepMs } }); } catch(_e) {}
         await sleep(__sleepMs);
@@ -966,8 +966,10 @@ for(let i=0;i<cycles;i++){
         try { console.log("[INFO] cycle-summary", jobId, "c=", (i+1), (__sum && __sum.counts) || null, (__sum && __sum.rawCounts) ? __sum.rawCounts : null); } catch(_e) {}
 
     // __CAN_MULTI_REFRESH_V3__ guards
-    const __msg = Number((rawCounts && rawCounts.unit_messages_events) || (counts && counts.unit_messages_events) || 0);
-    const __conn = Number((rawCounts && rawCounts.unit_conn_events) || (counts && counts.unit_conn_events) || 0);
+    // __FIX_RAWCOUNTS_SCOPE__: rawCounts não existe neste escopo; usa snap.rawCounts
+    const __snapRawCounts = (snap && (snap.rawCounts || snap.raw_counts)) || null;
+    const __msg = Number((__snapRawCounts && __snapRawCounts.unit_messages_events) || (counts && counts.unit_messages_events) || 0);
+    const __conn = Number((__snapRawCounts && __snapRawCounts.unit_conn_events) || (counts && counts.unit_conn_events) || 0);
 
     // 1) já está bom: para cedo
     if (MR_ENABLED && pTot >= MR_STOP_AT_PARAMS) {

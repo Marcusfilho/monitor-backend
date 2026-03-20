@@ -4323,6 +4323,62 @@ const __vh = (__ctx && __ctx.__vhcls_last) ? __ctx.__vhcls_last : null;
           return;
         }
 
+        // === PIPELINE_META_V1 + SB_SKIP_CHECK_V3 (ANTES do pipeline) ===
+        // Lê estado atual do veículo ANTES de executar qualquer step HTML5.
+        // Assim curAsset/curSetting refletem o estado original, não o que acabamos de gravar.
+        let __meta = null;
+        try {
+          const __vid = Number(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || 0) || null;
+          const __tc  = Number(payload.target_client_id || payload.targetClientId || payload.client_id || payload.clientId || payload.CLIENT_ID || 0) || null;
+          const __vs  = Number(payload.vehicleSettingId || payload.vehicle_setting_id || payload.vehicleSettingID || 0) || null;
+          const __at  = Number(payload.assetType || payload.asset_type || payload.ASSET_TYPE || payload.vehicleType || payload.VEHICLE_TYPE || 0) || null;
+          __meta = {
+            service,
+            vehicle_id: __vid,
+            target_client_id: __tc,
+            vehicleSettingId: __vs,
+            assetType: __at,
+            plate_real: payload.plate_real || payload.plateReal || payload.LICENSE_NMBR || payload.plate || payload.placa || null,
+            serial: payload.serial || payload.serie || payload.INNER_ID || payload.innerId || payload.SERIAL || null
+          };
+        } catch (e) { __meta = null; }
+        try {
+          const __sbSkipEnabled = (process.env.SB_SKIP_ENABLED || "1") !== "0";
+          const __sbServices = ["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"];
+          if (__sbSkipEnabled && __meta && __meta.vehicle_id && __meta.vehicleSettingId && __meta.assetType && __sbServices.includes(String(service || "").toUpperCase())) {
+            const __cj = await loadCookieJar();
+            const __cookieStr = (__cj && __cj.cookie) ? __cj.cookie : "";
+            const __html5Url = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
+            const __sbBody = `VEHICLE_ID=${encodeURIComponent(String(__meta.vehicle_id))}&CLIENT_ID=${encodeURIComponent(String(__meta.target_client_id || ""))}&action=GET_VHCL_ACTIVATION_DATA_NEW&VERSION_ID=2`;
+            const __sbResp = await fetchWithCookies(__html5Url, {
+              method: "POST",
+              headers: {
+                "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "accept": "*/*",
+                "origin": "https://html5.traffilog.com",
+                "referer": "https://html5.traffilog.com/appv2/index.htm",
+              },
+              body: __sbBody,
+            }, __cookieStr);
+            const __sbTxt = __sbResp && __sbResp.text ? __sbResp.text : "";
+            const __mSetting = __sbTxt.match(/ASSIGNED_VEHICLE_SETTING_ID\s*=\s*"(\d+)"/i);
+            const __mAsset   = __sbTxt.match(/ASSET_TYPE\s*=\s*"(\d+)"/i);
+            const __curSetting = __mSetting ? Number(__mSetting[1]) : null;
+            const __curAsset   = __mAsset   ? Number(__mAsset[1])   : null;
+            const __settingMatch = __curSetting !== null && __curSetting === __meta.vehicleSettingId;
+            const __assetMatch   = __curAsset   !== null && __curAsset   === __meta.assetType;
+            __meta.sb_skip = __settingMatch && __assetMatch;
+            __meta.sb_skip_detail = { curSetting: __curSetting, curAsset: __curAsset, expSetting: __meta.vehicleSettingId, expAsset: __meta.assetType };
+            console.log(`[html5_v8] SB_SKIP_CHECK_V4 (PRE-PIPELINE) vehicleId=${__meta.vehicle_id} curSetting=${__curSetting} curAsset=${__curAsset} expSetting=${__meta.vehicleSettingId} expAsset=${__meta.assetType} sb_skip=${__meta.sb_skip}`);
+          } else {
+            if (__meta) __meta.sb_skip = false;
+          }
+        } catch (__sbErr) {
+          console.log(`[html5_v8] SB_SKIP_CHECK_V4 falhou (ignora, segue com SB):`, __sbErr && __sbErr.message);
+          if (__meta) __meta.sb_skip = false;
+        }
+        // === /PIPELINE_META_V1 + SB_SKIP_CHECK_V3 ===
+
         const results = [];
         for (const s of steps) {
           const out = await html5RunStep(id, s, cookie);
@@ -4361,22 +4417,6 @@ const __vh = (__ctx && __ctx.__vhcls_last) ? __ctx.__vhcls_last : null;
 
         const cookieKeys = cookieKeysFromCookieHeader((await loadCookieJar()).cookie || "");
 
-// === PIPELINE_META_V1 (expor IDs p/ encadear Monitor no backend) ===
-let __meta = null;
-try {
-  const __vid = Number(payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || 0) || null;
-  const __tc  = Number(payload.target_client_id || payload.targetClientId || payload.client_id || payload.clientId || payload.CLIENT_ID || 0) || null;
-  const __vs  = Number(payload.vehicleSettingId || payload.vehicle_setting_id || payload.vehicleSettingID || 0) || null;
-  __meta = {
-    service,
-    vehicle_id: __vid,
-    target_client_id: __tc,
-    vehicleSettingId: __vs,
-    plate_real: payload.plate_real || payload.plateReal || payload.LICENSE_NMBR || payload.plate || payload.placa || null,
-    serial: payload.serial || payload.serie || payload.INNER_ID || payload.innerId || payload.SERIAL || null
-  };
-} catch (e) { __meta = null; }
-// === /PIPELINE_META_V1 ===
 
 await finish("ok", {
   ok:true,

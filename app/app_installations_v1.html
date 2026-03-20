@@ -742,7 +742,10 @@
 
   function parseSbProgress(inst, snapshot){
     const h = canExtractHeaderObj(snapshot);
+    // SB_PROGRESS_V1: lê progressPercent do job (reportado em tempo real pelo worker)
     const p =
+      inst?.job?.progressPercent ??          // ← novo: progress real do job em tempo real
+      inst?.jobs?.find?.(j => j.type === "scheme_builder")?.progressPercent ??
       inst?.sb_progress ??
       inst?.sb?.progress ??
       inst?.sb?.progress_percent ??
