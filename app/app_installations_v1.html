@@ -1148,8 +1148,16 @@
     state.lastSnapshot = snap;
 
     const sb = parseSbProgress(inst, snap);
-    $("sbPct").textContent = (sb == null) ? "—" : (sb + "%");
-    $("sbFill").style.width = (sb == null) ? "0%" : (sb + "%");
+    const isSbRunning = st.includes("SB_RUNNING");
+    if (isSbRunning) {
+      const pct = sb ?? 0;
+      $("sbPct").textContent = pct > 0 ? (pct + "%") : "em andamento...";
+      $("sbFill").style.width = (pct > 0 ? pct : 5) + "%";
+      $("sbFill").style.transition = "width 1.5s ease";
+    } else {
+      $("sbPct").textContent = (sb == null) ? "—" : (sb + "%");
+      $("sbFill").style.width = (sb == null) ? "0%" : (sb + "%");
+    }
 
     const pa = parsePacketAge(snap);
     $("pktAge").textContent = pa.ageText;

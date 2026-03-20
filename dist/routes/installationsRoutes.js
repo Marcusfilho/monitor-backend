@@ -222,7 +222,7 @@ router.get("/:id", async (req, res) => {
         // SB_PROGRESS_ENRICH_V1: incluir progressPercent do job ativo na resposta
         // O app usa inst.job.progressPercent para exibir a barra de progresso do SB
         try {
-            const workerJobId = inst?.worker_job_id || inst?.sb?.job_id || null;
+            const workerJobId = inst?.sb?.job_id || inst?.worker_job_id || null;
             if (workerJobId && jobStore) {
                 const getJob = jobStore.getJob || jobStore.get;
                 if (typeof getJob === "function") {
