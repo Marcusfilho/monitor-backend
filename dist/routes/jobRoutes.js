@@ -4,7 +4,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
-const installationsStore = (() => { try { return require("../services/installationsStore"); } catch(_) { return null; } })();
 function pickCanSnapshotFromCompleteBody(root) {
     const first = (v) => Array.isArray(v) && v.length ? v[0] : null;
     const candidates = [
