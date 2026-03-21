@@ -1676,10 +1676,34 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       showToast("Falha ao carregar instalação (HTTP " + r.status + ")", "bad");
       return;
     }
-    renderAll(r.data);
+    const inst = r.data;
+
+    // SB_PROGRESS_DIRECT_V2: se SB_RUNNING e inst.job não veio do backend,
+    // busca o progress diretamente do endpoint de jobs (não depende de memória do Render)
+    const st = String(inst?.status || "").toUpperCase();
+    if (st.includes("SB_RUNNING") && !inst.job) {
+      const sbJobId = inst?.sb?.job_id || null;
+      if (sbJobId) {
+        try {
+          const rj = await api("/api/jobs/" + encodeURIComponent(sbJobId));
+          if (rj.ok && rj.data?.job) {
+            const j = rj.data.job;
+            if (j.progressPercent != null) {
+              inst.job = {
+                id: sbJobId,
+                progressPercent: j.progressPercent,
+                progressStage:  j.progressStage  || null,
+                progressDetail: j.progressDetail || null,
+              };
+            }
+          }
+        } catch(_) {}
+      }
+    }
+
+    renderAll(inst);
 
     // stop auto poll on completed
-    const st = String(r.data?.status || "").toUpperCase();
     if (st.includes("COMPLETED")) stopPoll();
   }
 
