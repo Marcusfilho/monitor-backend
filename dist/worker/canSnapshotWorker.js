@@ -856,9 +856,11 @@ async function pollOnce(){
     if (__isPostSb && installationId) {
       try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "WAITING_REBOOT_CAN", worker_job_id: jobId } }); } catch(_e) {}
 
-      // snapshot rápido (baseline)
+      // snapshot rápido (baseline) — best-effort, não bloqueia o fluxo se falhar
       try {
-        const pre = await takeSnapshotOnce(sessionToken, vehicleId, { windowMs: 4000, waitAfterCmdMs: 500 });
+        const prePromise = takeSnapshotOnce(sessionToken, vehicleId, { windowMs: 4000, waitAfterCmdMs: 500 });
+        const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error("baseline snapshot timeout 15s")), 15000));
+        const pre = await Promise.race([prePromise, timeoutPromise]);
         const preSum = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(pre) || pre) : pre;
         const hdr = preSum && preSum.header ? preSum.header : (pre && pre.header) ? pre.header : null;
         const pkt = __pickPacketTsFromHeader(hdr);
@@ -866,6 +868,7 @@ async function pollOnce(){
         const prog = __pickProgressFromHeader(hdr);
         await postInstallationCanSnapshot(installationId, preSum, { status: "SB_RUNNING", phase: "SB_UPDATE", sb_progress: prog, packet_ts: pkt, job_id: jobId });
       } catch(e) {
+        console.log(`[WARN] baseline snapshot falhou (não crítico): ${e?.message || e}`);
         errors.push(String(e?.message || e));
       }
 

@@ -784,8 +784,9 @@ try {
 
   if (!processId) {
     const preview = Array.isArray(d) ? d.slice(0, 3) : d;
-    console.log("[sb] DEBUG: process_id não veio no topo. preview data=", JSON.stringify(preview));
-    throw new Error("Não veio process_id");
+    console.log("[sb] WARN: process_id não veio — SB pode já estar rodando. preview=", JSON.stringify(preview));
+    console.log("[sb] Continuando sem process_id — SB_WAIT_V1 vai detectar conclusão via UNIT_CONFIG_STATUS");
+    // Não falha: o SB_WAIT_V1 detecta conclusão independente do process_id
   }
 }
   console.log("[sb] process_id =", processId);
@@ -892,6 +893,8 @@ try {
           const error    = String(push.error     ?? "").trim();
           const retries  = String(push.retries   ?? "").trim();
 
+          const pct = parseFloat(progress) || 0;
+
           // Só logar quando mudar (evitar spam)
           const key = `${status}|${progress}`;
           if (key !== `${lastStatus}|${lastProgress}`) {
@@ -903,7 +906,6 @@ try {
           }
 
           // Fim detectado
-          const pct = parseFloat(progress) || 0;
           // Completed: status explícito OU progress >= 99.9
           const isDone = status === "Completed" || status === "Done" ||
                          status === "completed" || status === "done" ||
@@ -984,6 +986,7 @@ try {
   }
   // ===========================================================================
 ws.close(1000, "done");
+setTimeout(() => process.exit(0), 500); // garante encerramento do processo
 })();
 
 // PATCH_WAITFORMTKN_V2

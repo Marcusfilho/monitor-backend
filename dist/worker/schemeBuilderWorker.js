@@ -309,10 +309,20 @@ async function processJob(job) {
                 GS_ONLY: "0",
             }),
         };
-        const r = (0, child_process_1.spawnSync)(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
-        if (r.status !== 0)
-            throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
-        await completeJob(job.id, "ok", { status: "ok", stdout: r.stdout, stderr: r.stderr });
+        // spawn assíncrono = não bloqueia o event loop (heartbeat continua funcionando)
+        const exitCode = await new Promise((resolve, reject) => {
+            const child = (0, child_process_1.spawn)(process.execPath, args, {
+                cwd: process.cwd(),
+                env,
+                stdio: ["ignore", "inherit", "inherit"], // output direto no journal
+            });
+            child.on("close", (code) => resolve(code ?? 0));
+            child.on("error", (err) => reject(err));
+        });
+        if (exitCode !== 0)
+            throw new Error(`[sb_run_vm] exit=${exitCode}`);
+        // Não enviar stdout/stderr no payload — causa 413 (payload muito grande)
+        await completeJob(job.id, "ok", { status: "ok" });
     }
     catch (err) {
         console.error(`[worker] Erro no job ${job.id}:`, err?.message || err);
