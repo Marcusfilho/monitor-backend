@@ -5,6 +5,7 @@ const router = Router();
 
 // require(any) pra não travar por typings enquanto estabiliza V1
 const installationsStore: any = require("../services/installationsStore");
+const jobStore: any = (() => { try { return require("../jobs/jobStore"); } catch(_) { return null; } })();
 const installationsEngine: any = require("../services/installationsEngine");
 
 function pickFn(obj: any, names: string[]) {
