@@ -6,7 +6,7 @@ const router = (0, express_1.Router)();
 // require(any) pra não travar por typings enquanto estabiliza V1
 const installationsStore = require("../services/installationsStore");
 const installationsEngine = require("../services/installationsEngine");
-const jobStore = (() => { try { return require("../services/jobStore"); } catch(_) { return null; } })();
+const jobStore = (() => { try { return require("../jobs/jobStore"); } catch(_) { return null; } })();
 function pickFn(obj, names) {
     for (const n of names)
         if (obj && typeof obj[n] === "function")
