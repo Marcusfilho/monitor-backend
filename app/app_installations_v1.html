@@ -205,7 +205,10 @@
     <div class="progressWrap">
       <div class="progressBar"><div class="progressFill" id="sbFill"></div></div>
       <div class="progressMeta">
-        <div>SB: <b id="sbPct">—</b></div>
+        <div>SB: <b id="sbPct">—</b> <span id="sbStatusLabel" style="font-size:11px;color:var(--muted);margin-left:4px"></span></div>
+        <div id="sbCountdownWrap" class="hidden" style="color:var(--accent);font-weight:700">
+          CAN em <span id="sbCountdown">60</span>s
+        </div>
         <div class="hidden">Último pacote: <b id="pktAge">—</b></div>
       </div>
     </div>
@@ -1123,6 +1126,58 @@
     kv.appendChild(pill(`Setting: ${setting}`, ""));
   }
 
+  // ====== SB Countdown (60s após SB concluído antes de liberar CAN) ======
+  // Guarda quando entrou em WAITING_REBOOT para fazer a contagem regressiva
+  const _sbCd = { enteredAt: null, timer: null, lastStatus: null };
+
+  function renderSbCountdown(inst, isWaitReboot) {
+    const wrap = $("sbCountdownWrap");
+    const span = $("sbCountdown");
+
+    if (!isWaitReboot) {
+      // saiu do estado — limpa tudo
+      if (_sbCd.timer) { clearInterval(_sbCd.timer); _sbCd.timer = null; }
+      _sbCd.enteredAt  = null;
+      _sbCd.lastStatus = null;
+      wrap.classList.add("hidden");
+      return;
+    }
+
+    // entrou em WAITING_REBOOT — registrar timestamp na primeira vez
+    const st = String(inst?.status || "").toUpperCase();
+    if (_sbCd.lastStatus !== st) {
+      _sbCd.lastStatus = st;
+      // tenta usar o timestamp de mudança do backend; se não tiver, usa agora
+      const changedAt = inst?.updated_at ?? inst?.updatedAt ?? inst?.status_changed_at ?? null;
+      _sbCd.enteredAt = changedAt ? new Date(changedAt).getTime() : Date.now();
+      if (_sbCd.timer) clearInterval(_sbCd.timer);
+      _sbCd.timer = null;
+    }
+
+    const REBOOT_WAIT_MS = 60_000; // 60 segundos que o dispositivo leva para resetar
+
+    const tick = () => {
+      const elapsed = Date.now() - (_sbCd.enteredAt ?? Date.now());
+      const remaining = Math.max(0, Math.ceil((REBOOT_WAIT_MS - elapsed) / 1000));
+      span.textContent = remaining;
+
+      if (remaining <= 0) {
+        clearInterval(_sbCd.timer);
+        _sbCd.timer = null;
+        wrap.classList.add("hidden");
+        // força um poll imediato para pegar o novo status (CAN disponível)
+        loadInstallation(inst?.installation_id || inst?.id || "");
+      }
+    };
+
+    wrap.classList.remove("hidden");
+    tick(); // exibe imediatamente
+
+    if (!_sbCd.timer) {
+      _sbCd.timer = setInterval(tick, 1000);
+    }
+  }
+
   function renderAll(inst){
     state.inst = inst;
     renderTop(inst);
@@ -1148,16 +1203,45 @@
     state.lastSnapshot = snap;
 
     const sb = parseSbProgress(inst, snap);
-    const isSbRunning = st.includes("SB_RUNNING");
+    const isSbRunning   = st.includes("SB_RUNNING");
+    const isSbDone      = st.includes("SB_DONE") || st.includes("WAITING_REBOOT") || st.includes("CAN_");
+    const isWaitReboot  = st.includes("WAITING_REBOOT");
+
+    // --- barra de progresso ---
     if (isSbRunning) {
       const pct = sb ?? 0;
-      $("sbPct").textContent = pct > 0 ? (pct + "%") : "em andamento...";
-      $("sbFill").style.width = (pct > 0 ? pct : 5) + "%";
-      $("sbFill").style.transition = "width 1.5s ease";
+      $("sbPct").textContent     = pct > 0 ? (pct + "%") : "0%";
+      $("sbFill").style.transition = "width 1.2s ease";
+      $("sbFill").style.width    = (pct > 0 ? pct : 2) + "%";
+    } else if (isSbDone) {
+      $("sbPct").textContent     = "100%";
+      $("sbFill").style.transition = "width 0.6s ease";
+      $("sbFill").style.width    = "100%";
     } else {
-      $("sbPct").textContent = (sb == null) ? "—" : (sb + "%");
-      $("sbFill").style.width = (sb == null) ? "0%" : (sb + "%");
+      $("sbPct").textContent     = (sb == null) ? "—" : (sb + "%");
+      $("sbFill").style.transition = "";
+      $("sbFill").style.width    = (sb == null) ? "0%" : (sb + "%");
     }
+
+    // --- label de status do SB (texto ao lado do %) ---
+    const sbLabel = $("sbStatusLabel");
+    if (isSbRunning) {
+      const sbStatus =
+        inst?.job?.sbStatus ??
+        inst?.job?.progressStage ??
+        inst?.job?.progressDetail ??
+        inst?.sbStatus ?? null;
+      sbLabel.textContent = sbStatus ? ("· " + sbStatus) : "· enviando...";
+    } else if (isSbDone) {
+      sbLabel.textContent = "· concluído ✓";
+      sbLabel.style.color = "var(--ok, #22c55e)";
+    } else {
+      sbLabel.textContent = "";
+      sbLabel.style.color = "";
+    }
+
+    // --- countdown de reboot (60s antes de liberar CAN) ---
+    renderSbCountdown(inst, isWaitReboot);
 
     const pa = parsePacketAge(snap);
     $("pktAge").textContent = pa.ageText;
@@ -1188,6 +1272,10 @@
     $("keyParams").innerHTML = "";
     $("sbPct").textContent = "—";
     $("sbFill").style.width = "0%";
+    $("sbStatusLabel").textContent = "";
+    $("sbCountdownWrap").classList.add("hidden");
+    if (_sbCd.timer) { clearInterval(_sbCd.timer); _sbCd.timer = null; }
+    _sbCd.enteredAt = null; _sbCd.lastStatus = null;
     $("pktAge").textContent = "—";
     renderStepper("");
     renderTop(empty);
@@ -1219,8 +1307,9 @@
 
   function nextPollDelay(inst){
     const st = String(inst?.status || "").toUpperCase();
-    if (st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT")) return 1500;
-    if (st.includes("SB_RUNNING")) return 1800;
+    if (st.includes("CAN_RUNNING")) return 1500;
+    if (st.includes("WAITING_REBOOT")) return 1000;
+    if (st.includes("SB_RUNNING")) return 1000;
     if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 2000;
     return state.pollMs;
   }
