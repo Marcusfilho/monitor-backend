@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>APP V1 — Instalações (v1.4)</title>
+  <title>APP V1 — Instalações (v1.5)</title>
   <style>
     :root{
       --bg:#0b0f12; --panel:#0f1620; --text:#e8eef2; --muted:#93a4b8; --line:#1f2a38;
@@ -35,7 +35,7 @@
     textarea{min-height:70px;resize:vertical}
 
     .row{display:flex;gap:10px;flex-wrap:wrap}
-    .row > *{flex:1;min-width:220px}
+    .row > *{flex:1;min-width:140px}
 
     button{
       cursor:pointer;border:1px solid #2a3a52;background:#122033;color:var(--text);
@@ -91,6 +91,18 @@
     .bottomBar button{flex:1}
 
     .hidden{display:none !important}
+    @keyframes pulse-bad{ 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse-bad{ animation:pulse-bad 1.2s ease-in-out infinite }
+    .csel-trigger{width:100%;padding:10px 12px;border-radius:14px;border:1px solid #273245;background:#0b1118;color:var(--text);font-size:14px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+    .csel-trigger .csel-arrow{color:var(--muted);font-size:11px}
+    .csel-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);align-items:flex-end}
+    .csel-overlay.open{display:flex}
+    .csel-sheet{width:100%;background:#0f1620;border-radius:20px 20px 0 0;max-height:70vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,12px)}
+    .csel-sheet-title{padding:16px 16px 8px;font-size:13px;color:var(--muted);font-weight:700;border-bottom:1px solid #1f2a38}
+    .csel-item{padding:14px 16px;font-size:15px;color:var(--text);border-bottom:1px solid #1a2535;cursor:pointer}
+    .csel-item:active{background:#1a2535}
+    .csel-item.selected{color:var(--accent)}
+    .csel-cancel{padding:14px 16px;font-size:14px;color:var(--muted);text-align:center;cursor:pointer;margin-top:4px}
 
     @media (max-width:520px){
       .row > *{min-width: 100%}
@@ -98,17 +110,68 @@
       .wrap{padding:12px 10px 98px}
       .chip .msg{max-width:160px}
     }
+
+    /* === NOVO LAYOUT CAN HEADER === */
+    .hdr{padding:10px 0 6px;border-bottom:1px solid var(--line)}
+    .hdr-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:22px}
+    .hdr-row + .hdr-row{margin-top:4px}
+    .hdr-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap}
+    .hdr-right{flex-shrink:0}
+    .hdr-tag{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
+    .hdr-sep{color:var(--line);font-size:13px}
+    .hdr-muted{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+    .driver-box{background:#0b1118;border:1px solid #2a3a52;border-radius:10px;padding:4px 10px;font-size:11px;font-weight:800;color:var(--accent);font-family:var(--mono);white-space:nowrap}
+    .driver-box .driver-label{font-size:9px;color:var(--muted);font-weight:600;display:block;margin-bottom:1px}
+    .can-status-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid #223043;background:#0b1118;font-size:11px;font-weight:700;color:var(--muted)}
+    .can-status-chip.ok{border-color:#166534;background:#052e16;color:var(--good)}
+    .can-status-chip.warn{border-color:#854d0e;background:#1c1002;color:var(--warn)}
+    .can-status-chip.bad{border-color:#7f1d1d;background:#1c0505;color:var(--bad)}
+    @keyframes can-spin{to{transform:rotate(360deg)}}
+    .can-spin{display:inline-block;animation:can-spin .9s linear infinite;font-size:11px}
+
+    /* === GRID 2 COLUNAS PARÂMETROS === */
+    .param-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+    .param-card{background:transparent;border:1px solid #1a2535;border-radius:10px;padding:8px 10px;min-width:0}
+    .param-card.has-val{border-color:#1a3a28;background:#040e08}
+    .param-card .p-label{font-size:9px;color:#4a5a6e;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .param-card .p-val{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .param-card.has-val .p-label{color:#2d6a44}
+    .param-card.has-val .p-val{color:#4ade80}
+    .param-card .p-val.awaiting{color:#232f3e;font-size:11px;font-weight:400}
+    .param-summary{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+    .param-summary .ps-label{font-size:11px;color:var(--muted)}
+    .param-summary .ps-val{font-size:12px;font-family:var(--mono);font-weight:700;color:var(--accent)}
+
+    /* === STEPPER COMPACTO === */
+    .stepper-compact{display:flex;align-items:center;gap:0;margin-top:10px;overflow-x:auto;padding-bottom:2px}
+    .sc-step{display:flex;align-items:center;gap:0}
+    .sc-dot{width:28px;height:28px;border-radius:99px;border:2px solid #223043;background:#0b1118;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--muted);flex-shrink:0;position:relative}
+    .sc-dot.done{background:#052e16;border-color:#166534;color:var(--good)}
+    .sc-dot.active{background:#1c1002;border-color:#854d0e;color:var(--warn)}
+    .sc-line{width:20px;height:2px;background:#223043;flex-shrink:0}
+    .sc-line.done{background:#166534}
+    .sc-label{font-size:9px;color:var(--muted);font-weight:700;text-align:center;margin-top:3px;white-space:nowrap}
+    .sc-label.done{color:var(--good)}
+    .sc-label.active{color:var(--warn)}
+    .sc-wrap{display:flex;flex-direction:column;align-items:center}
   </style>
 </head>
 <body>
-<header>
-  <div class="title">
-    <h1>APP V1 — Instalações <span class="pill" style="margin-left:8px">v1.4</span></h1>
-    <div class="sub" id="subline">Pronto</div>
+<header style="padding:10px 14px;gap:8px">
+  <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:13px;font-weight:700;color:var(--text)">App Instalador</span>
+      <span style="font-size:10px;color:#3a4a5c;font-weight:600">v1.5</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted)" id="subline">Pronto</div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
     <div class="kv" id="topKv"></div>
-    <button id="btnNew" class="secondary" style="padding:8px 10px;border-radius:12px;font-weight:800;font-size:12px">Nova</button>
+    <button id="btnNew" class="secondary" style="padding:7px 12px;border-radius:12px;font-weight:700;font-size:12px">Nova</button>
+    <div id="sessionPill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid #2a3a52;background:#0b1118;color:var(--muted)">
+      <span id="sessionDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0"></span>
+      <span id="sessionTxt">sessão...</span>
+    </div>
   </div>
 </header>
 
@@ -117,63 +180,69 @@
   <section class="card" id="cardForm">
     <h2>1) Dados da instalação</h2>
 
-    <label>Serviço</label>
-    <select id="service">
-      <option value="INSTALL">INSTALL</option>
-      <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
-      <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
-      <option value="UNINSTALL">UNINSTALL</option>
-    </select>
+    <!-- Serviço: sutil, inline -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:11px;color:var(--muted);flex-shrink:0">Serviço</span>
+      <select id="service" style="padding:5px 10px;font-size:12px;border-radius:10px;flex:1;min-width:0">
+        <option value="INSTALL">INSTALL</option>
+        <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
+        <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
+        <option value="UNINSTALL">UNINSTALL</option>
+      </select>
+    </div>
 
-    <div class="row">
-      <div>
-        <label>Cliente</label>
-        <select id="clientSelect"></select>
-        <div class="hidden" id="clientMeta" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+    <!-- vehicleSettingId: preenchido automaticamente pelo select de cliente, não exibido -->
+    <input type="hidden" id="vehicleSettingId" />
+
+    <label>Cliente</label>
+    <select id="clientSelect"></select>
+    <div class="hidden" id="clientMeta" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+
+    <!-- Frota + Placa na mesma linha -->
+    <div class="row" style="margin-top:10px">
+      <div style="flex:0 0 35%;min-width:0">
+        <label>Frota <span style="font-size:10px;opacity:.7">(opcional)</span></label>
+        <input id="fleet" placeholder="ex.: 0042" />
       </div>
-      <div>
-        <label>Setting (Monitor)</label>
-        <input id="vehicleSettingId" placeholder="ex.: 5592" inputmode="numeric" />
+      <div style="flex:1;min-width:0">
+        <label>Placa</label>
+        <input id="plate_real" placeholder="ex.: ABC1D23" autocapitalize="characters" style="text-transform:uppercase" />
       </div>
     </div>
 
-    <div class="row">
-      <div>
-        <label>Placa (real)</label>
-        <input id="plate_real" placeholder="ex.: ABC1D23" autocapitalize="characters" />
-      </div>
-      <div id="rowSerial">
-        <label>Serial</label>
-        <input id="serial" placeholder="ex.: 913055459" inputmode="numeric" />
-      </div>
+    <div id="rowSerial" style="margin-top:0">
+      <label>Serial</label>
+      <input id="serial" placeholder="ex.: 913055459" inputmode="numeric" />
     </div>
 
-    <div class="row" id="rowInstallModel">
-      <div>
+    <!-- Fabricante + Modelo na mesma linha -->
+    <div class="row" id="rowInstallModel" style="margin-top:0">
+      <div style="flex:1;min-width:0">
         <label>Fabricante</label>
-        <select id="cat_manufacturer"></select>
+        <select id="cat_manufacturer" style="font-size:13px"></select>
       </div>
-      <div>
+      <div style="flex:1;min-width:0">
         <label>Modelo</label>
-        <select id="cat_model"></select>
+        <select id="cat_model" style="font-size:13px"></select>
       </div>
     </div>
-    <div class="hidden" id="assetTypeWrap" style="margin-top:8px">
-      <span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span>
-    </div>
+
     <div style="margin-top:10px">
       <label>Comentário</label>
       <input id="comment" placeholder="Comentário para os comandos no Monitor" />
     </div>
+    <!-- assetType: mantido no DOM para o JS, mas nunca exibido ao usuário -->
+    <div class="hidden" id="assetTypeWrap"><span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span></div>
 
-    <details id="gsDetails">
-      <summary>G‑Sensor (orientação)</summary>
-      <div class="row" style="margin-top:6px">
-        <div>
+    <!-- G-Sensor: sempre visível, dois campos lado a lado -->
+    <div style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
+      <div class="row" style="margin-top:0">
+        <div style="flex:1;min-width:0">
           <label>Etiqueta (label)</label>
           <select id="gs_label"></select>
         </div>
-        <div>
+        <div style="flex:1;min-width:0">
           <label>Chicote (harness)</label>
           <select id="gs_harness"></select>
         </div>
@@ -182,9 +251,14 @@
         <label>Comando (auto)</label>
         <input id="gs_command" readonly />
       </div>
-      <div style="margin-top:8px;font-size:12px;color:var(--muted)">O comando é calculado automaticamente.</div>
-    </details>
+    </div>
 
+    <div style="margin-top:12px">
+      <label>Fotos da instalação <span style="font-size:10px;opacity:.7">(em breve)</span></label>
+      <div style="border:1px dashed #2a3a52;border-radius:14px;padding:14px;text-align:center;color:var(--muted);font-size:12px;background:#0b1118;cursor:default">
+        📷 Tirar foto ou selecionar da galeria<br><span style="font-size:10px;opacity:.7">Funcionalidade em desenvolvimento</span>
+      </div>
+    </div>
     <div class="row" style="margin-top:12px">
       <button id="btnCreate">Criar instalação</button>
       <button class="secondary" id="btnReset">Limpar</button>
@@ -206,14 +280,23 @@
       <div class="progressBar"><div class="progressFill" id="sbFill"></div></div>
       <div class="progressMeta">
         <div>SB: <b id="sbPct">—</b> <span id="sbStatusLabel" style="font-size:11px;color:var(--muted);margin-left:4px"></span></div>
-        <div id="sbCountdownWrap" class="hidden" style="color:var(--accent);font-weight:700">
-          CAN em <span id="sbCountdown">60</span>s
-        </div>
+        <div id="sbCountdownWrap" class="hidden" style="color:var(--accent);font-weight:700">CAN em <span id="sbCountdown">60</span>s</div>
         <div class="hidden">Último pacote: <b id="pktAge">—</b></div>
       </div>
     </div>
 
     <div class="stepper hidden" id="stepper"></div>
+
+<div id="errRow" class="hidden" style="margin-top:12px">
+  <div class="pill" style="border-color:#5b1f1f;background:#2a1111;color:#ffd6d6">
+    <span class="dot bad"></span>
+    <b id="errTitle">ERRO</b>
+    <span id="errMsg" style="font-weight:700"></span>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="btnRetryHtml5" class="secondary">Reprocessar HTML5</button>
+  </div>
+</div>
 
     <div class="list" id="canHeader"></div>
 
@@ -225,6 +308,17 @@
       <summary>Detalhes (JSON)</summary>
       <pre id="debugJson">{}</pre>
     </details>
+  </section>
+
+  <!-- Card de conclusão — exibido quando COMPLETED -->
+  <section class="card hidden" id="cardCompleted" style="text-align:center;padding:32px 20px">
+    <div style="font-size:48px;margin-bottom:12px">&#x2705;</div>
+    <h2 style="margin:0 0 8px 0;font-size:20px;color:var(--ok)">Instalação concluída!</h2>
+    <p id="completedPlate" style="margin:0 0 6px 0;font-size:14px;color:var(--text)">—</p>
+    <p id="completedSerial" style="margin:0 0 24px 0;font-size:12px;color:var(--muted);font-family:var(--mono)">—</p>
+    <button id="btnNewFromCompletion" style="padding:12px 28px;border-radius:14px;font-weight:700;font-size:14px;background:var(--accent);color:#000;border:none;cursor:pointer">
+      + Nova instalação
+    </button>
   </section>
 </div>
 
@@ -339,6 +433,7 @@
     renderManufacturers();
     renderGsSelectors();
     applyServiceUI();
+  updateBtnLabel();
     refreshAdvancedPreview();
   }
 
@@ -450,10 +545,25 @@
   }
   $("service").addEventListener("change", applyServiceUI);
 
+  function updateBtnLabel(){
+    const svc = $("service")?.value || "INSTALL";
+    const labels = {
+      "INSTALL":        "Criar instalação",
+      "MAINT_WITH_SWAP": "Criar manutenção",
+      "MAINT_NO_SWAP":   "Criar manutenção",
+      "UNINSTALL":       "Criar desinstalação",
+    };
+    const btn = $("btnCreate");
+    if (btn) btn.textContent = labels[svc] || "Criar instalação";
+  }
+  $("service").addEventListener("change", updateBtnLabel);
+
   function buildPayload(){
     const svc = $("service").value;
 
     const plateReal = up($("plate_real").value);
+    const fleet = ($("fleet")?.value || "").trim().toUpperCase();
+    const plateFull = fleet ? (fleet + " - " + plateReal) : plateReal;
     const serial = norm($("serial").value);
 
     const v = $("clientSelect").value || "";
@@ -466,10 +576,10 @@
       service: svc,
       target_client_id: clientId ? Number(clientId) : null,
       vehicleSettingId: vehicleSettingId ? Number(vehicleSettingId) : null,
-      plate_real: plateReal || null,
+      plate_real: plateFull || null,
       serial: serial || "",
       // compat: plate_lookup fica nulo (backend normaliza); plate usado p/ lookup
-      plate: (svc === "INSTALL") ? (serial || plateReal || null) : (plateReal || null),
+      plate: (svc === "INSTALL") ? (serial || plateFull || null) : (plateFull || null),
       gsensor: {
         label_pos: $("gs_label").value || null,
         harness_pos: $("gs_harness").value || null,
@@ -745,10 +855,8 @@
 
   function parseSbProgress(inst, snapshot){
     const h = canExtractHeaderObj(snapshot);
-    // SB_PROGRESS_V1: lê progressPercent do job (reportado em tempo real pelo worker)
     const p =
-      inst?.job?.progressPercent ??          // ← novo: progress real do job em tempo real
-      inst?.jobs?.find?.(j => j.type === "scheme_builder")?.progressPercent ??
+      inst?.job?.progressPercent ??      // progress real do job em tempo real
       inst?.sb_progress ??
       inst?.sb?.progress ??
       inst?.sb?.progress_percent ??
@@ -799,7 +907,13 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  function canRowModuleName(r){ return r?.sub_name ?? r?.subName ?? r?.subname ?? r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? ""; }
+  function canRowModuleName(r){
+    // Usa sub se for descritivo; se for "other"/vazio, usa module
+    const sub = r?.sub_name ?? r?.subName ?? r?.sub ?? r?.subname ?? "";
+    const subNorm = String(sub).toLowerCase().replace(/[^a-z0-9]/g,"");
+    if (sub && subNorm !== "other" && subNorm !== "") return sub;
+    return r?.name ?? r?.module_name ?? r?.moduleName ?? r?.module ?? "";
+  }
 
   function canFindModule(msRows, names){
     const rows = Array.isArray(msRows) ? msRows : [];
@@ -811,27 +925,29 @@
   }
 
   const CAN_MS_WANT = [
-    { key: "CAN0", names: ["can0"] },
-    { key: "CAN1", names: ["can1"] },
-    { key: "J1708", names: ["j1708"] },
-    { key: "KEYPAD_DALLAS_IBUTTON", names: ["keypaddallasibutton", "dallas", "ibutton"] },
-    { key: "KEYPAD_RAMZOR", names: ["keypadramzor", "ramzor"] },
+    { key: "CAN0",              names: ["can0"] },
+    { key: "CAN1",              names: ["can1"] },
+    { key: "J1708",             names: ["j1708"] },
+    { key: "KEYPAD_RAMZOR",     names: ["keypadramzor", "ramzor"] },
+    { key: "KEYPAD_DALLAS",     names: ["keypaddallasibutton", "dallas", "ibutton"] },
   ];
 
   const CAN_PARAM_RULES = [
-    { key: "speed",           label: "Velocidade",           ids: [],                                              aliases: ["sysparamspeed", "vehiclespeed", "speed"] },
-    { key: "rpm",             label: "RPM",                  ids: ["000000AD", "0000003A", "00002715"],       aliases: ["sysparamrpm", "enginerpm", "rpm"] },
-    { key: "distance",        label: "Distância",            ids: ["00002714"],                                   aliases: ["sysparamvehicledistance", "vehicledistance", "distance", "odometer"] },
-    { key: "engine_hours",    label: "Horas do motor",       ids: [],                                              aliases: ["sysparamenginetotalhoursofoperation", "enginetotalhoursofoperation", "enginehours"] },
-    { key: "fuel_level",      label: "Nível de combustível", ids: ["00000032", "000000C3", "0000879F", "00002717"], aliases: ["sysparamfuellevel", "tflprocessedsysparamfuellevel", "fuellevel"] },
-    { key: "fuel_rate",       label: "Consumo instantâneo",  ids: ["0000003C", "00002718"],                     aliases: ["sysparamfuelrate", "enginefuelrate", "fuelrate"] },
-    { key: "fuel_used",       label: "Combustível usado",    ids: ["00000031", "000000C5", "00002719"],       aliases: ["sysparamtotalfuelused", "calctotalfuelusedfromsysfuelrate", "enginetotalfuelused", "fuelused"] },
-    { key: "coolant_temp",    label: "Temp. coolant",        ids: ["0000002F", "0000010E", "0000271F"],       aliases: ["sysparamcoolanttemp", "enginecoolanttemperature", "coolanttemp"] },
-    { key: "oil_temp",        label: "Temp. óleo",           ids: ["0000168E", "0000271E"],                     aliases: ["sysparamoiltemp", "engineoiltemperature1", "oiltemp"] },
-    { key: "oil_pressure",    label: "Pressão do óleo",      ids: ["00000024", "0000010D", "00002723"],       aliases: ["sysparamoilpressure", "engineoilpressure", "oilpressure"] },
-    { key: "air_pressure",    label: "Pressão do ar",        ids: [],                                              aliases: ["sysparambrake1airpressurebar", "brake1airpressurebar", "airpressure"] },
-    { key: "battery_voltage", label: "Tensão da bateria",    ids: [],                                              aliases: ["sysparambatteryvoltage", "mbuv2mtstbatteryvoltage", "armanaloginput4backupbatteryvoltage", "batteryvoltage"] },
-    { key: "ignition",        label: "Ignição",              ids: [],                                              aliases: ["sysparamignitionnodelay", "sysparamignition", "ignitionstatus", "ignition"] },
+    // 1) Combustível (prioridade máxima)
+    { key: "fuel_level",      label: "Nível combustível",    ids: ["00000032", "000000C3", "0000879F", "00002717"], aliases: ["sysparamfuellevel", "tflprocessedsysparamfuellevel", "fuellevel"] },
+    { key: "fuel_rate",       label: "Consumo instantâneo",  ids: ["0000003C", "00002718"],                         aliases: ["sysparamfuelrate", "enginefuelrate", "fuelrate"] },
+    { key: "fuel_used",       label: "Combustível usado",    ids: ["00000031", "000000C5", "00002719"],             aliases: ["sysparamtotalfuelused", "calctotalfuelusedfromsysfuelrate", "enginetotalfuelused", "fuelused"] },
+    // 2) Odômetro
+    { key: "distance",        label: "Odômetro",             ids: ["00002714"],                                     aliases: ["sysparamvehicledistance", "vehicledistance", "distance", "odometer"] },
+    { key: "rpm",             label: "RPM",                  ids: ["000000AD", "0000003A", "00002715"],             aliases: ["sysparamrpm", "enginerpm", "rpm"] },
+    // 3) Pressão
+    { key: "oil_pressure",    label: "Pressão do óleo",      ids: ["00000024", "0000010D", "00002723"],             aliases: ["sysparamoilpressure", "engineoilpressure", "oilpressure"] },
+    { key: "air_pressure",    label: "Pressão do ar",        ids: [],                                               aliases: ["sysparambrake1airpressurebar", "brake1airpressurebar", "airpressure"] },
+    // 4) Temperatura
+    { key: "coolant_temp",    label: "Temp. coolant",        ids: ["0000002F", "0000010E", "0000271F"],             aliases: ["sysparamcoolanttemp", "enginecoolanttemperature", "coolanttemp"] },
+    { key: "oil_temp",        label: "Temp. óleo",           ids: ["0000168E", "0000271E"],                         aliases: ["sysparamoiltemp", "engineoiltemperature1", "oiltemp"] },
+    // 5) Limpador
+    { key: "wiper",           label: "Limpador",             ids: [],                                               aliases: ["sysparamwiperstatus", "wiperstatus", "wiper", "wiperactive", "wiper_status"] },
   ];
 
   function canFindParam(rows, rule){
@@ -929,7 +1045,7 @@
       config_type: canSafeDecode(cfgType),
       config_progress: canSafeDecode(cfgProgress),
       config_error: canSafeDecode(cfgError),
-      driver_code: canSafeDecode(canFirstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code], "—")),
+      driver_code: canSafeDecode(canFirstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code, inst?.driver_code, inst?.driverCode], "—")),
       license_number: canSafeDecode(canFirstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
       serial: canSafeDecode(canFirstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
       client: canSafeDecode(canFirstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
@@ -940,58 +1056,83 @@
   function renderCanHeader(inst, snapshot){
     const host = $("canHeader");
     if (!host) return;
-    host.innerHTML = "";
     const h = canGetHeaderLite(inst, snapshot);
     const ign = canToIgnitionBool(h.ignitionRaw);
-    const ignHtml = ign === true
-      ? `<span class="pill"><span class="dot good"></span>Ligada</span>`
-      : ign === false
-        ? `<span class="pill"><span class="dot bad"></span>Desligada</span>`
-        : `<span class="pill"><span class="dot warn"></span>—</span>`;
-    const items = [
-      ["Ignição", ignHtml, true],
-      ["Comunicação", h.communication || "—", false],
-      ["Driver ID", h.driver_code || "—", false],
-      ["Placa", h.license_number || "—", false],
-      ["Serial", h.serial || "—", false],
-      ["Cliente", h.client || "—", false],
-      ["Modelo", h.model || "—", false],
-    ];
-    for (const [k, v, isHtml] of items){
-      const li = document.createElement("div");
-      li.className = "li";
-      li.innerHTML = `<div class="k">${canEsc(k)}</div><div class="v">${isHtml ? v : canEsc(v || "—")}</div>`;
-      host.appendChild(li);
+
+    const ignClass = ign === true ? "good" : ign === false ? "bad" : "warn";
+    const ignText  = ign === true ? "Ligada" : ign === false ? "Desligada" : "—";
+
+    const phase = snapshot?.phase || "";
+    let canChipClass = "warn", canChipIcon = `<span class="can-spin">⟳</span>`, canChipText = "aguardando";
+    if (phase === "CAN_DONE" || phase === "CAN_APPROVED") {
+      canChipClass = "ok"; canChipIcon = "✓"; canChipText = "coletado";
+    } else if (phase === "CAN_PARTIAL") {
+      canChipClass = "warn"; canChipIcon = `<span class="can-spin">⟳</span>`; canChipText = "coletando";
+    } else if (phase && phase.includes("ERROR")) {
+      canChipClass = "bad"; canChipIcon = "✗"; canChipText = "erro CAN";
     }
+
+    const plate   = canEsc(h.license_number || "—");
+    const serial  = canEsc(h.serial || "—");
+    const client  = canEsc(h.client || "—");
+    const model   = canEsc(h.model || "—");
+    const gprs    = canEsc(h.communication || "—");
+    const driver  = h.driver_code && h.driver_code !== "—" ? canEsc(h.driver_code) : "—";
+
+    host.innerHTML = `
+      <div class="hdr" style="display:flex;gap:10px;align-items:flex-start">
+        <!-- coluna esquerda: dados do veículo -->
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${plate}</div>
+          <div style="font-size:11px;color:var(--accent);font-family:var(--mono);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${serial}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${client}</div>
+          <div style="font-size:10px;color:#3a4a5c;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${model}</div>
+          <div style="font-size:10px;color:#3a4a5c;margin-top:1px">GPRS: ${gprs}</div>
+        </div>
+        <!-- coluna direita: chips empilhados -->
+        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0">
+          <span class="can-status-chip ${canChipClass}">${canChipIcon} ${canChipText}</span>
+          <div class="driver-box"><span class="driver-label">DRIVER</span>${driver}</div>
+          <span class="pill" style="font-size:10px;padding:3px 8px">
+            <span class="dot ${ignClass}"></span>${ignText}
+          </span>
+        </div>
+      </div>`;
   }
 
   function renderModuleState(snapshot){
     const x = canExtractRowsFromSnapshot(snapshot);
     const host = $("msChips");
     host.innerHTML = "";
+    let hasAny = false;
     for (const w of CAN_MS_WANT){
       const it = canFindModule(x.ms, w.names);
       const ok = canStrictOkTriple(it);
-      const msg = canSafeDecode(canPickErr(it));
-      let kind = "bad";
-      if (ok) kind = "good";
-      else if (!it) kind = "warn";
+      // NOVO: só exibe módulos que estão OK
+      if (!ok) continue;
+      hasAny = true;
       const chip = document.createElement("div");
       chip.className = "chip";
-      if (msg) chip.title = msg;
+      chip.style.borderColor = "#166534";
+      chip.style.background = "#052e16";
       const d = document.createElement("span");
-      d.className = "dot " + kind;
+      d.className = "dot good";
       const n = document.createElement("span");
       n.className = "name";
       n.textContent = w.key;
       const m = document.createElement("span");
       m.className = "msg";
-      if (!it) m.textContent = "sem dados";
-      else if (msg) m.textContent = msg;
-      else m.textContent = ok ? "OK" : "falha";
+      m.textContent = "OK";
+      m.style.color = "var(--good)";
       chip.appendChild(d);
       chip.appendChild(n);
       chip.appendChild(m);
+      host.appendChild(chip);
+    }
+    if (!hasAny) {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.innerHTML = `<span class="dot warn"></span><span class="name" style="color:var(--muted)">Nenhum módulo OK</span>`;
       host.appendChild(chip);
     }
   }
@@ -1031,51 +1172,90 @@
     if (!Number.isFinite(withVal)) {
       withVal = x.params.filter((p) => canDisplayValue(p) !== "—").length;
     }
-    const top = document.createElement("div");
-    top.className = "li";
-    top.innerHTML = `<div class="k">Parameters</div><div class="v">${withVal}/${total}</div>`;
-    host.appendChild(top);
-    const built = canBuildKeyParamItems(inst, snapshot);
-    for (const it of built.picked){
-      const li = document.createElement("div");
-      li.className = "li";
-      li.innerHTML = `<div class="k">${canEsc(it.name)}</div><div class="v">${canEsc(it.val)}</div>`;
-      host.appendChild(li);
+
+    // Cabeçalho resumo
+    const summary = document.createElement("div");
+    summary.className = "param-summary";
+    summary.innerHTML = `<span class="ps-label">Parâmetros CAN</span><span class="ps-val">${withVal}/${total}</span>`;
+    host.appendChild(summary);
+
+    // Grid 2 colunas
+    const grid = document.createElement("div");
+    grid.className = "param-grid";
+
+    for (const rule of CAN_PARAM_RULES) {
+      const found = canFindParam(x.params, rule);
+      const shown = found ? canDisplayValue(found) : null;
+      const hasVal = !!(shown && shown !== "—");
+
+      const card = document.createElement("div");
+      card.className = "param-card" + (hasVal ? " has-val" : "");
+      card.innerHTML = `
+        <div class="p-label">${canEsc(rule.label)}</div>
+        <div class="p-val${hasVal ? "" : " awaiting"}">${hasVal ? canEsc(shown) : "aguardando..."}</div>`;
+      grid.appendChild(card);
     }
-    if (!built.picked.length){
-      const li = document.createElement("div");
-      li.className = "li";
-      li.innerHTML = `<div class="k">Sem parâmetros principais</div><div class="v">—</div>`;
-      host.appendChild(li);
-    }
+
+    host.appendChild(grid);
   }
 
 
   function statusToLabel(s){
-    const x = String(s || "").trim();
-    if (!x) return "CRIADA";
-    return x;
+    const x = String(s || "").trim().toUpperCase();
+    if (!x) return "criada";
+    const MAP = {
+      "CREATED":          "criada",
+      "HTML5_QUEUED":     "aguardando cadastro",
+      "HTML5_RUNNING":    "cadastrando...",
+      "HTML5_DONE":       "cadastrado",
+      "SB_QUEUED":        "aguardando config.",
+      "SB_RUNNING":       "configurando...",
+      "SB_DONE":          "configurado",
+      "CAN_RUNNING":      "coletando CAN...",
+      "CAN_APPROVED":     "CAN aprovado",
+      "GS_QUEUED":        "aguardando envio GS",
+      "GS_RUNNING":       "enviando GS...",
+      "GS_DONE":          "GS enviado",
+      "COMPLETED":        "concluído ✓",
+      "WAITING_REBOOT":   "aguardando reboot",
+    };
+    if (MAP[x]) return MAP[x];
+    // fallback: retorna o status em minúsculo para não poluir a UI
+    return x.toLowerCase();
   }
 
   function statusToStepIndex(status){
+    // Retorna quantos steps estão concluídos (i < idx → verde)
+    // HTML5(0) SB(1) CAN(2) FIM(3)
     const s = String(status || "").toUpperCase();
-    if (s.includes("COMPLETED")) return 5;
-    if (s.includes("GS")) return 4;
-    if (s.includes("CAN_APPROVED")) return 3;
-    if (s.includes("CAN_")) return 2;
-    if (s.includes("WAITING_REBOOT")) return 2;
-    if (s.includes("SB")) return 1;
-    if (s.includes("HTML5")) return 0;
-    return 0;
+
+    // Flag HTML5: verde em HTML5_DONE ou qualquer status posterior
+    // Inclui qualquer variação de SB/CAN/GS para cobrir status intermediários
+    const html5Done = s.includes("SB") || s.includes("CAN") || s.includes("GS")
+                   || s === "COMPLETED" || s === "HTML5_DONE" || s === "WAITING_REBOOT"
+                   || s === "CAN_SNAPSHOT_READY";
+
+    // Flag SB: verde SOMENTE em SB_DONE ou posterior (não em SB_QUEUED nem SB_RUNNING)
+    const sbDone = s === "SB_DONE" || s.startsWith("CAN") || s.startsWith("GS") || s === "COMPLETED";
+
+    // Flag CAN: verde ao clicar "Validar CAN" (CAN_APPROVED ou GS ou COMPLETED)
+    const canDone = s === "CAN_APPROVED" || s.startsWith("GS") || s === "COMPLETED";
+
+    // Flag FIM: verde quando GS foi enviado (GS_RUNNING, GS_DONE ou COMPLETED)
+    const fimDone = s === "GS_RUNNING" || s === "GS_DONE" || s === "COMPLETED";
+
+    if (fimDone)  return 4; // todos verdes
+    if (canDone)  return 3; // HTML5+SB+CAN verdes, FIM ativo
+    if (sbDone)   return 2; // HTML5+SB verdes, CAN ativo
+    if (html5Done)return 1; // HTML5 verde, SB ativo
+    return 0; // nenhum verde ainda
   }
 
   function renderStepper(status){
     const steps = [
       { b:"HTML5", s:"cadastro" },
-      { b:"SB", s:"atualizando" },
+      { b:"SB", s:"configurando" },
       { b:"CAN", s:"coletando" },
-      { b:"Aprovar", s:"técnico" },
-      { b:"GS", s:"enviado" },
       { b:"Fim", s:"ok" },
     ];
 
@@ -1083,30 +1263,47 @@
     const host = $("stepper");
     host.innerHTML = "";
 
-    for (let i=0;i<steps.length;i++){
+    const wrap = document.createElement("div");
+    wrap.className = "stepper-compact";
+
+    for (let i = 0; i < steps.length; i++){
       const it = steps[i];
-      const el = document.createElement("div");
-      el.className = "step";
-      const d = document.createElement("span");
-      d.className = "dot " + (i < idx ? "good" : (i === idx ? "warn" : ""));
-      const b = document.createElement("b");
-      b.textContent = it.b;
-      const s = document.createElement("span");
-      s.textContent = it.s;
-      el.appendChild(d);
-      el.appendChild(b);
-      el.appendChild(s);
-      host.appendChild(el);
+      const isDone = i < idx;
+      const isActive = i === idx;
+
+      const scWrap = document.createElement("div");
+      scWrap.className = "sc-wrap";
+
+      const dot = document.createElement("div");
+      dot.className = "sc-dot" + (isDone ? " done" : isActive ? " active" : "");
+      dot.textContent = isDone ? "✓" : String(i + 1);
+
+      const lbl = document.createElement("div");
+      lbl.className = "sc-label" + (isDone ? " done" : isActive ? " active" : "");
+      lbl.textContent = it.b;
+
+      scWrap.appendChild(dot);
+      scWrap.appendChild(lbl);
+      wrap.appendChild(scWrap);
+
+      if (i < steps.length - 1){
+        const line = document.createElement("div");
+        line.className = "sc-line" + (isDone ? " done" : "");
+        line.style.marginBottom = "14px"; // alinha com o centro dos dots
+        wrap.appendChild(line);
+      }
     }
+    host.appendChild(wrap);
   }
 
   function renderTop(inst){
+    // DEV: chips de status e inst_id ocultos no header (úteis só para debug)
+    // Para reativar: remover o "return" abaixo
     const top = $("topKv");
     top.innerHTML = "";
-
+    // return; // descomente para ocultar em produção
     const st = statusToLabel(inst?.status);
     top.appendChild(pill("status: " + st, ""));
-
     const id = inst?.installation_id || inst?.id || null;
     if (id) top.appendChild(pill(String(id), ""));
   }
@@ -1126,129 +1323,206 @@
     kv.appendChild(pill(`Setting: ${setting}`, ""));
   }
 
-  // ====== SB Countdown (60s após SB concluído antes de liberar CAN) ======
-  // Guarda quando entrou em WAITING_REBOOT para fazer a contagem regressiva
-  const _sbCd = { enteredAt: null, timer: null, lastStatus: null };
+  
 
-  function renderSbCountdown(inst, isWaitReboot) {
-    const wrap = $("sbCountdownWrap");
-    const span = $("sbCountdown");
+// Mapa de mensagens amigáveis para erros do Monitor Traffilog
+const ERROR_MESSAGES = [
+  { match: "Editing unit number is not allowed",  friendly: "Veículo já possui rastreador. Faça o UNINSTALL primeiro." },
+  { match: "not found",                            friendly: "Veículo não encontrado no Monitor. Verifique o serial." },
+  { match: "job_exception_or_timeout",             friendly: "Falha na comunicação. Verifique a sessão VPN." },
+  { match: "html5_install_job_exception",          friendly: "Falha na comunicação. Verifique a sessão VPN." },
+  { match: "unauthorized",                         friendly: "Sessão expirada — reconecte à VPN." },
+  { match: "Failed to link unit",                  friendly: "Falha ao vincular rastreador. Verifique o serial e tente novamente." },
+  { match: "timeout",                              friendly: "Tempo esgotado. Verifique a conexão VPN e tente novamente." },
+];
 
-    if (!isWaitReboot) {
-      // saiu do estado — limpa tudo
-      if (_sbCd.timer) { clearInterval(_sbCd.timer); _sbCd.timer = null; }
-      _sbCd.enteredAt  = null;
-      _sbCd.lastStatus = null;
-      wrap.classList.add("hidden");
-      return;
-    }
+function friendlyError(msg) {
+  if (!msg) return "Erro desconhecido";
+  const lower = String(msg).toLowerCase();
+  for (const entry of ERROR_MESSAGES) {
+    if (lower.includes(entry.match.toLowerCase())) return entry.friendly;
+  }
+  return String(msg).slice(0, 240);
+}
 
-    // entrou em WAITING_REBOOT — registrar timestamp na primeira vez
-    const st = String(inst?.status || "").toUpperCase();
-    if (_sbCd.lastStatus !== st) {
-      _sbCd.lastStatus = st;
-      // tenta usar o timestamp de mudança do backend; se não tiver, usa agora
-      const changedAt = inst?.updated_at ?? inst?.updatedAt ?? inst?.status_changed_at ?? null;
-      _sbCd.enteredAt = changedAt ? new Date(changedAt).getTime() : Date.now();
-      if (_sbCd.timer) clearInterval(_sbCd.timer);
-      _sbCd.timer = null;
-    }
+function extractLastError(inst){
+  const e =
+    inst?.last_error ||
+    inst?.lastError ||
+    inst?.html5?.last_error ||
+    inst?.html5?.lastError ||
+    null;
+  if (!e) return null;
+  if (typeof e === "string") return { title: "ERRO", message: friendlyError(e) };
+  if (typeof e === "object"){
+    const msg = e.message || e.error || e.detail || e.hint || "";
+    const title = e.job_type ? String(e.job_type) : "ERRO";
+    const message = friendlyError(msg || "job_failed");
+    return { title: title.toUpperCase(), message, raw: e };
+  }
+  return { title: "ERRO", message: friendlyError(String(e)) };
+}
 
-    const REBOOT_WAIT_MS = 60_000; // 60 segundos que o dispositivo leva para resetar
+// ====== SB Countdown (60s de reboot após SB concluído, antes de liberar CAN) ======
+const _sbCd = { enteredAt: null, timer: null, lastStatus: null };
 
-    const tick = () => {
-      const elapsed = Date.now() - (_sbCd.enteredAt ?? Date.now());
-      const remaining = Math.max(0, Math.ceil((REBOOT_WAIT_MS - elapsed) / 1000));
-      span.textContent = remaining;
+function renderSbCountdown(inst, isWaitReboot) {
+  const wrap = $("sbCountdownWrap");
+  const span = $("sbCountdown");
 
-      if (remaining <= 0) {
-        clearInterval(_sbCd.timer);
-        _sbCd.timer = null;
-        wrap.classList.add("hidden");
-        // força um poll imediato para pegar o novo status (CAN disponível)
-        loadInstallation(inst?.installation_id || inst?.id || "");
-      }
-    };
-
-    wrap.classList.remove("hidden");
-    tick(); // exibe imediatamente
-
-    if (!_sbCd.timer) {
-      _sbCd.timer = setInterval(tick, 1000);
-    }
+  if (!isWaitReboot) {
+    if (_sbCd.timer) { clearInterval(_sbCd.timer); _sbCd.timer = null; }
+    _sbCd.enteredAt  = null;
+    _sbCd.lastStatus = null;
+    wrap.classList.add("hidden");
+    return;
   }
 
-  function renderAll(inst){
+  const st = String(inst?.status || "").toUpperCase();
+  if (_sbCd.lastStatus !== st) {
+    _sbCd.lastStatus = st;
+    // usa timestamp do backend se disponível, senão assume agora
+    const changedAt = inst?.updated_at ?? inst?.updatedAt ?? inst?.status_changed_at ?? null;
+    _sbCd.enteredAt = changedAt ? new Date(changedAt).getTime() : Date.now();
+    if (_sbCd.timer) clearInterval(_sbCd.timer);
+    _sbCd.timer = null;
+  }
+
+  const REBOOT_WAIT_MS = 60_000;
+
+  const tick = () => {
+    const elapsed   = Date.now() - (_sbCd.enteredAt ?? Date.now());
+    const remaining = Math.max(0, Math.ceil((REBOOT_WAIT_MS - elapsed) / 1000));
+    span.textContent = remaining;
+    if (remaining <= 0) {
+      clearInterval(_sbCd.timer);
+      _sbCd.timer = null;
+      wrap.classList.add("hidden");
+      // poll imediato ao zerar — pega o novo status CAN
+      const instId = inst?.installation_id || inst?.id || "";
+      if (instId) loadInstallation(instId);
+    }
+  };
+
+  wrap.classList.remove("hidden");
+  tick();
+  if (!_sbCd.timer) _sbCd.timer = setInterval(tick, 1000);
+}
+
+function renderAll(inst){
     state.inst = inst;
     renderTop(inst);
     renderInstKv(inst);
 
-    const status = inst?.status || "";
-    renderStepper(status);
+    
+const status = inst?.status || "";
+const st = String(status || "").toUpperCase();
 
-    // enable buttons when we have id/token
-    const id = inst?.installation_id || inst?.id || "";
-    const tok = inst?.installation_token || inst?.token || "";
+// --- Tela de conclusão: exibe card especial quando COMPLETED ---
+if (st === "COMPLETED") {
+  const plate  = inst?.payload?.plate_real || inst?.plate_real || inst?.plateReal || inst?.plate || "—";
+  const serial = inst?.payload?.serial || inst?.serial || inst?.inner_id || inst?.innerId || "—";
+  const model  = inst?.payload?.vehicle?.manufacturer && inst?.payload?.vehicle?.model
+    ? inst.payload.vehicle.manufacturer + " " + inst.payload.vehicle.model : "";
+  $("completedPlate").textContent  = plate !== "—" ? plate : (inst?.payload?.plate || "—");
+  $("completedSerial").textContent = "Serial: " + serial + (model ? " • " + model : "");
+  $("cardCompleted").classList.remove("hidden");
+  $("cardCan").classList.add("hidden");
+  stopPoll();
+  return;
+} else {
+  $("cardCompleted").classList.add("hidden");
+}
+// --- fim tela de conclusão ---
 
-    const canApproveEnabled = !!(id && tok);
-    $("btnApprove").disabled = !canApproveEnabled;
+$("stepper").classList.remove("hidden");
+renderStepper(status);
 
-    // Atualizar CAN: só quando não estiver no meio (heurística por status)
-    const st = String(status || "").toUpperCase();
-    const canRefreshEnabled = canApproveEnabled && !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
-    $("btnRefresh").disabled = !canRefreshEnabled;
+// erro da última etapa (ex.: HTML5_ERROR)
+const err = extractLastError(inst);
+const errRow = $("errRow");
+const isErr = !!(err && (st.includes("ERROR") || st.includes("HTML5_ERROR") || st.includes("SB_ERROR") || st.includes("GS_ERROR")));
+if (isErr) {
+  errRow.classList.remove("hidden");
+  $("errTitle").textContent = err.title || "ERRO";
+  $("errMsg").textContent = " " + (err.message || "");
+  const canRetryHtml5 = st.includes("HTML5_ERROR") || st.includes("HTML5_");
+  $("btnRetryHtml5").classList.toggle("hidden", !canRetryHtml5);
+  $("btnRetryHtml5").disabled = !canRetryHtml5;
+} else {
+  errRow.classList.add("hidden");
+  $("btnRetryHtml5").classList.add("hidden");
+}
 
+// enable buttons when we have id/token
+const id = inst?.installation_id || inst?.id || "";
+const tok = inst?.installation_token || inst?.token || "";
+
+// VALIDAR CAN: somente quando estivermos no estágio CAN+ (ou depois)
+const canApproveEnabled = !!(id && tok) && (st.includes("CAN") || st.includes("WAITING_REBOOT") || st.includes("GS") || st.includes("COMPLETED"));
+$("btnApprove").disabled = !canApproveEnabled;
+
+// Atualizar CAN: só quando CAN já iniciou em algum momento e não estiver coletando/aguardando reboot/SB
+const canRefreshEnabled =
+  !!(id && tok) &&
+  (st === "SB_DONE" || st.includes("CAN") || st.includes("WAITING_REBOOT") || st.includes("GS") || st === "COMPLETED" || st === "CAN_SNAPSHOT_READY") &&
+  !(st.includes("CAN_RUNNING") || st.includes("WAITING_REBOOT") || st.includes("SB_RUNNING"));
+$("btnRefresh").disabled = !canRefreshEnabled;
     // snapshot
     const snap = extractSnapshot(inst);
-    state.lastSnapshot = snap;
+    // Regra: nunca apagar lastSnapshot por snapshot vazio
+    const snapParams = canExtractRowsFromSnapshot(snap)?.params;
+    if (snap && snapParams && snapParams.length > 0) {
+      state.lastSnapshot = snap;
+    } else if (!state.lastSnapshot) {
+      state.lastSnapshot = snap;
+    }
+    const activeSnap = state.lastSnapshot;
 
-    const sb = parseSbProgress(inst, snap);
-    const isSbRunning   = st.includes("SB_RUNNING");
-    const isSbDone      = st.includes("SB_DONE") || st.includes("WAITING_REBOOT") || st.includes("CAN_");
-    const isWaitReboot  = st.includes("WAITING_REBOOT");
+    const sb = parseSbProgress(inst, activeSnap);
+    const isSbRunning  = st.includes("SB_RUNNING");
+    const isSbDone     = st.includes("SB_DONE") || st.includes("WAITING_REBOOT") || st.includes("CAN_") || st.includes("GS_") || st === "COMPLETED";
+    const isWaitReboot = st.includes("WAITING_REBOOT");
 
-    // --- barra de progresso ---
+    // --- barra de progresso animada ---
     if (isSbRunning) {
       const pct = sb ?? 0;
-      $("sbPct").textContent     = pct > 0 ? (pct + "%") : "0%";
+      $("sbPct").textContent       = pct > 0 ? (pct + "%") : "0%";
       $("sbFill").style.transition = "width 1.2s ease";
-      $("sbFill").style.width    = (pct > 0 ? pct : 2) + "%";
+      $("sbFill").style.width      = (pct > 0 ? pct : 2) + "%";
     } else if (isSbDone) {
-      $("sbPct").textContent     = "100%";
+      $("sbPct").textContent       = "100%";
       $("sbFill").style.transition = "width 0.6s ease";
-      $("sbFill").style.width    = "100%";
+      $("sbFill").style.width      = "100%";
     } else {
-      $("sbPct").textContent     = (sb == null) ? "—" : (sb + "%");
+      $("sbPct").textContent       = (sb == null) ? "—" : (sb + "%");
       $("sbFill").style.transition = "";
-      $("sbFill").style.width    = (sb == null) ? "0%" : (sb + "%");
+      $("sbFill").style.width      = (sb == null) ? "0%" : (sb + "%");
     }
 
-    // --- label de status do SB (texto ao lado do %) ---
+    // --- label de status textual do SB ---
     const sbLabel = $("sbStatusLabel");
     if (isSbRunning) {
-      const sbStatus =
-        inst?.job?.sbStatus ??
-        inst?.job?.progressStage ??
-        inst?.job?.progressDetail ??
-        inst?.sbStatus ?? null;
+      const sbStatus = inst?.job?.progressStage ?? inst?.job?.progressDetail ?? inst?.job?.sbStatus ?? null;
       sbLabel.textContent = sbStatus ? ("· " + sbStatus) : "· enviando...";
+      sbLabel.style.color = "";
     } else if (isSbDone) {
       sbLabel.textContent = "· concluído ✓";
-      sbLabel.style.color = "var(--ok, #22c55e)";
+      sbLabel.style.color = "var(--good, #22c55e)";
     } else {
       sbLabel.textContent = "";
       sbLabel.style.color = "";
     }
 
-    // --- countdown de reboot (60s antes de liberar CAN) ---
+    // --- countdown 60s aguardando reboot antes de liberar CAN ---
     renderSbCountdown(inst, isWaitReboot);
 
-    const pa = parsePacketAge(snap);
+    const pa = parsePacketAge(activeSnap);
     $("pktAge").textContent = pa.ageText;
 
-    renderCanHeader(inst, snap || {});
-    renderModuleState(snap || {});
-    renderKeyParams(inst, snap || {});
+    renderCanHeader(inst, activeSnap || {});
+    renderModuleState(activeSnap || {});
+    renderKeyParams(inst, activeSnap || {});
 
     if (state.debug){
       $("detailsDebug").classList.remove("hidden");
@@ -1280,10 +1554,114 @@
     renderStepper("");
     renderTop(empty);
     renderInstKv(empty);
+    try { $("errRow").classList.add("hidden"); $("btnRetryHtml5").classList.add("hidden"); } catch {}
     $("btnApprove").disabled = true;
     $("btnRefresh").disabled = true;
     setSubline("Pronto");
   }
+
+  // ====== session status ======
+  async function checkSessionStatus(){
+    try {
+      const r = await fetch("/api/worker/status", { cache: "no-store" });
+      if (!r.ok) throw new Error("http " + r.status);
+      const d = await r.json();
+      const pill = document.getElementById("sessionPill");
+      const dot  = document.getElementById("sessionDot");
+      const txt  = document.getElementById("sessionTxt");
+      if (!pill || !dot || !txt) return;
+      // pega o worker principal (vm-tunel-01 ou o primeiro disponível)
+      const workers = d.workers || [];
+      const w = workers.find(x => x.checks?.session_ok !== undefined) || workers[0];
+      const sessionOk = w?.checks?.session_ok === true;
+      const workerOk  = !!w && (Date.now() - new Date(w.ts).getTime()) < 120000;
+      if (sessionOk && workerOk) {
+        dot.style.background = "var(--good)";
+        dot.classList.remove("pulse-bad");
+        txt.textContent = "sessão OK";
+        pill.style.borderColor = "#1a3a1a";
+        pill.style.color = "var(--good)";
+        pill.title = "";
+      } else if (!workerOk) {
+        dot.style.background = "var(--warn)";
+        dot.classList.remove("pulse-bad");
+        txt.textContent = "⚠ worker offline";
+        pill.style.borderColor = "var(--warn)";
+        pill.style.color = "var(--warn)";
+        pill.title = "Worker não responde há mais de 2 minutos";
+      } else {
+        dot.style.background = "var(--bad)";
+        dot.classList.add("pulse-bad");
+        txt.textContent = "⚠ sessão expirada";
+        pill.style.borderColor = "var(--bad)";
+        pill.style.color = "var(--bad)";
+        pill.title = "Token inválido — reconecte à VPN";
+      }
+    } catch(e) {
+      const txt = document.getElementById("sessionTxt");
+      if (txt) txt.textContent = "sessão ?";
+    }
+  }
+  // ====== custom select (UX mobile) ======
+  function initCustomSelect(selectEl){
+    if (!selectEl || selectEl.dataset.cselInit) return;
+    selectEl.dataset.cselInit = "1";
+    selectEl.style.display = "none";
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "csel-trigger";
+    trigger.innerHTML = '<span class="csel-val"></span><span class="csel-arrow">▼</span>';
+    selectEl.parentNode.insertBefore(trigger, selectEl.nextSibling);
+
+    const overlay = document.createElement("div");
+    overlay.className = "csel-overlay";
+    overlay.innerHTML = '<div class="csel-sheet"><div class="csel-sheet-title" id="csel-title-'+selectEl.id+'"></div><div class="csel-items"></div><div class="csel-cancel">Cancelar</div></div>';
+    document.body.appendChild(overlay);
+
+    function syncTrigger(){
+      const opt = selectEl.options[selectEl.selectedIndex];
+      trigger.querySelector(".csel-val").textContent = opt ? (opt.textContent || opt.value) : "—";
+    }
+    function buildItems(){
+      const host = overlay.querySelector(".csel-items");
+      host.innerHTML = "";
+      const title = overlay.querySelector(".csel-sheet-title");
+      title.textContent = selectEl.closest("div")?.querySelector("label")?.textContent?.replace(/\(.*\)/g,"").trim() || "";
+      for (let i=0;i<selectEl.options.length;i++){
+        const opt = selectEl.options[i];
+        const item = document.createElement("div");
+        item.className = "csel-item" + (i === selectEl.selectedIndex ? " selected" : "");
+        item.textContent = opt.textContent || opt.value;
+        item.addEventListener("click", () => {
+          selectEl.selectedIndex = i;
+          selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+          syncTrigger();
+          overlay.classList.remove("open");
+        });
+        host.appendChild(item);
+      }
+    }
+    trigger.addEventListener("click", () => { buildItems(); overlay.classList.add("open"); });
+    overlay.querySelector(".csel-cancel").addEventListener("click", () => overlay.classList.remove("open"));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.remove("open"); });
+
+    // observer para quando as options mudarem dinamicamente
+    new MutationObserver(() => syncTrigger()).observe(selectEl, { childList: true, subtree: true });
+    syncTrigger();
+  }
+
+  function initAllCustomSelects(){
+    ["service","clientSelect","cat_manufacturer","cat_model","gs_label","gs_harness"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) initCustomSelect(el);
+    });
+  }
+  // inicializar após o DOM estar pronto
+  setTimeout(initAllCustomSelects, 100);
+
+  checkSessionStatus();
+  setInterval(checkSessionStatus, 60000);
 
   // ====== polling ======
   function stopPoll(){
@@ -1309,7 +1687,8 @@
     const st = String(inst?.status || "").toUpperCase();
     if (st.includes("CAN_RUNNING")) return 1500;
     if (st.includes("WAITING_REBOOT")) return 1000;
-    if (st.includes("SB_RUNNING")) return 1000;
+    if (st.includes("SB_RUNNING")) return 1000;   // mais rápido para detectar progresso
+    if (st.includes("SB_QUEUED"))  return 1000;
     if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 2000;
     return state.pollMs;
   }
@@ -1328,11 +1707,23 @@
   }
 
   // ====== actions ======
+  $("btnNewFromCompletion").onclick = () => {
+    stopPoll();
+    state.inst = null;
+    state.lastSnapshot = null;
+    $("cardCompleted").classList.add("hidden");
+    $("cardCan").classList.remove("hidden");
+    $("cardForm").classList.remove("hidden");
+    renderEmpty();
+    showToast("Nova instalação", "warn");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   $("btnNew").onclick = () => {
     stopPoll();
     state.inst = null;
     state.lastSnapshot = null;
-    saveLs("", "");
+    // não apagar o último installation_id/token ao clicar "Nova" (permite retomar caso o job esteja rodando)
     $("cardForm").classList.remove("hidden");
     renderEmpty();
     showToast("Nova instalação", "warn");
@@ -1449,7 +1840,41 @@
     }
   };
 
-  // ====== boot ======
+  
+
+$("btnRetryHtml5").onclick = async () => {
+  const id = state?.inst?.installation_id || state?.inst?.id || (loadLs().id) || "";
+  const tok = state?.inst?.installation_token || state?.inst?.token || (loadLs().tok) || "";
+  if (!id || !tok){ showToast("Falta installation_id/token", "bad"); return; }
+
+  try {
+    $("btnRetryHtml5").disabled = true;
+    setSubline("Reprocessando HTML5…");
+
+    const r = await api("/api/installations/" + encodeURIComponent(id) + "/actions/retry-html5", {
+      method: "POST",
+      headers: { "x-installation-token": tok },
+      json: {}
+    });
+
+    if (!r.ok){
+      showToast("Falha ao reprocessar (HTTP " + r.status + ")", "bad");
+      console.log(r.data);
+      return;
+    }
+
+    showToast("HTML5 reenfileirado. Aguardando execução…", "good");
+    await loadInstallation(id);
+    startPoll();
+
+  } catch (e) {
+    showToast("Falha: " + fmtErr(e), "bad");
+  } finally {
+    $("btnRetryHtml5").disabled = false;
+  }
+};
+
+// ====== boot ======
   (function init(){
     // debug mode via URL ?debug=1
     try {
