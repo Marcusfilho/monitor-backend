@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
+const installationsStore = (() => { try { return require("../services/installationsStore"); } catch(_) { return null; } })();
 function pickCanSnapshotFromCompleteBody(root) {
     const first = (v) => Array.isArray(v) && v.length ? v[0] : null;
     const candidates = [
@@ -672,6 +673,19 @@ router.post("/:id/progress", (req, res) => {
     job.progressStage = (typeof body.stage === "string") ? body.stage : null;
     job.progressDetail = (typeof body.detail === "string") ? body.detail : null;
     job.lastProgressAt = new Date().toISOString();
+    // SB_PROGRESS_PERSIST_V1: salvar progress direto na instalação (merge do sb para não perder job_id)
+    try {
+        const instId = job.payload?.installation_id || null;
+        if (instId && installationsStore) {
+            const getOne = installationsStore.getInstallation || installationsStore.getById || installationsStore.read;
+            const patchFn = installationsStore.patchInstallation || installationsStore.patch || installationsStore.update;
+            if (typeof getOne === "function" && typeof patchFn === "function") {
+                const inst = getOne(instId);
+                const sbPrev = (inst?.sb && typeof inst.sb === "object") ? inst.sb : {};
+                patchFn(instId, { sb: Object.assign({}, sbPrev, { progress: Math.round(p), stage: job.progressStage, detail: job.progressDetail }) });
+            }
+        }
+    } catch(_) {}
     return res.json({ ok: true });
 });
 router.post("/:id/complete", (req, res) => {
