@@ -223,10 +223,13 @@ router.get("/:id", async (req, res) => {
         // O app usa inst.job.progressPercent para exibir a barra de progresso do SB
         try {
             const workerJobId = inst?.sb?.job_id || inst?.worker_job_id || null;
+            console.log('[enrich] workerJobId=', workerJobId, 'jobStore=', !!jobStore);
             if (workerJobId && jobStore) {
                 const getJob = jobStore.getJob || jobStore.get;
+                console.log('[enrich] getJob=', typeof getJob);
                 if (typeof getJob === "function") {
                     const job = getJob(workerJobId);
+                    console.log('[enrich] job=', job ? {status: job.status, pct: job.progressPercent} : null);
                     if (job && job.progressPercent != null) {
                         inst.job = {
                             id: workerJobId,
@@ -237,7 +240,7 @@ router.get("/:id", async (req, res) => {
                     }
                 }
             }
-        } catch(_) { /* best-effort */ }
+        } catch(e) { console.log('[enrich] ERROR', e?.message); }
         return res.json(inst);
     }
     catch (e) {
