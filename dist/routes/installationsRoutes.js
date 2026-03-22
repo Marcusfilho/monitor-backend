@@ -210,7 +210,7 @@ router.post("/", async (req, res) => {
     }
 });
 // ADMIN_LIST_V1 — lista todas as instalações
-router.get("/", (_req, res) => {
+router.get("", (_req, res) => {
     try {
         const list = typeof installationsStore.listInstallations === "function"
             ? installationsStore.listInstallations()
