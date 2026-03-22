@@ -485,6 +485,35 @@ const adminKey = pickAdminKey();
   }
 });
 
+// ADMIN_LIST_V1
+router.get("/", (_req, res) => {
+  try {
+    const list = typeof installationsStore.listInstallations === "function"
+      ? installationsStore.listInstallations()
+      : [];
+    return res.json({ installations: list });
+  } catch(e: any) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+// ADMIN_CANCEL_V1
+router.post("/:id/cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inst = installationsStore.getInstallation(id);
+    if (!inst) return res.status(404).json({ ok: false, error: "not found" });
+    const TERMINAL = ["COMPLETED","CANCELLED","ERROR","CAN_SNAPSHOT_ERROR"];
+    if (TERMINAL.includes(String(inst.status||"").toUpperCase()))
+      return res.json({ ok: true, skipped: true, reason: "already_terminal", status: inst.status });
+    const updated = installationsStore.patchInstallation(id, {
+      status: "CANCELLED",
+      last_error: { ts: new Date().toISOString(), message: "cancelled_by_admin" }
+    });
+    return res.json({ ok: true, installation: updated });
+  } catch(e: any) {
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
 router.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id || "");

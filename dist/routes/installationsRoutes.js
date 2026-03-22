@@ -5,8 +5,13 @@ const requireWorkerKey_1 = require("../middleware/requireWorkerKey");
 const router = (0, express_1.Router)();
 // require(any) pra não travar por typings enquanto estabiliza V1
 const installationsStore = require("../services/installationsStore");
+const jobStore = (() => { try {
+    return require("../jobs/jobStore");
+}
+catch (_) {
+    return null;
+} })();
 const installationsEngine = require("../services/installationsEngine");
-const jobStore = (() => { try { return require("../jobs/jobStore"); } catch(_) { return null; } })();
 function pickFn(obj, names) {
     for (const n of names)
         if (obj && typeof obj[n] === "function")
@@ -209,33 +214,35 @@ router.post("/", async (req, res) => {
         return res.status(500).json({ ok: false, error: "Internal Server Error" });
     }
 });
-// ADMIN_LIST_V1 — lista todas as instalações
-router.get("", (_req, res) => {
+// ADMIN_LIST_V1
+router.get("/", (_req, res) => {
     try {
         const list = typeof installationsStore.listInstallations === "function"
             ? installationsStore.listInstallations()
             : [];
         return res.json({ installations: list });
-    } catch(e) {
+    }
+    catch (e) {
         return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
 });
-// ADMIN_CANCEL_V1 — cancela instalação por id
+// ADMIN_CANCEL_V1
 router.post("/:id/cancel", async (req, res) => {
     try {
         const { id } = req.params;
         const inst = installationsStore.getInstallation(id);
-        if (!inst) return res.status(404).json({ ok: false, error: "not found" });
+        if (!inst)
+            return res.status(404).json({ ok: false, error: "not found" });
         const TERMINAL = ["COMPLETED", "CANCELLED", "ERROR", "CAN_SNAPSHOT_ERROR"];
-        if (TERMINAL.includes(String(inst.status || "").toUpperCase())) {
+        if (TERMINAL.includes(String(inst.status || "").toUpperCase()))
             return res.json({ ok: true, skipped: true, reason: "already_terminal", status: inst.status });
-        }
         const updated = installationsStore.patchInstallation(id, {
             status: "CANCELLED",
             last_error: { ts: new Date().toISOString(), message: "cancelled_by_admin" }
         });
         return res.json({ ok: true, installation: updated });
-    } catch(e) {
+    }
+    catch (e) {
         return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
 });
@@ -249,28 +256,6 @@ router.get("/:id", async (req, res) => {
         const inst = await getOne(id);
         if (!inst)
             return res.status(404).json({ ok: false, error: "not found" });
-        // SB_PROGRESS_ENRICH_V1: incluir progressPercent do job ativo na resposta
-        // O app usa inst.job.progressPercent para exibir a barra de progresso do SB
-        try {
-            const workerJobId = inst?.sb?.job_id || inst?.worker_job_id || null;
-            console.log('[enrich] workerJobId=', workerJobId, 'jobStore=', !!jobStore);
-            if (workerJobId && jobStore) {
-                const getJob = jobStore.getJob || jobStore.get;
-                console.log('[enrich] getJob=', typeof getJob);
-                if (typeof getJob === "function") {
-                    const job = getJob(workerJobId);
-                    console.log('[enrich] job=', job ? {status: job.status, pct: job.progressPercent} : null);
-                    if (job && job.progressPercent != null) {
-                        inst.job = {
-                            id: workerJobId,
-                            progressPercent: job.progressPercent,
-                            progressStage: job.progressStage || null,
-                            progressDetail: job.progressDetail || null,
-                        };
-                    }
-                }
-            }
-        } catch(e) { console.log('[enrich] ERROR', e?.message); }
         return res.json(inst);
     }
     catch (e) {
