@@ -493,6 +493,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
                 vehicleId: String(vehicleId),
                 cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
                 interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+                plate: inst?.payload?.plate_real || inst?.payload?.plateReal || inst?.payload?.plate || null,
+                serial: inst?.payload?.serial || inst?.payload?.serie || null,
             });
             try {
                 installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
@@ -515,6 +517,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             clientName,
             vehicleId: String(vehicleId),
             vehicleSettingId: Number(vehicleSettingId),
+            plate: inst?.payload?.plate_real || inst?.payload?.plateReal || inst?.payload?.plate || null,
+            serial: inst?.payload?.serial || inst?.payload?.serie || null,
             comment: (() => { const _b = String((inst && inst.payload && inst.payload.comment) || "").trim(); if (_b)
                 return _b; try {
                 const d = new Date();
@@ -572,6 +576,8 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             mode: "post_sb",
             reboot_sleep_ms: 60000,
             sb_poll_interval_ms: 60000,
+            plate: inst?.payload?.plate_real || inst?.payload?.plateReal || inst?.payload?.plate || job?.payload?.plate || null,
+            serial: inst?.payload?.serial || inst?.payload?.serie || job?.payload?.serial || null,
         });
         try {
             installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
@@ -743,6 +749,19 @@ router.post("/:id/complete", (req, res) => {
         _enqueueCanAfterSchemeBuilder(job, result);
     }
     return res.json({ job });
+});
+// ADMIN_CANCEL_V1 — cancela job por id (sem exigir worker key, protegido só por admin key ou sem auth p/ facilitar painel)
+router.post("/:id/cancel", (req, res) => {
+    const { id } = req.params;
+    const job = (0, jobStore_1.getJob)(id);
+    if (!job)
+        return res.status(404).json({ ok: false, error: "not found" });
+    if (job.status === "completed" || job.status === "cancelled" || job.status === "error") {
+        return res.json({ ok: true, skipped: true, reason: "already_terminal", job });
+    }
+    job.status = "cancelled";
+    job.updatedAt = new Date().toISOString();
+    return res.json({ ok: true, job });
 });
 router.get("/:id", (req, res) => {
     const { id } = req.params;

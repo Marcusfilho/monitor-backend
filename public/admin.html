@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Monitor Backend</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 20px; font-size: 13px; }
+  h1 { color: #aaa; font-size: 15px; margin-bottom: 16px; letter-spacing: 1px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  button { background: #1e1e1e; color: #ccc; border: 1px solid #333; padding: 6px 14px; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 12px; }
+  button:hover { background: #2a2a2a; border-color: #555; }
+  button.danger { border-color: #7a2020; color: #f08080; }
+  button.danger:hover { background: #2a1010; border-color: #c03030; }
+  button.warn { border-color: #6b5a00; color: #f0c040; }
+  button.warn:hover { background: #2a2000; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .status-bar { font-size: 11px; color: #666; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: #666; font-weight: normal; padding: 4px 8px; border-bottom: 1px solid #222; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  td { padding: 6px 8px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
+  tr:hover td { background: #161616; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
+  .badge.queued    { background: #1a2a1a; color: #6dbf6d; border: 1px solid #2a4a2a; }
+  .badge.processing{ background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
+  .badge.completed { background: #1a1a1a; color: #555; border: 1px solid #2a2a2a; }
+  .badge.cancelled { background: #1a1a1a; color: #555; border: 1px solid #2a2a2a; }
+  .badge.error     { background: #2a1010; color: #f08080; border: 1px solid #4a2020; }
+  .badge.pending   { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
+  .empty { color: #444; padding: 20px 8px; text-align: center; font-size: 12px; }
+  .progress-bar { width: 80px; height: 6px; background: #222; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 5px; }
+  .progress-bar span { display: block; height: 100%; background: #3a6a3a; border-radius: 3px; transition: width 0.3s; }
+  .id-cell { color: #555; font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .type-cell { color: #888; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a2a1a; border: 1px solid #2a4a2a; color: #6dbf6d; padding: 8px 16px; border-radius: 3px; font-size: 12px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.error { background: #2a1010; border-color: #4a2020; color: #f08080; }
+  .toast.show { opacity: 1; }
+  .section-title { color: #555; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .filter-btns { display: flex; gap: 6px; }
+  .filter-btn { font-size: 11px; padding: 3px 10px; }
+  .filter-btn.active { border-color: #555; color: #ddd; }
+</style>
+</head>
+<body>
+
+<h1>⚙ ADMIN — MONITOR BACKEND</h1>
+
+<div class="toolbar">
+  <button onclick="load()">↻ Atualizar</button>
+  <button class="danger" onclick="killAll()" id="btn-kill-all">✕ Kill All</button>
+  <div class="filter-btns">
+    <button class="filter-btn active" id="f-active" onclick="setFilter('active')">Ativos</button>
+    <button class="filter-btn" id="f-all" onclick="setFilter('all')">Todos</button>
+  </div>
+  <span class="status-bar" id="status-bar">—</span>
+</div>
+
+<p class="section-title">Jobs</p>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Tipo</th>
+      <th>Placa</th>
+      <th>Serial</th>
+      <th>Status</th>
+      <th>Progresso</th>
+      <th>Criado</th>
+      <th>Atualizado</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="jobs-body">
+    <tr><td colspan="7" class="empty">Carregando...</td></tr>
+  </tbody>
+</table>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const BASE = window.location.origin;
+  let allJobs = [];
+  let filter = 'active';
+  const ACTIVE = ['queued','processing','pending'];
+
+  function setFilter(f) {
+    filter = f;
+    document.getElementById('f-active').classList.toggle('active', f === 'active');
+    document.getElementById('f-all').classList.toggle('active', f === 'all');
+    render();
+  }
+
+  async function load() {
+    setStatus('atualizando...');
+    try {
+      const r = await fetch(BASE + '/api/jobs');
+      const d = await r.json();
+      allJobs = (d.jobs || []).sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+      render();
+      setStatus('atualizado ' + fmt(new Date()));
+    } catch(e) {
+      setStatus('erro: ' + e.message);
+      toast('Erro ao carregar jobs', true);
+    }
+  }
+
+  function render() {
+    const jobs = filter === 'active'
+      ? allJobs.filter(j => ACTIVE.includes(j.status))
+      : allJobs;
+
+    const tbody = document.getElementById('jobs-body');
+    if (!jobs.length) {
+      tbody.innerHTML = `<tr><td colspan="9" class="empty">${filter === 'active' ? 'Nenhum job ativo.' : 'Nenhum job.'}</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = jobs.map(j => {
+      const pct = j.progressPercent ?? j.progress ?? null;
+      const progressHtml = pct !== null
+        ? `<div class="progress-bar"><span style="width:${Math.min(100,pct)}%"></span></div>${pct}%`
+        : `<span style="color:#444">—</span>`;
+      const canCancel = ACTIVE.includes(j.status);
+      const btn = canCancel
+        ? `<button class="danger" onclick="cancelJob('${j.id}')">✕ Cancelar</button>`
+        : `<button disabled>✕</button>`;
+      const plate = j.plate || j.payload?.plate || j.payload?.plate_real || '—';
+      const serial = j.serial || j.payload?.serial || '—';
+      return `<tr>
+        <td class="id-cell" title="${j.id}">${j.id}</td>
+        <td class="type-cell">${j.type||'—'}</td>
+        <td style="color:#c8a96e;font-weight:bold">${plate}</td>
+        <td style="color:#888">${serial}</td>
+        <td><span class="badge ${j.status}">${j.status}</span></td>
+        <td>${progressHtml}</td>
+        <td style="color:#555">${fmtDate(j.createdAt)}</td>
+        <td style="color:#555">${fmtDate(j.updatedAt)}</td>
+        <td>${btn}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function cancelJob(id) {
+    try {
+      const r = await fetch(`${BASE}/api/jobs/${id}/cancel`, { method: 'POST' });
+      const d = await r.json();
+      if (d.ok) {
+        toast(`Job ${id.slice(-6)} cancelado`);
+        await load();
+      } else {
+        toast('Erro: ' + (d.error || JSON.stringify(d)), true);
+      }
+    } catch(e) {
+      toast('Erro: ' + e.message, true);
+    }
+  }
+
+  async function killAll() {
+    const ativos = allJobs.filter(j => ACTIVE.includes(j.status));
+    if (!ativos.length) { toast('Nenhum job ativo para cancelar'); return; }
+    if (!confirm(`Cancelar ${ativos.length} job(s) ativo(s)?`)) return;
+    setStatus('cancelando...');
+    let ok = 0, fail = 0;
+    for (const j of ativos) {
+      try {
+        const r = await fetch(`${BASE}/api/jobs/${j.id}/cancel`, { method: 'POST' });
+        const d = await r.json();
+        d.ok ? ok++ : fail++;
+      } catch { fail++; }
+    }
+    toast(`Kill all: ${ok} cancelados${fail ? ', ' + fail + ' falha(s)' : ''}`, fail > 0);
+    await load();
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status-bar').textContent = msg;
+  }
+
+  let toastTimer;
+  function toast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (isError ? ' error' : '') + ' show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  function fmt(d) {
+    return d.toLocaleTimeString('pt-BR');
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})
+      + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  // Auto-refresh a cada 10s enquanto há jobs ativos
+  setInterval(() => {
+    if (allJobs.some(j => ACTIVE.includes(j.status))) load();
+  }, 10000);
+
+  load();
+</script>
+</body>
+</html>
