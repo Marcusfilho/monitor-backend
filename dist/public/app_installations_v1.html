@@ -1236,7 +1236,7 @@
                    || s === "CAN_SNAPSHOT_READY";
 
     // Flag SB: verde SOMENTE em SB_DONE ou posterior (não em SB_QUEUED nem SB_RUNNING)
-    const sbDone = s === "SB_DONE" || s.startsWith("CAN") || s.startsWith("GS") || s === "COMPLETED";
+    const sbDone = s === "SB_DONE" || s.startsWith("CAN") || s.startsWith("GS") || s === "COMPLETED" || s.includes("WAITING_REBOOT");
 
     // Flag CAN: verde ao clicar "Validar CAN" (CAN_APPROVED ou GS ou COMPLETED)
     const canDone = s === "CAN_APPROVED" || s.startsWith("GS") || s === "COMPLETED";
