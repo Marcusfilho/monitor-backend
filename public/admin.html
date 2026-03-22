@@ -8,38 +8,44 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 20px; font-size: 13px; }
   h1 { color: #aaa; font-size: 15px; margin-bottom: 16px; letter-spacing: 1px; }
-  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
   button { background: #1e1e1e; color: #ccc; border: 1px solid #333; padding: 6px 14px; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 12px; }
   button:hover { background: #2a2a2a; border-color: #555; }
   button.danger { border-color: #7a2020; color: #f08080; }
   button.danger:hover { background: #2a1010; border-color: #c03030; }
-  button.warn { border-color: #6b5a00; color: #f0c040; }
-  button.warn:hover { background: #2a2000; }
   button:disabled { opacity: 0.35; cursor: not-allowed; }
   .status-bar { font-size: 11px; color: #666; margin-left: auto; }
+  .section { margin-bottom: 24px; }
+  .section-title { color: #555; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .count-badge { background: #1a1a1a; border: 1px solid #2a2a2a; color: #666; padding: 1px 7px; border-radius: 3px; font-size: 11px; }
+  .count-badge.active { border-color: #2a4a2a; color: #6dbf6d; }
   table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; color: #666; font-weight: normal; padding: 4px 8px; border-bottom: 1px solid #222; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
-  td { padding: 6px 8px; border-bottom: 1px solid #1a1a1a; vertical-align: middle; }
+  th { text-align: left; color: #555; font-weight: normal; padding: 4px 8px; border-bottom: 1px solid #1e1e1e; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  td { padding: 6px 8px; border-bottom: 1px solid #151515; vertical-align: middle; }
   tr:hover td { background: #161616; }
   .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
-  .badge.queued    { background: #1a2a1a; color: #6dbf6d; border: 1px solid #2a4a2a; }
-  .badge.processing{ background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
-  .badge.completed { background: #1a1a1a; color: #555; border: 1px solid #2a2a2a; }
-  .badge.cancelled { background: #1a1a1a; color: #555; border: 1px solid #2a2a2a; }
-  .badge.error     { background: #2a1010; color: #f08080; border: 1px solid #4a2020; }
-  .badge.pending   { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
-  .empty { color: #444; padding: 20px 8px; text-align: center; font-size: 12px; }
-  .progress-bar { width: 80px; height: 6px; background: #222; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 5px; }
-  .progress-bar span { display: block; height: 100%; background: #3a6a3a; border-radius: 3px; transition: width 0.3s; }
-  .id-cell { color: #555; font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .type-cell { color: #888; }
-  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a2a1a; border: 1px solid #2a4a2a; color: #6dbf6d; padding: 8px 16px; border-radius: 3px; font-size: 12px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .badge.queued     { background: #1a2a1a; color: #6dbf6d; border: 1px solid #2a4a2a; }
+  .badge.processing { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
+  .badge.completed  { background: #1a1a1a; color: #444; border: 1px solid #222; }
+  .badge.cancelled  { background: #1a1a1a; color: #444; border: 1px solid #222; }
+  .badge.error      { background: #2a1010; color: #f08080; border: 1px solid #4a2020; }
+  .badge.pending    { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
+  .badge.sb_running { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
+  .badge.can_running{ background: #1a2a2a; color: #6dbfbf; border: 1px solid #2a4a4a; }
+  .badge.waiting_reboot_can { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
+  .id-cell { color: #444; font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .plate-cell { color: #c8a96e; font-weight: bold; }
+  .type-cell { color: #777; }
+  .empty { color: #333; padding: 16px 8px; text-align: center; font-size: 12px; }
+  .progress-bar { width: 70px; height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 5px; }
+  .progress-bar span { display: block; height: 100%; background: #3a6a3a; border-radius: 3px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a2a1a; border: 1px solid #2a4a2a; color: #6dbf6d; padding: 8px 16px; border-radius: 3px; font-size: 12px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 99; }
   .toast.error { background: #2a1010; border-color: #4a2020; color: #f08080; }
   .toast.show { opacity: 1; }
-  .section-title { color: #555; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-  .filter-btns { display: flex; gap: 6px; }
+  .filter-btns { display: flex; gap: 4px; }
   .filter-btn { font-size: 11px; padding: 3px 10px; }
   .filter-btn.active { border-color: #555; color: #ddd; }
+  .divider { border: none; border-top: 1px solid #1a1a1a; margin: 20px 0; }
 </style>
 </head>
 <body>
@@ -47,147 +53,220 @@
 <h1>⚙ ADMIN — MONITOR BACKEND</h1>
 
 <div class="toolbar">
-  <button onclick="load()">↻ Atualizar</button>
+  <button onclick="loadAll()">↻ Atualizar</button>
   <button class="danger" onclick="killAll()" id="btn-kill-all">✕ Kill All</button>
-  <div class="filter-btns">
-    <button class="filter-btn active" id="f-active" onclick="setFilter('active')">Ativos</button>
-    <button class="filter-btn" id="f-all" onclick="setFilter('all')">Todos</button>
-  </div>
   <span class="status-bar" id="status-bar">—</span>
 </div>
 
-<p class="section-title">Jobs</p>
-<table>
-  <thead>
-    <tr>
-      <th>ID</th>
-      <th>Tipo</th>
-      <th>Placa</th>
-      <th>Serial</th>
-      <th>Status</th>
-      <th>Progresso</th>
-      <th>Criado</th>
-      <th>Atualizado</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody id="jobs-body">
-    <tr><td colspan="7" class="empty">Carregando...</td></tr>
-  </tbody>
-</table>
+<!-- JOBS -->
+<div class="section">
+  <div class="section-title">
+    Jobs
+    <span class="count-badge active" id="jobs-count">—</span>
+    <div class="filter-btns">
+      <button class="filter-btn active" id="fj-active" onclick="setJobFilter('active')">Ativos</button>
+      <button class="filter-btn" id="fj-all" onclick="setJobFilter('all')">Todos</button>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Tipo</th><th>Placa</th><th>Serial</th><th>Status</th><th>Progresso</th><th>Criado</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="jobs-body"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
+  </table>
+</div>
+
+<hr class="divider">
+
+<!-- INSTALAÇÕES -->
+<div class="section">
+  <div class="section-title">
+    Instalações
+    <span class="count-badge active" id="inst-count">—</span>
+    <div class="filter-btns">
+      <button class="filter-btn active" id="fi-active" onclick="setInstFilter('active')">Ativas</button>
+      <button class="filter-btn" id="fi-all" onclick="setInstFilter('all')">Todas</button>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Placa</th><th>Serial</th><th>Status</th><th>Atualizado</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="inst-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+  </table>
+</div>
 
 <div class="toast" id="toast"></div>
 
 <script>
   const BASE = window.location.origin;
-  let allJobs = [];
-  let filter = 'active';
-  const ACTIVE = ['queued','processing','pending'];
+  let allJobs = [], allInst = [];
+  let jobFilter = 'active', instFilter = 'active';
 
-  function setFilter(f) {
-    filter = f;
-    document.getElementById('f-active').classList.toggle('active', f === 'active');
-    document.getElementById('f-all').classList.toggle('active', f === 'all');
-    render();
+  const ACTIVE_JOB  = ['queued','processing','pending'];
+  const ACTIVE_INST = ['HTML5_QUEUED','HTML5_RUNNING','SB_QUEUED','SB_RUNNING',
+                       'CAN_QUEUED','CAN_RUNNING','WAITING_REBOOT_CAN',
+                       'GS_QUEUED','GS_RUNNING','HTML5_DONE','SB_DONE'];
+
+  function setJobFilter(f) {
+    jobFilter = f;
+    document.getElementById('fj-active').classList.toggle('active', f==='active');
+    document.getElementById('fj-all').classList.toggle('active', f==='all');
+    renderJobs();
+  }
+  function setInstFilter(f) {
+    instFilter = f;
+    document.getElementById('fi-active').classList.toggle('active', f==='active');
+    document.getElementById('fi-all').classList.toggle('active', f==='all');
+    renderInst();
   }
 
-  async function load() {
+  async function loadAll() {
     setStatus('atualizando...');
     try {
-      const r = await fetch(BASE + '/api/jobs');
-      const d = await r.json();
-      allJobs = (d.jobs || []).sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
-      render();
-      setStatus('atualizado ' + fmt(new Date()));
+      const [rj, ri] = await Promise.all([
+        fetch(BASE + '/api/jobs').then(r=>r.json()),
+        fetch(BASE + '/api/installations').then(r=>r.json())
+      ]);
+      allJobs = (rj.jobs || []).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+      allInst = (ri.installations || []).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
+      renderJobs();
+      renderInst();
+      setStatus('atualizado ' + new Date().toLocaleTimeString('pt-BR'));
     } catch(e) {
       setStatus('erro: ' + e.message);
-      toast('Erro ao carregar jobs', true);
+      toast('Erro ao carregar dados', true);
     }
   }
 
-  function render() {
-    const jobs = filter === 'active'
-      ? allJobs.filter(j => ACTIVE.includes(j.status))
+  function renderJobs() {
+    const jobs = jobFilter === 'active'
+      ? allJobs.filter(j => ACTIVE_JOB.includes(j.status))
       : allJobs;
+    const active = allJobs.filter(j => ACTIVE_JOB.includes(j.status));
+    const badge = document.getElementById('jobs-count');
+    badge.textContent = active.length + ' ativo' + (active.length !== 1 ? 's' : '');
+    badge.className = 'count-badge' + (active.length ? ' active' : '');
 
     const tbody = document.getElementById('jobs-body');
     if (!jobs.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty">${filter === 'active' ? 'Nenhum job ativo.' : 'Nenhum job.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty">${jobFilter==='active'?'Nenhum job ativo.':'Nenhum job.'}</td></tr>`;
       return;
     }
-
     tbody.innerHTML = jobs.map(j => {
-      const pct = j.progressPercent ?? j.progress ?? null;
+      const pct = j.progressPercent ?? null;
+      const plate = j.plate || j.payload?.plate_real || j.payload?.plate || '—';
+      const serial = j.serial || j.payload?.serial || '—';
       const progressHtml = pct !== null
         ? `<div class="progress-bar"><span style="width:${Math.min(100,pct)}%"></span></div>${pct}%`
-        : `<span style="color:#444">—</span>`;
-      const canCancel = ACTIVE.includes(j.status);
-      const btn = canCancel
-        ? `<button class="danger" onclick="cancelJob('${j.id}')">✕ Cancelar</button>`
-        : `<button disabled>✕</button>`;
-      const plate = j.plate || j.payload?.plate || j.payload?.plate_real || '—';
-      const serial = j.serial || j.payload?.serial || '—';
+        : `<span style="color:#333">—</span>`;
+      const canCancel = ACTIVE_JOB.includes(j.status);
       return `<tr>
         <td class="id-cell" title="${j.id}">${j.id}</td>
         <td class="type-cell">${j.type||'—'}</td>
-        <td style="color:#c8a96e;font-weight:bold">${plate}</td>
-        <td style="color:#888">${serial}</td>
+        <td class="plate-cell">${plate}</td>
+        <td style="color:#666">${serial}</td>
         <td><span class="badge ${j.status}">${j.status}</span></td>
         <td>${progressHtml}</td>
-        <td style="color:#555">${fmtDate(j.createdAt)}</td>
-        <td style="color:#555">${fmtDate(j.updatedAt)}</td>
-        <td>${btn}</td>
+        <td style="color:#444">${fmtDate(j.createdAt)}</td>
+        <td>${canCancel
+          ? `<button class="danger" onclick="cancelJob('${j.id}')">✕</button>`
+          : `<button disabled>✕</button>`}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderInst() {
+    const list = instFilter === 'active'
+      ? allInst.filter(i => ACTIVE_INST.includes(String(i.status||'').toUpperCase()))
+      : allInst;
+    const active = allInst.filter(i => ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+    const badge = document.getElementById('inst-count');
+    badge.textContent = active.length + ' ativa' + (active.length !== 1 ? 's' : '');
+    badge.className = 'count-badge' + (active.length ? ' active' : '');
+
+    const tbody = document.getElementById('inst-body');
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${instFilter==='active'?'Nenhuma instalação ativa.':'Nenhuma instalação.'}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(i => {
+      const id = i.installation_id || i.id || '';
+      const plate = i.payload?.plate_real || i.payload?.plateReal || i.payload?.plate || '—';
+      const serial = i.payload?.serial || i.serial || '—';
+      const st = String(i.status||'').toLowerCase().replace(/_/g,'-');
+      const isActive = ACTIVE_INST.includes(String(i.status||'').toUpperCase());
+      return `<tr>
+        <td class="id-cell" title="${id}">${id}</td>
+        <td class="plate-cell">${plate}</td>
+        <td style="color:#666">${serial}</td>
+        <td><span class="badge ${st}">${i.status||'—'}</span></td>
+        <td style="color:#444">${fmtDate(i.updated_at)}</td>
+        <td>${isActive
+          ? `<button class="danger" onclick="cancelInst('${id}')">✕</button>`
+          : `<button disabled>✕</button>`}</td>
       </tr>`;
     }).join('');
   }
 
   async function cancelJob(id) {
     try {
-      const r = await fetch(`${BASE}/api/jobs/${id}/cancel`, { method: 'POST' });
+      const r = await fetch(`${BASE}/api/jobs/${id}/cancel`, {method:'POST'});
       const d = await r.json();
-      if (d.ok) {
-        toast(`Job ${id.slice(-6)} cancelado`);
-        await load();
-      } else {
-        toast('Erro: ' + (d.error || JSON.stringify(d)), true);
-      }
-    } catch(e) {
-      toast('Erro: ' + e.message, true);
-    }
+      d.ok ? toast(`Job cancelado`) : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+      await loadAll();
+    } catch(e) { toast('Erro: '+e.message, true); }
+  }
+
+  async function cancelInst(id) {
+    try {
+      const r = await fetch(`${BASE}/api/installations/${id}/cancel`, {method:'POST'});
+      const d = await r.json();
+      d.ok ? toast(`Instalação cancelada`) : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+      await loadAll();
+    } catch(e) { toast('Erro: '+e.message, true); }
   }
 
   async function killAll() {
-    const ativos = allJobs.filter(j => ACTIVE.includes(j.status));
-    if (!ativos.length) { toast('Nenhum job ativo para cancelar'); return; }
-    if (!confirm(`Cancelar ${ativos.length} job(s) ativo(s)?`)) return;
-    setStatus('cancelando...');
+    const activeJobs = allJobs.filter(j => ACTIVE_JOB.includes(j.status));
+    const activeInst = allInst.filter(i => ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+    const total = activeJobs.length + activeInst.length;
+    if (!total) { toast('Nada ativo para cancelar'); return; }
+    if (!confirm(`Cancelar ${activeJobs.length} job(s) e ${activeInst.length} instalação(ões) ativa(s)?`)) return;
+    setStatus('cancelando tudo...');
     let ok = 0, fail = 0;
-    for (const j of ativos) {
+    for (const j of activeJobs) {
       try {
-        const r = await fetch(`${BASE}/api/jobs/${j.id}/cancel`, { method: 'POST' });
+        const r = await fetch(`${BASE}/api/jobs/${j.id}/cancel`, {method:'POST'});
         const d = await r.json();
         d.ok ? ok++ : fail++;
       } catch { fail++; }
     }
-    toast(`Kill all: ${ok} cancelados${fail ? ', ' + fail + ' falha(s)' : ''}`, fail > 0);
-    await load();
+    for (const i of activeInst) {
+      const id = i.installation_id || i.id;
+      try {
+        const r = await fetch(`${BASE}/api/installations/${id}/cancel`, {method:'POST'});
+        const d = await r.json();
+        d.ok ? ok++ : fail++;
+      } catch { fail++; }
+    }
+    toast(`Kill all: ${ok} cancelados${fail ? ', '+fail+' falha(s)' : ''}`, fail > 0);
+    await loadAll();
   }
 
-  function setStatus(msg) {
-    document.getElementById('status-bar').textContent = msg;
-  }
+  function setStatus(msg) { document.getElementById('status-bar').textContent = msg; }
 
   let toastTimer;
-  function toast(msg, isError = false) {
+  function toast(msg, isError=false) {
     const el = document.getElementById('toast');
     el.textContent = msg;
-    el.className = 'toast' + (isError ? ' error' : '') + ' show';
+    el.className = 'toast' + (isError?' error':'') + ' show';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
-  }
-
-  function fmt(d) {
-    return d.toLocaleTimeString('pt-BR');
   }
 
   function fmtDate(iso) {
@@ -197,12 +276,14 @@
       + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   }
 
-  // Auto-refresh a cada 10s enquanto há jobs ativos
+  // Auto-refresh a cada 8s enquanto houver ativos
   setInterval(() => {
-    if (allJobs.some(j => ACTIVE.includes(j.status))) load();
-  }, 10000);
+    const hasActive = allJobs.some(j=>ACTIVE_JOB.includes(j.status))
+                   || allInst.some(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+    if (hasActive) loadAll();
+  }, 8000);
 
-  load();
+  loadAll();
 </script>
 </body>
 </html>

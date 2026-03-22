@@ -97,9 +97,14 @@ function setResolved(id, resolvedPatch) {
   return rec;
 }
 
+function listInstallations() {
+  load();
+  return Object.values(mem.installations || {});
+}
 module.exports = {
   createInstallation,
   getInstallation,
+  listInstallations,
   patchInstallation,
   pushJob,
   setResolved,
