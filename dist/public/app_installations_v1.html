@@ -280,7 +280,7 @@
       <div class="progressBar"><div class="progressFill" id="sbFill"></div></div>
       <div class="progressMeta">
         <div>SB: <b id="sbPct">—</b> <span id="sbStatusLabel" style="font-size:11px;color:var(--muted);margin-left:4px"></span></div>
-        <div id="sbCountdownWrap" class="hidden" style="color:var(--accent);font-weight:700">CAN em <span id="sbCountdown">60</span>s</div>
+        <!-- countdown removido: não agregava valor ao técnico -->
         <div class="hidden">Último pacote: <b id="pktAge">—</b></div>
       </div>
     </div>
@@ -1045,7 +1045,14 @@
       config_type: canSafeDecode(cfgType),
       config_progress: canSafeDecode(cfgProgress),
       config_error: canSafeDecode(cfgError),
-      driver_code: canSafeDecode(canFirstNonEmpty([h.driver_code, h.driverCode, h.driver_id, h.driverId, vehicle?.driver_code, inst?.driver_code, inst?.driverCode], "—")),
+      driver_code: canSafeDecode(canFirstNonEmpty([
+        h.driver_code, h.driverCode, h.driver_id, h.driverId,
+        snap?.driver_code, snap?.driverCode,
+        snap?.header?.driver_code, snap?.header?.driverCode,
+        inst?.can_snapshot_latest?.header?.driver_code,
+        inst?.can_snapshot_latest?.driver_code,
+        vehicle?.driver_code, inst?.driver_code, inst?.driverCode
+      ], "—")),
       license_number: canSafeDecode(canFirstNonEmpty([h.license_nmbr, h.license_number, h.license, vehicle?.license_number, vehicle?.license_nmbr], "—")),
       serial: canSafeDecode(canFirstNonEmpty([h.inner_id, h.serial, h.dial_number, vehicle?.inner_id, vehicle?.dial_number], "—")),
       client: canSafeDecode(canFirstNonEmpty([h.vcl_client_description, h.client_description, h.client_name, h.client], "—")),
@@ -1241,8 +1248,9 @@
     // Flag CAN: verde ao clicar "Validar CAN" (CAN_APPROVED ou GS ou COMPLETED)
     const canDone = s === "CAN_APPROVED" || s.startsWith("GS") || s === "COMPLETED";
 
-    // Flag FIM: verde quando GS foi enviado (GS_RUNNING, GS_DONE ou COMPLETED)
-    const fimDone = s === "GS_RUNNING" || s === "GS_DONE" || s === "COMPLETED";
+    // Flag FIM: verde somente quando GS completou (GS_DONE ou COMPLETED)
+    // GS_RUNNING fica como "ativo" (laranja), não verde — evita piscar prematuro
+    const fimDone = s === "GS_DONE" || s === "COMPLETED";
 
     if (fimDone)  return 4; // todos verdes
     if (canDone)  return 3; // HTML5+SB+CAN verdes, FIM ativo
@@ -1363,51 +1371,6 @@ function extractLastError(inst){
   return { title: "ERRO", message: friendlyError(String(e)) };
 }
 
-// ====== SB Countdown (60s de reboot após SB concluído, antes de liberar CAN) ======
-const _sbCd = { enteredAt: null, timer: null, lastStatus: null };
-
-function renderSbCountdown(inst, isWaitReboot) {
-  const wrap = $("sbCountdownWrap");
-  const span = $("sbCountdown");
-
-  if (!isWaitReboot) {
-    if (_sbCd.timer) { clearInterval(_sbCd.timer); _sbCd.timer = null; }
-    _sbCd.enteredAt  = null;
-    _sbCd.lastStatus = null;
-    wrap.classList.add("hidden");
-    return;
-  }
-
-  const st = String(inst?.status || "").toUpperCase();
-  if (_sbCd.lastStatus !== st) {
-    _sbCd.lastStatus = st;
-    // usa timestamp do backend se disponível, senão assume agora
-    const changedAt = inst?.updated_at ?? inst?.updatedAt ?? inst?.status_changed_at ?? null;
-    _sbCd.enteredAt = changedAt ? new Date(changedAt).getTime() : Date.now();
-    if (_sbCd.timer) clearInterval(_sbCd.timer);
-    _sbCd.timer = null;
-  }
-
-  const REBOOT_WAIT_MS = 60_000;
-
-  const tick = () => {
-    const elapsed   = Date.now() - (_sbCd.enteredAt ?? Date.now());
-    const remaining = Math.max(0, Math.ceil((REBOOT_WAIT_MS - elapsed) / 1000));
-    span.textContent = remaining;
-    if (remaining <= 0) {
-      clearInterval(_sbCd.timer);
-      _sbCd.timer = null;
-      wrap.classList.add("hidden");
-      // poll imediato ao zerar — pega o novo status CAN
-      const instId = inst?.installation_id || inst?.id || "";
-      if (instId) loadInstallation(instId);
-    }
-  };
-
-  wrap.classList.remove("hidden");
-  tick();
-  if (!_sbCd.timer) _sbCd.timer = setInterval(tick, 1000);
-}
 
 function renderAll(inst){
     state.inst = inst;
@@ -1480,29 +1443,40 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     const activeSnap = state.lastSnapshot;
 
     const sb = parseSbProgress(inst, activeSnap);
+    const isSbQueued   = st === "SB_QUEUED";
     const isSbRunning  = st.includes("SB_RUNNING");
     const isSbDone     = st.includes("SB_DONE") || st.includes("WAITING_REBOOT") || st.includes("CAN_") || st.includes("GS_") || st === "COMPLETED";
-    const isWaitReboot = st.includes("WAITING_REBOOT");
 
     // --- barra de progresso animada ---
-    if (isSbRunning) {
+    // SB_QUEUED: mantém barra em 5% (indicativo de "aguardando SB iniciar")
+    // SB_RUNNING: mostra progresso real; se vier 0 do backend usa 5% para não parecer zerado
+    // SB_DONE+: 100%
+    if (isSbQueued) {
+      $("sbPct").textContent       = "5%";
+      $("sbFill").style.transition = "width 0.6s ease";
+      $("sbFill").style.width      = "5%";
+    } else if (isSbRunning) {
       const pct = sb ?? 0;
-      $("sbPct").textContent       = pct > 0 ? (pct + "%") : "0%";
+      $("sbPct").textContent       = pct > 0 ? (pct + "%") : "5%";
       $("sbFill").style.transition = "width 1.2s ease";
-      $("sbFill").style.width      = (pct > 0 ? pct : 2) + "%";
+      $("sbFill").style.width      = (pct > 5 ? pct : 5) + "%";
     } else if (isSbDone) {
       $("sbPct").textContent       = "100%";
       $("sbFill").style.transition = "width 0.6s ease";
       $("sbFill").style.width      = "100%";
     } else {
-      $("sbPct").textContent       = (sb == null) ? "—" : (sb + "%");
+      // HTML5 ainda em andamento — barra vazia
+      $("sbPct").textContent       = "—";
       $("sbFill").style.transition = "";
-      $("sbFill").style.width      = (sb == null) ? "0%" : (sb + "%");
+      $("sbFill").style.width      = "0%";
     }
 
     // --- label de status textual do SB ---
     const sbLabel = $("sbStatusLabel");
-    if (isSbRunning) {
+    if (isSbQueued) {
+      sbLabel.textContent = "· aguardando SB...";
+      sbLabel.style.color = "";
+    } else if (isSbRunning) {
       const sbStatus = inst?.job?.progressStage ?? inst?.job?.progressDetail ?? inst?.job?.sbStatus ?? null;
       sbLabel.textContent = sbStatus ? ("· " + sbStatus) : "· enviando...";
       sbLabel.style.color = "";
@@ -1513,9 +1487,6 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       sbLabel.textContent = "";
       sbLabel.style.color = "";
     }
-
-    // --- countdown 60s aguardando reboot antes de liberar CAN ---
-    renderSbCountdown(inst, isWaitReboot);
 
     const pa = parsePacketAge(activeSnap);
     $("pktAge").textContent = pa.ageText;
@@ -1547,9 +1518,6 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     $("sbPct").textContent = "—";
     $("sbFill").style.width = "0%";
     $("sbStatusLabel").textContent = "";
-    $("sbCountdownWrap").classList.add("hidden");
-    if (_sbCd.timer) { clearInterval(_sbCd.timer); _sbCd.timer = null; }
-    _sbCd.enteredAt = null; _sbCd.lastStatus = null;
     $("pktAge").textContent = "—";
     renderStepper("");
     renderTop(empty);
@@ -1709,9 +1677,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
   function nextPollDelay(inst){
     const st = String(inst?.status || "").toUpperCase();
-    if (st.includes("CAN_RUNNING")) return 1500;
+    if (st.includes("CAN_RUNNING")) return 800;   // agressivo: dados de validação chegam rápido
     if (st.includes("WAITING_REBOOT")) return 1000;
-    if (st.includes("SB_RUNNING")) return 1000;   // mais rápido para detectar progresso
+    if (st.includes("SB_RUNNING")) return 1000;
     if (st.includes("SB_QUEUED"))  return 1000;
     if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 2000;
     return state.pollMs;
@@ -1917,18 +1885,10 @@ $("btnRetryHtml5").onclick = async () => {
 
     renderEmpty();
 
-    // se já houver instalação salva, carrega e rola para CAN
-    const { id } = loadLs();
-    if (id){
-      setTimeout(async () => {
-        try {
-          await loadInstallation(id);
-          $("cardForm").classList.add("hidden");
-          document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
-          startPoll();
-        } catch {}
-      }, 200);
-    }
+    // Sempre abre a tela de cadastro — nunca retoma instalação anterior automaticamente.
+    // Isso evita que o técnico abra o app e se depare com uma instalação inacabada.
+    $("cardForm").classList.remove("hidden");
+    $("cardCan").classList.remove("hidden");
   })();
 </script>
 </body>
