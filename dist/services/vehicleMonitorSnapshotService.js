@@ -146,6 +146,25 @@ async function collectVehicleMonitorSnapshot(opts) {
     }).catch(() => { });
     if (!header.unit_key)
         throw new Error("[vm] unit_key ausente no get_vehicle_info");
+    // Buscar moduleState ANTES da janela — disponível desde o primeiro pacote parcial
+    let earlyModuleState = [];
+    try {
+        const msEarly = await mux.sendAction("get_monitor_module_state", {
+            tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
+        });
+        earlyModuleState = (msEarly?.data ?? []).map((r) => ({
+            id: String(r?.id ?? ""),
+            module: String(r?.module_descr ?? ""),
+            sub: String(r?.sub_module_descr ?? ""),
+            name: String(r?.module_descr ?? ""),
+            last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+            active: asBool01(r?.active),
+            was_ok: asBool01(r?.was_ok),
+            ok: asBool01(r?.ok),
+            error: asBool01(r?.error),
+            error_descr: r?.error_descr != null ? String(r.error_descr) : null,
+        }));
+    } catch(_e_ms) { /* best-effort — moduleState é opcional no parcial */ }
     // Captura refresh UNIT_PARAMETERS por janela
     const latest = new Map();
     let unitParametersEvents = 0;
@@ -180,11 +199,12 @@ async function collectVehicleMonitorSnapshot(opts) {
                 });
             }
             // STREAMING PROGRESSIVO: notifica caller com snapshot parcial a cada pacote
+            // Passa header e moduleState já disponíveis — worker usa no partialSnap
             if (opts.onPartialParams) {
                 try {
                     const allParams = Array.from(latest.values());
                     const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
-                    opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents });
+                    opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents }, header, earlyModuleState);
                 }
                 catch { /* best-effort */ }
             }

@@ -937,15 +937,17 @@ for(let i=0;i<cycles;i++){
         }
         const snap = await takeSnapshotOnce(sessionToken, vehicleId, {
           // STREAMING PROGRESSIVO: publica no backend a cada pacote, sem esperar o fim da janela
-          onPartialParams: installationId ? async (params, counts) => {
+          onPartialParams: installationId ? async (params, counts, liveHeader, liveModuleState) => {
             try {
               const partialSnap = {
                 capturedAt: new Date().toISOString(),
                 vehicleId,
                 isConnected: null,
-                header: {},
+                // header já inclui driver_code capturado do UNIT_MESSAGES
+                header: (liveHeader && typeof liveHeader === "object") ? liveHeader : {},
                 parameters: params,
-                moduleState: [],
+                // moduleState buscado antes da janela — disponível desde o primeiro pacote
+                moduleState: Array.isArray(liveModuleState) ? liveModuleState : [],
                 rawCounts: { unitParametersEvents: counts.events, unitMessagesEvents: 0, unitConnEvents: 0 },
                 _partial: true,
               };
