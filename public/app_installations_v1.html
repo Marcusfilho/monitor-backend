@@ -919,15 +919,22 @@
     const rows = Array.isArray(msRows) ? msRows : [];
     const nameKeys = (names || []).map(canNormKey).filter(Boolean);
     return rows.find((r) => {
-      const nk = canNormKey(canRowModuleName(r));
-      return !!(nk && nameKeys.some((k) => nk.includes(k)));
+      // O vehicleMonitorSnapshotService retorna: module=module_descr, sub=sub_module_descr
+      // Ex: { module:"CAN", sub:"CAN0" } ou { module:"J1708", sub:"J1708" }
+      // Busca em todos os campos possíveis — module, sub, name, module_name
+      const allNames = [
+        r?.sub, r?.sub_name, r?.subName, r?.subname,   // sub tem CAN0/CAN1/J1708
+        r?.module, r?.module_name, r?.moduleName,       // module tem "CAN"/"J1708"
+        r?.name                                          // name como fallback
+      ].filter(Boolean).map(canNormKey).filter(Boolean);
+      return allNames.some(nk => nameKeys.some(k => nk.includes(k)));
     }) || null;
   }
 
   const CAN_MS_WANT = [
-    { key: "CAN0",              names: ["can0"] },
-    { key: "CAN1",              names: ["can1"] },
-    { key: "J1708",             names: ["j1708"] },
+    { key: "CAN0", names: ["can0","can_0","canbus0"] },
+    { key: "CAN1", names: ["can1","can_1","canbus1"] },
+    { key: "J1708", names: ["j1708","j_1708","sae1708"] },
     { key: "KEYPAD_RAMZOR",     names: ["keypadramzor", "ramzor"] },
     { key: "KEYPAD_DALLAS",     names: ["keypaddallasibutton", "dallas", "ibutton"] },
   ];
@@ -1111,35 +1118,60 @@
     const x = canExtractRowsFromSnapshot(snapshot);
     const host = $("msChips");
     host.innerHTML = "";
+
+    // Mostra todos os módulos da lista — com estado real (OK, inativo, erro)
+    // Não filtra por triple-ok: durante coleta CAN muitos módulos ficam inativos
+    // mas precisam aparecer para o técnico saber o que está sendo detectado
     let hasAny = false;
     for (const w of CAN_MS_WANT){
       const it = canFindModule(x.ms, w.names);
-      const ok = canStrictOkTriple(it);
-      // NOVO: só exibe módulos que estão OK
-      if (!ok) continue;
+      if (!it) continue; // módulo não presente no snapshot — pular
       hasAny = true;
+
+      const strictOk = canStrictOkTriple(it);
+      const isActive = canToBool01(it.active) === true;
+      const isOk     = canToBool01(it.ok ?? it.is_ok ?? it.isOk) === true;
+      const errMsg   = canPickErr(it);
+
+      // Determinar visual
+      let dotClass, borderColor, bgColor, statusText, statusColor;
+      if (strictOk) {
+        dotClass = "dot good"; borderColor = "#166534"; bgColor = "#052e16";
+        statusText = "OK"; statusColor = "var(--good)";
+      } else if (isActive && !isOk && errMsg) {
+        dotClass = "dot bad"; borderColor = "#5b1f1f"; bgColor = "#2a1111";
+        statusText = errMsg.slice(0, 40); statusColor = "var(--bad)";
+      } else if (isActive) {
+        dotClass = "dot warn"; borderColor = "#854d0e"; bgColor = "#1c1002";
+        statusText = "ativo"; statusColor = "var(--warn)";
+      } else {
+        dotClass = "dot"; borderColor = "#223043"; bgColor = "#0b1118";
+        statusText = "inativo"; statusColor = "var(--muted)";
+      }
+
       const chip = document.createElement("div");
       chip.className = "chip";
-      chip.style.borderColor = "#166534";
-      chip.style.background = "#052e16";
+      chip.style.borderColor = borderColor;
+      chip.style.background = bgColor;
       const d = document.createElement("span");
-      d.className = "dot good";
+      d.className = dotClass;
       const n = document.createElement("span");
       n.className = "name";
       n.textContent = w.key;
       const m = document.createElement("span");
       m.className = "msg";
-      m.textContent = "OK";
-      m.style.color = "var(--good)";
+      m.textContent = statusText;
+      m.style.color = statusColor;
       chip.appendChild(d);
       chip.appendChild(n);
       chip.appendChild(m);
       host.appendChild(chip);
     }
+
     if (!hasAny) {
       const chip = document.createElement("div");
       chip.className = "chip";
-      chip.innerHTML = `<span class="dot warn"></span><span class="name" style="color:var(--muted)">Nenhum módulo OK</span>`;
+      chip.innerHTML = `<span class="dot warn"></span><span class="name" style="color:var(--muted)">Aguardando módulos...</span>`;
       host.appendChild(chip);
     }
   }
