@@ -294,10 +294,6 @@ async function processJob(job) {
             MONITOR_WS_COOKIE: "", // ✅ cookie não é necessário (net-export mostrou)
             MONITOR_WS_ORIGIN: origin,
             // monitor_gs => roda APENAS GS (sem SB)
-            SB_JOB_ID: String(job.id || ""),
-            SB_JOB_SERVER_URL: JOB_SERVER_BASE_URL,
-            SB_WORKER_KEY: WORKER_KEY,
-            SB_INSTALLATION_ID: installationId,
             ...(isGs ? {
                 GS_ENABLE: "1",
                 GS_ONLY: "1",
@@ -309,20 +305,13 @@ async function processJob(job) {
                 GS_ONLY: "0",
             }),
         };
-        // spawn assíncrono = não bloqueia o event loop (heartbeat continua funcionando)
-        const exitCode = await new Promise((resolve, reject) => {
-            const child = (0, child_process_1.spawn)(process.execPath, args, {
-                cwd: process.cwd(),
-                env,
-                stdio: ["ignore", "inherit", "inherit"], // output direto no journal
-            });
-            child.on("close", (code) => resolve(code ?? 0));
-            child.on("error", (err) => reject(err));
-        });
-        if (exitCode !== 0)
-            throw new Error(`[sb_run_vm] exit=${exitCode}`);
-        // Não enviar stdout/stderr no payload — causa 413 (payload muito grande)
-        await completeJob(job.id, "ok", { status: "ok" });
+        const SB_SPAWN_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutos — equipamento desligado não trava para sempre
+        const r = (0, child_process_1.spawnSync)(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8", timeout: SB_SPAWN_TIMEOUT_MS });
+        if (r.signal === "SIGTERM" || r.error?.code === "ETIMEDOUT")
+            throw new Error(`[sb_run_vm] timeout após ${SB_SPAWN_TIMEOUT_MS/1000}s — equipamento pode estar desligado ou VPN caiu`);
+        if (r.status !== 0)
+            throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
+        await completeJob(job.id, "ok", { status: "ok", stdout: r.stdout, stderr: r.stderr });
     }
     catch (err) {
         console.error(`[worker] Erro no job ${job.id}:`, err?.message || err);

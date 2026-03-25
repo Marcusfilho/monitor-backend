@@ -66,6 +66,35 @@ async function postJson(url, body, extraHeaders) {
 router.post("/", async (req, res) => {
     try {
         const payload = req.body || {};
+        // 0) RESET TOTAL — cancelar todas as instalações e jobs ativos antes de criar nova
+        // Garante que jobs travados em "processing" não bloqueiam o próximo técnico
+        try {
+            const TERMINAL = ["COMPLETED", "CANCELLED", "ERROR", "CAN_SNAPSHOT_ERROR"];
+            const allInsts = typeof installationsStore.listInstallations === "function"
+                ? installationsStore.listInstallations() : [];
+            for (const prev of allInsts) {
+                if (TERMINAL.includes(String(prev.status || "").toUpperCase())) continue;
+                console.log(`[installationsRoutes] reset: cancelando inst ${prev.installation_id} (${prev.status})`);
+                installationsStore.patchInstallation(prev.installation_id, {
+                    status: "CANCELLED",
+                    last_error: { ts: new Date().toISOString(), message: "superseded_by_new_installation" }
+                });
+                // Cancelar todos os jobs associados — inclusive os em "processing"
+                if (jobStore && typeof jobStore.listJobs === "function") {
+                    const jobs = jobStore.listJobs().filter((j) =>
+                        j?.payload?.installation_id === prev.installation_id &&
+                        !["completed", "cancelled", "error"].includes(String(j.status || "").toLowerCase())
+                    );
+                    for (const j of jobs) {
+                        console.log(`[installationsRoutes] reset: cancelando job ${j.id} (${j.status})`);
+                        j.status = "cancelled";
+                        j.updatedAt = new Date().toISOString();
+                    }
+                }
+            }
+        } catch (resetErr) {
+            console.warn("[installationsRoutes] reset: erro não-fatal:", resetErr?.message || resetErr);
+        }
         // 1) cria installation (prefer engine; fallback store)
         const create = pickFn(installationsEngine, ["createInstallation", "create", "createAndStart", "startInstallation"]) ||
             pickFn(installationsStore, ["createInstallation", "create"]);
