@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
-export type JobStatus = "pending" | "processing" | "completed" | "error";
+export type JobStatus = "pending" | "processing" | "completed" | "error" | "cancelled";
 
 export interface BaseJob<TPayload = any, TResult = any> {
   id: string;
@@ -142,6 +142,16 @@ export function completeJob<TResult = any>(
   return job;
 }
 
+
+export function updateJob(id: string, patch: Partial<BaseJob>): BaseJob | null {
+  loadOnce();
+  const job = jobs.find((j) => j.id === id);
+  if (!job) return null;
+  Object.assign(job, patch);
+  job.updatedAt = new Date().toISOString();
+  save();
+  return job;
+}
 export function getJob(id: string): BaseJob | null {
   loadOnce();
   return jobs.find((j) => j.id === id) || null;

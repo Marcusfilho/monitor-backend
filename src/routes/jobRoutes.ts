@@ -1,6 +1,7 @@
 // src/routes/jobRoutes.ts
 import { Router, Request, Response } from "express";
-import { createJob, getNextJob, completeJob, getJob, listJobs } from "../jobs/jobStore";
+import { createJob, getNextJob, completeJob, getJob, listJobs, updateJob } from "../jobs/jobStore";
+import { requireWorkerKey } from "../middleware/requireWorkerKey";
 import { getSessionToken } from "../services/sessionTokenStore";
 
 
@@ -674,6 +675,16 @@ try {
   }
 
   return res.json({ job });
+});
+
+
+router.post("/:id/cancel", requireWorkerKey, (req: Request, res: Response) => {
+  const job = getJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "job_not_found" });
+  const terminal = ["completed", "cancelled", "error"];
+  if (terminal.includes(job.status)) return res.json({ skipped: true, status: job.status });
+  updateJob(req.params.id, { status: "cancelled" });
+  return res.json({ ok: true, id: req.params.id });
 });
 
 router.get("/:id", (req: Request, res: Response) => {
