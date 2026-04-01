@@ -154,6 +154,14 @@
     .sc-label.done{color:var(--good)}
     .sc-label.active{color:var(--warn)}
     .sc-wrap{display:flex;flex-direction:column;align-items:center}
+
+    /* === MODAL CONFIRMAÇÃO RESOLVER === */
+    .confirm-modal{display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,.75);align-items:flex-end}
+    .confirm-modal.open{display:flex}
+    .confirm-sheet{width:100%;background:#0f1620;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+    .confirm-sheet h3{margin:0 0 10px;font-size:14px;color:#cfe6ff}
+    .confirm-sheet p{margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.5}
+    .confirm-sheet .row{margin-top:0}
   </style>
 </head>
 <body>
@@ -320,6 +328,18 @@
       + Nova instalação
     </button>
   </section>
+</div>
+
+<!-- Modal de confirmação (resolver) -->
+<div class="confirm-modal" id="confirmModal">
+  <div class="confirm-sheet">
+    <h3 id="confirmTitle">Confirmar</h3>
+    <p id="confirmMsg"></p>
+    <div class="row">
+      <button id="confirmOk">Continuar</button>
+      <button class="secondary" id="confirmCancel">Corrigir</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast">
@@ -575,6 +595,7 @@
     const body = {
       service: svc,
       target_client_id: clientId ? Number(clientId) : null,
+      clientName: $("clientSelect").options[$("clientSelect").selectedIndex]?.text?.trim() || "",
       vehicleSettingId: vehicleSettingId ? Number(vehicleSettingId) : null,
       plate_real: plateFull || null,
       serial: serial || "",
@@ -1753,6 +1774,57 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     showToast("Nova instalação", "warn");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  // ====== modal de confirmação (resolver) ======
+  function showConfirm(title, msg){ return new Promise(resolve => {
+    $("confirmTitle").textContent = title;
+    $("confirmMsg").textContent   = msg;
+    $("confirmModal").classList.add("open");
+    const cleanup = (val) => {
+      $("confirmModal").classList.remove("open");
+      $("confirmOk").onclick = null;
+      $("confirmCancel").onclick = null;
+      resolve(val);
+    };
+    $("confirmOk").onclick     = () => cleanup(true);
+    $("confirmCancel").onclick = () => cleanup(false);
+  }); }
+
+  // ====== resolver: dispara job vehicle_resolve e aguarda resultado ======
+  async function resolveVehicle(payload) {
+    const svc = String(payload.service || "").toUpperCase();
+    const flow = (svc === "MAINT_WITH_SWAP") ? "MAINT_WITH_SWAP" : "INSTALL";
+
+    const jobPayload = {
+      flow,
+      licence_nmbr: payload.plate_real || "",
+      serial:       payload.serial || "",
+      serial_old:   payload.serial_old || "",
+      serial_new:   payload.serial || "",
+      client_descr: payload.clientName || "",
+    };
+
+    setSubline("Verificando cadastro…");
+    const rJob = await api("/api/jobs", { method: "POST", json: { type: "vehicle_resolve", payload: jobPayload } });
+    if (!rJob.ok) throw new Error("Falha ao criar job de resolução (HTTP " + rJob.status + ")");
+
+    const jobId = rJob.data?.job?.id || rJob.data?.id;
+    if (!jobId) throw new Error("Job de resolução sem ID");
+
+    // polling até completar (max 30s)
+    const deadline = Date.now() + 30000;
+    let result = null;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 1500));
+      const rPoll = await api("/api/jobs/" + encodeURIComponent(jobId));
+      if (!rPoll.ok) continue;
+      const job = rPoll.data?.job || rPoll.data;
+      if (job?.status === "completed") { result = job.result; break; }
+      if (job?.status === "error")     throw new Error(job?.result?.error_message || "Resolução falhou");
+    }
+    if (!result) throw new Error("Timeout aguardando resolução do veículo");
+    return result;
+  }
+
   $("btnCreate").onclick = async () => {
     const payload = buildPayload();
     const errs = validatePayload(payload);
@@ -1763,7 +1835,54 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
     try {
       $("btnCreate").disabled = true;
+
+      const svc = String(payload.service || "").toUpperCase();
+      const needsResolve = (svc === "INSTALL" || svc === "MAINT_WITH_SWAP");
+
+      let resolveResult = null;
+      let confirmedChangeCompany = false;
+      let confirmedSerialSwap    = false;
+
+      if (needsResolve) {
+        // Fase 1: resolver vehicle_id
+        resolveResult = await resolveVehicle(payload);
+
+        if (resolveResult.status !== "OK") {
+          showToast(resolveResult.error_message || "Erro na resolução", "bad");
+          return;
+        }
+
+        // Confirmação de serial antigo (MAINT_WITH_SWAP)
+        if (svc === "MAINT_WITH_SWAP" && resolveResult.serial_old_found) {
+          const ok = await showConfirm(
+            "Confirmar troca de serial",
+            "Serial instalado na placa " + payload.plate_real + ": " + resolveResult.serial_old_found + ". Confirma a troca?"
+          );
+          if (!ok) { showToast("Operação cancelada", "warn"); return; }
+          confirmedSerialSwap = true;
+        }
+
+        // Confirmação de cliente diferente
+        if (resolveResult.client_mismatch) {
+          const ok = await showConfirm(
+            "Cliente diferente",
+            "Cliente no sistema: " + resolveResult.client_descr_current + ". Informado: " + (payload.clientName || "—") + ". Continuar?"
+          );
+          if (!ok) { showToast("Operação cancelada. Corrija o cliente.", "warn"); return; }
+          confirmedChangeCompany = true;
+        }
+      }
+
       setSubline("Enviando…");
+
+      // Enriquece payload com dados do resolver
+      if (resolveResult) {
+        if (resolveResult.vehicle_id_final) payload.vehicle_id_final = resolveResult.vehicle_id_final;
+        payload.licence_nmbr_final      = resolveResult.licence_nmbr_final;
+        payload.needs_uninstall_cmdt    = resolveResult.needs_uninstall_cmdt || false;
+        payload.confirmed_change_company = confirmedChangeCompany;
+        payload.confirmed_serial_swap    = confirmedSerialSwap;
+      }
 
       const r = await api("/api/installations", { method: "POST", json: payload });
       if (!r.ok){
@@ -1773,14 +1892,13 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       }
 
       const inst = r.data;
-      const id = inst?.installation_id || inst?.id || null;
+      const id  = inst?.installation_id || inst?.id || null;
       const tok = inst?.installation_token || inst?.token || null;
 
       if (id && tok) saveLs(String(id), String(tok));
 
       renderAll(inst);
 
-      // colapsa o form (mantém a seção mas reduz ruído)
       $("cardForm").classList.add("hidden");
       showToast("Instalação criada. Vá para a validação CAN.", "good");
       document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
