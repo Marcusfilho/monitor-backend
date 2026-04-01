@@ -160,7 +160,7 @@
     .confirm-modal.open{display:flex}
     .confirm-sheet{width:100%;background:#0f1620;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px))}
     .confirm-sheet h3{margin:0 0 10px;font-size:14px;color:#cfe6ff}
-    .confirm-sheet p{margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.5}
+    .confirm-sheet p{margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.5;white-space:pre-line}
     .confirm-sheet .row{margin-top:0}
   </style>
 </head>
@@ -1866,7 +1866,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         if (resolveResult.client_mismatch) {
           const ok = await showConfirm(
             "Cliente diferente",
-            "Cliente no sistema: " + resolveResult.client_descr_current + ". Informado: " + (payload.clientName || "—") + ". Continuar?"
+            "Cliente no sistema: " + resolveResult.client_descr_current + "\nInformado: " + (payload.clientName || "—")
           );
           if (!ok) { showToast("Operação cancelada. Corrija o cliente.", "warn"); return; }
           confirmedChangeCompany = true;

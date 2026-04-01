@@ -425,7 +425,17 @@ router.post("/", async (req, res) => {
 
       gsensor,
 
+      // vehicle_id resolvido pelo vehicleResolverWorker (Fase 1)
+      // worker v8 lê: vehicle_id || VEHICLE_ID || vehicleId
+      vehicle_id:       payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+      VEHICLE_ID:       payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+      vehicleId:        payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+      vehicle_id_final: payload.vehicle_id_final || null,
 
+      // flags de confirmação do app
+      confirmed_change_company: payload.confirmed_change_company || false,
+      confirmed_serial_swap:    payload.confirmed_serial_swap    || false,
+      needs_uninstall_cmdt:     payload.needs_uninstall_cmdt     || false,
 
     };
 const adminKey = pickAdminKey();

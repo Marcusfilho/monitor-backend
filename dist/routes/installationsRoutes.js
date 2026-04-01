@@ -66,35 +66,6 @@ async function postJson(url, body, extraHeaders) {
 router.post("/", async (req, res) => {
     try {
         const payload = req.body || {};
-        // 0) RESET TOTAL — cancelar todas as instalações e jobs ativos antes de criar nova
-        // Garante que jobs travados em "processing" não bloqueiam o próximo técnico
-        try {
-            const TERMINAL = ["COMPLETED", "CANCELLED", "ERROR", "CAN_SNAPSHOT_ERROR"];
-            const allInsts = typeof installationsStore.listInstallations === "function"
-                ? installationsStore.listInstallations() : [];
-            for (const prev of allInsts) {
-                if (TERMINAL.includes(String(prev.status || "").toUpperCase())) continue;
-                console.log(`[installationsRoutes] reset: cancelando inst ${prev.installation_id} (${prev.status})`);
-                installationsStore.patchInstallation(prev.installation_id, {
-                    status: "CANCELLED",
-                    last_error: { ts: new Date().toISOString(), message: "superseded_by_new_installation" }
-                });
-                // Cancelar todos os jobs associados — inclusive os em "processing"
-                if (jobStore && typeof jobStore.listJobs === "function") {
-                    const jobs = jobStore.listJobs().filter((j) =>
-                        j?.payload?.installation_id === prev.installation_id &&
-                        !["completed", "cancelled", "error"].includes(String(j.status || "").toLowerCase())
-                    );
-                    for (const j of jobs) {
-                        console.log(`[installationsRoutes] reset: cancelando job ${j.id} (${j.status})`);
-                        j.status = "cancelled";
-                        j.updatedAt = new Date().toISOString();
-                    }
-                }
-            }
-        } catch (resetErr) {
-            console.warn("[installationsRoutes] reset: erro não-fatal:", resetErr?.message || resetErr);
-        }
         // 1) cria installation (prefer engine; fallback store)
         const create = pickFn(installationsEngine, ["createInstallation", "create", "createAndStart", "startInstallation"]) ||
             pickFn(installationsStore, ["createInstallation", "create"]);
@@ -181,6 +152,16 @@ router.post("/", async (req, res) => {
             comments,
             installationDate,
             gsensor,
+            // vehicle_id resolvido pelo vehicleResolverWorker (Fase 1)
+            // worker v8 lê: vehicle_id || VEHICLE_ID || vehicleId
+            vehicle_id: payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+            VEHICLE_ID: payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+            vehicleId: payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+            vehicle_id_final: payload.vehicle_id_final || null,
+            // flags de confirmação do app
+            confirmed_change_company: payload.confirmed_change_company || false,
+            confirmed_serial_swap: payload.confirmed_serial_swap || false,
+            needs_uninstall_cmdt: payload.needs_uninstall_cmdt || false,
         };
         const adminKey = pickAdminKey();
         const headers = {};
@@ -547,6 +528,111 @@ router.post("/:id/actions/approve-can", async (req, res) => {
     }
     catch (e) {
         console.error("[installationsRoutes] approve-can error:", e && (e.stack || e.message || String(e)));
+        return res.status(500).json({ ok: false, error: "Internal Server Error" });
+    }
+});
+// =============================================================================
+// VEHICLE_RESOLVER_V1
+// POST /api/installations/resolve
+//
+// Fase 1 (resolução sem execução): identifica o vehicle_id correto no HTML5
+// para INSTALL e MAINT_WITH_SWAP, e detecta conflito de cliente.
+//
+// O app chama esse endpoint ANTES de criar a instalação.
+// Nenhuma ação destrutiva é executada aqui.
+// =============================================================================
+// ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router"
+// no arquivo src/routes/installationsRoutes.ts
+// Adicione este import no topo do arquivo (junto aos outros imports):
+// import { resolveForInstall, resolveForMaintWithSwap } from "../services/vehicleResolver";
+router.post("/resolve", async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === "object") ? req.body : {};
+        const flow = String(body.flow || "").trim().toUpperCase();
+        // -------------------------------------------------------------------------
+        // INSTALL
+        // -------------------------------------------------------------------------
+        if (flow === "INSTALL") {
+            const licence_nmbr = String(body.licence_nmbr || body.plate || body.placa || "").trim();
+            const serial = String(body.serial || body.inner_id || body.innerId || "").trim();
+            const client_descr = String(body.client_descr || body.clientName || body.client_name || "").trim();
+            if (!licence_nmbr || !serial || !client_descr) {
+                return res.status(400).json({
+                    ok: false,
+                    error: "missing_fields",
+                    detail: "Obrigatório: licence_nmbr, serial, client_descr",
+                });
+            }
+            const { resolveForInstall } = require("../services/vehicleResolver");
+            const result = await resolveForInstall({ licence_nmbr, serial, client_descr });
+            if (result.status !== "OK") {
+                return res.status(422).json({
+                    ok: false,
+                    status: result.status,
+                    error: result.error_message,
+                    resolution_path: result.resolution_path,
+                });
+            }
+            return res.json({
+                ok: true,
+                flow: "INSTALL",
+                vehicle_id_final: result.vehicle_id_final ?? null, // null = criar novo
+                licence_nmbr_final: result.licence_nmbr_final,
+                client_descr_current: result.client_descr_current ?? null,
+                client_id_current: result.client_id_current ?? null,
+                client_mismatch: result.client_mismatch ?? false,
+                needs_uninstall_cmdt: result.needs_uninstall_cmdt ?? false,
+                resolution_path: result.resolution_path,
+            });
+        }
+        // -------------------------------------------------------------------------
+        // MAINT_WITH_SWAP
+        // -------------------------------------------------------------------------
+        if (flow === "MAINT_WITH_SWAP") {
+            const licence_nmbr = String(body.licence_nmbr || body.plate || body.placa || "").trim();
+            const serial_old = String(body.serial_old || body.serialOld || "").trim();
+            const serial_new = String(body.serial_new || body.serialNew || body.serial || "").trim();
+            const client_descr = String(body.client_descr || body.clientName || body.client_name || "").trim();
+            if (!licence_nmbr || !serial_new || !client_descr) {
+                return res.status(400).json({
+                    ok: false,
+                    error: "missing_fields",
+                    detail: "Obrigatório: licence_nmbr, serial_new, client_descr",
+                });
+            }
+            const { resolveForMaintWithSwap } = require("../services/vehicleResolver");
+            const result = await resolveForMaintWithSwap({ licence_nmbr, serial_old, serial_new, client_descr });
+            if (result.status !== "OK") {
+                return res.status(422).json({
+                    ok: false,
+                    status: result.status,
+                    error: result.error_message,
+                    resolution_path: result.resolution_path,
+                });
+            }
+            return res.json({
+                ok: true,
+                flow: "MAINT_WITH_SWAP",
+                vehicle_id_final: result.vehicle_id_final,
+                serial_old_found: result.serial_old_found ?? "",
+                client_descr_current: result.client_descr_current ?? null,
+                client_id_current: result.client_id_current ?? null,
+                client_mismatch: result.client_mismatch ?? false,
+                needs_uninstall_cmdt: result.needs_uninstall_cmdt ?? false,
+                resolution_path: result.resolution_path,
+            });
+        }
+        // -------------------------------------------------------------------------
+        // Flow não reconhecido
+        // -------------------------------------------------------------------------
+        return res.status(400).json({
+            ok: false,
+            error: "invalid_flow",
+            detail: "flow deve ser INSTALL ou MAINT_WITH_SWAP",
+        });
+    }
+    catch (e) {
+        console.error("[installationsRoutes] /resolve error:", e && (e.stack || e.message || String(e)));
         return res.status(500).json({ ok: false, error: "Internal Server Error" });
     }
 });
