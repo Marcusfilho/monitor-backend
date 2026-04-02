@@ -24,7 +24,10 @@ const POLL_MS      = Number(process.env.RESOLVER_POLL_MS || 4000);
 const TIMEOUT_MS   = Number(process.env.RESOLVER_TIMEOUT_MS || 10000);
 const COOKIEJAR    = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
 const HTML5_URL    = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
-const JOB_TYPE     = "vehicle_resolve";
+const JOB_TYPE          = "vehicle_resolve";
+const HTML5_LOGIN_NAME  = (process.env.HTML5_LOGIN_NAME || "").trim();
+const HTML5_PASSWORD    = (process.env.HTML5_PASSWORD   || "").trim();
+const HTML5_BASE        = "https://html5.traffilog.com";
 
 if (!BASE)       { console.error("[resolver] missing JOB_SERVER_BASE_URL"); process.exit(2); }
 if (!WORKER_KEY) { console.error("[resolver] missing WORKER_KEY");          process.exit(2); }
@@ -45,6 +48,110 @@ function readCookieHeader() {
     if (typeof j.cookie      === "string") return j.cookie.trim();
     return "";
   } catch (_) { return ""; }
+}
+
+// ---------------------------------------------------------------------------
+// Cookie renewal (auto-login quando VHCLS retorna vazio)
+// ---------------------------------------------------------------------------
+function saveCookieHeader(cookieHeader) {
+  try {
+    const data = JSON.stringify({ cookie: cookieHeader, updatedAt: new Date().toISOString() }, null, 2);
+    fs.writeFileSync(COOKIEJAR, data, { mode: 0o600 });
+  } catch (e) {
+    console.log(`[resolver] saveCookieHeader err: ${e && e.message}`);
+  }
+}
+
+function parseCookieFromNetscape(txt) {
+  const parts = [];
+  for (const line of txt.split("\n")) {
+    let l = line.trim();
+    if (!l) continue;
+    if (l.startsWith("#HttpOnly_")) l = l.slice("#HttpOnly_".length);
+    else if (l.startsWith("#")) continue;
+    const cols = l.split("	");
+    if (cols.length >= 7) {
+      const name = cols[5].trim(), value = cols[6].trim();
+      if (name) parts.push(`${name}=${value}`);
+    }
+  }
+  let cookie = parts.join("; ");
+  if (!cookie.includes("EULA_APPROVED"))         cookie += "; EULA_APPROVED=1";
+  if (!cookie.includes("APPLICATION_ROOT_NODE")) cookie += "; APPLICATION_ROOT_NODE=%7B%22node%22%3A%22-2%22%7D";
+  return cookie;
+}
+
+async function html5Login() {
+  if (!HTML5_LOGIN_NAME || !HTML5_PASSWORD) {
+    console.log("[resolver] html5Login: sem credenciais (HTML5_LOGIN_NAME/HTML5_PASSWORD)");
+    return false;
+  }
+  try {
+    console.log("[resolver] html5Login: bootstrap GET...");
+    // Bootstrap — pega ASP.NET_SessionId
+    const r1 = await fetch(`${HTML5_BASE}/appv2/index.htm`, {
+      headers: { accept: "text/html" },
+      redirect: "follow",
+    });
+    const setCookie1 = r1.headers.get("set-cookie") || "";
+
+    // Monta cookie inicial a partir dos set-cookie do bootstrap
+    const bootCookies = [];
+    for (const c of setCookie1.split(",")) {
+      const part = c.trim().split(";")[0].trim();
+      if (part.includes("=")) bootCookies.push(part);
+    }
+    const bootCookieHeader = bootCookies.join("; ");
+
+    console.log("[resolver] html5Login: APPLICATION_LOGIN...");
+    const body = new URLSearchParams({
+      username: HTML5_LOGIN_NAME,
+      password: HTML5_PASSWORD,
+      language: "7001",
+      BOL_SAVE_COOKIE: "1",
+      action: "APPLICATION_LOGIN",
+      VERSION_ID: "2",
+    }).toString();
+
+    const r2 = await fetch(HTML5_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "accept": "*/*",
+        "origin": HTML5_BASE,
+        "referer": `${HTML5_BASE}/appv2/index.htm`,
+        ...(bootCookieHeader ? { cookie: bootCookieHeader } : {}),
+      },
+      body,
+      redirect: "manual",
+    });
+
+    const setCookie2 = r2.headers.get("set-cookie") || "";
+    const txt = await r2.text().catch(() => "");
+    const isOk = txt.includes("node=-2") || r2.status === 302 || r2.status === 200;
+
+    if (!isOk) {
+      console.log(`[resolver] html5Login FAIL status=${r2.status} txt=${txt.slice(0,120)}`);
+      return false;
+    }
+
+    // Combina cookies do bootstrap + login
+    const allCookies = [...bootCookies];
+    for (const c of setCookie2.split(",")) {
+      const part = c.trim().split(";")[0].trim();
+      if (part.includes("=")) allCookies.push(part);
+    }
+    let cookie = allCookies.join("; ");
+    if (!cookie.includes("EULA_APPROVED"))         cookie += "; EULA_APPROVED=1";
+    if (!cookie.includes("APPLICATION_ROOT_NODE")) cookie += "; APPLICATION_ROOT_NODE=%7B%22node%22%3A%22-2%22%7D";
+
+    saveCookieHeader(cookie);
+    console.log(`[resolver] html5Login OK cookieLen=${cookie.length}`);
+    return true;
+  } catch (e) {
+    console.log(`[resolver] html5Login EXCEPTION: ${e && e.message}`);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,24 +242,30 @@ function parseVhcls(xml) {
   return records;
 }
 
-async function vhclsByPlate(plate) {
+async function vhclsPost(params) {
   const cookie = readCookieHeader();
-  const xml = await httpsPost(
-    HTML5_URL,
-    buildBody({ REFRESH_FLG:"1", LICENSE_NMBR: plate, CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID:"", action:"VHCLS", VERSION_ID:"2" }),
-    cookie ? { cookie } : {}
-  );
-  return parseVhcls(xml);
+  const xml = await httpsPost(HTML5_URL, buildBody(params), cookie ? { cookie } : {});
+  const records = parseVhcls(xml);
+
+  // Se retornou vazio E temos credenciais, tenta renovar o cookie e repetir uma vez
+  if (records.length === 0 && HTML5_LOGIN_NAME && HTML5_PASSWORD) {
+    console.log("[resolver] VHCLS retornou vazio — tentando renovar cookie...");
+    const ok = await html5Login();
+    if (ok) {
+      const cookie2 = readCookieHeader();
+      const xml2 = await httpsPost(HTML5_URL, buildBody(params), cookie2 ? { cookie: cookie2 } : {});
+      return parseVhcls(xml2);
+    }
+  }
+  return records;
+}
+
+async function vhclsByPlate(plate) {
+  return vhclsPost({ REFRESH_FLG:"1", LICENSE_NMBR: plate, CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID:"", action:"VHCLS", VERSION_ID:"2" });
 }
 
 async function vhclsBySerial(serial) {
-  const cookie = readCookieHeader();
-  const xml = await httpsPost(
-    HTML5_URL,
-    buildBody({ REFRESH_FLG:"1", LICENSE_NMBR:"", CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID: serial, action:"VHCLS", VERSION_ID:"2" }),
-    cookie ? { cookie } : {}
-  );
-  return parseVhcls(xml);
+  return vhclsPost({ REFRESH_FLG:"1", LICENSE_NMBR:"", CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID: serial, action:"VHCLS", VERSION_ID:"2" });
 }
 
 // ---------------------------------------------------------------------------
