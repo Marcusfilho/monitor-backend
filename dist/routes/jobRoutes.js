@@ -461,9 +461,14 @@ function _enqueueChangeCompanyAfterHtml5(job, result) {
         const plate_real = job.payload?.plate_real ??
             job.payload?.plate ??
             job.payload?.LICENSE_NMBR ?? null;
+        // Busca clientName: job.payload primeiro, depois installation.payload
+        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
         const client_descr = job.payload?.client_descr ??
             job.payload?.clientName ??
-            job.payload?.client_name ?? null;
+            job.payload?.client_name ??
+            inst?.payload?.clientName ??
+            inst?.payload?.client_descr ??
+            inst?.payload?.client_name ?? null;
         if (!vehicle_id || !plate_real || !client_descr) {
             console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
             return;
@@ -492,10 +497,8 @@ function _enqueueChangeCompanyAfterHtml5(job, result) {
 async function _enqueueSchemeBuilderAfterHtml5(job, result) {
     try {
         const jobType = String(job?.type || "");
-        // Dispara SB após html5_install (sem CC) OU após resolver_change_company
         if (jobType !== "html5_install" && jobType !== "resolver_change_company")
             return;
-        // Se html5_install com change_company confirmado, aguarda CC — SB vem depois do CC
         if (jobType === "html5_install" && (job.payload?.confirmed_change_company === true ||
             job.payload?.confirmed_change_company === "true" ||
             job.payload?.confirmed_change_company === "True"))
