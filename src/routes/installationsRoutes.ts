@@ -432,6 +432,12 @@ router.post("/", async (req, res) => {
       vehicleId:        payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
       vehicle_id_final: payload.vehicle_id_final || null,
 
+      // client_id_target: necessário para o v8 executar CHANGE_COMPANY durante INSTALL
+      // o v8 compara curClientId (ASSET_BASIC_LOAD) com client_id_target para decidir trocar empresa
+      client_id_target:  targetClientId ? String(targetClientId) : null,
+      CLIENT_ID_TARGET:  targetClientId ? String(targetClientId) : null,
+      clientIdTarget:    targetClientId ? String(targetClientId) : null,
+
       // flags de confirmação do app
       confirmed_change_company: payload.confirmed_change_company || false,
       confirmed_serial_swap:    payload.confirmed_serial_swap    || false,
