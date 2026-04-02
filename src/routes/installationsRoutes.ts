@@ -378,7 +378,13 @@ router.post("/", async (req, res) => {
 
 
 
-      plate: ((String(svc || "").trim().toUpperCase() === "INSTALL") ? (plateLookup || serial || plateReal) : plateReal),
+      // plate: quando vehicle_id_final existe (resolver rodou), usa plate_real
+      // caso contrário mantém comportamento original (lookup por serial ou placa)
+      plate: (payload.vehicle_id_final
+        ? plateReal
+        : ((String(svc || "").trim().toUpperCase() === "INSTALL") ? (plateLookup || serial || plateReal) : plateReal)),
+      // LICENSE_NMBR explícito para o v8 não tentar resolver via VHCLS pelo serial
+      LICENSE_NMBR: plateReal || null,
 
 
 
