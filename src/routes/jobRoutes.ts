@@ -438,15 +438,18 @@ function _enqueueChangeCompanyAfterHtml5(job: any, result: any) {
       job.payload?.plate ??
       job.payload?.LICENSE_NMBR ?? null;
 
-    // Busca clientName: job.payload primeiro, depois installation.payload
+    // Busca clientName: catalogs pelo target_client_id é a fonte mais confiável
     const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
+    const targetClientId = _num(
+      job.payload?.target_client_id ?? job.payload?.client_id_target ??
+      inst?.payload?.target_client_id ?? inst?.resolved?.target_client_id
+    );
+    const catalogClient = (targetClientId && catalogs?.getClient) ? catalogs.getClient(targetClientId) : null;
     const client_descr =
+      (catalogClient?.clientName || null) ??
       job.payload?.client_descr ??
       job.payload?.clientName ??
-      job.payload?.client_name ??
-      inst?.payload?.clientName ??
-      inst?.payload?.client_descr ??
-      inst?.payload?.client_name ?? null;
+      inst?.payload?.clientName ?? null;
 
     if (!vehicle_id || !plate_real || !client_descr) {
       console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
