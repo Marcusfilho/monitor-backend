@@ -474,12 +474,14 @@ function _enqueueChangeCompanyAfterHtml5(job, result) {
             console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
             return;
         }
+        const service = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service);
         const ccJob = (0, jobStore_1.createJob)("resolver_change_company", {
             flow: "CHANGE_COMPANY",
             vehicle_id,
             plate_real,
             client_descr,
             installation_id: installationId,
+            service,
         });
         try {
             installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "resolver_change_company", job_id: ccJob.id, status: "queued" });

@@ -456,12 +456,14 @@ function _enqueueChangeCompanyAfterHtml5(job: any, result: any) {
       return;
     }
 
+    const service = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service);
     const ccJob = createJob("resolver_change_company", {
       flow: "CHANGE_COMPANY",
       vehicle_id,
       plate_real,
       client_descr,
       installation_id: installationId,
+      service,
     });
 
     try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "resolver_change_company", job_id: ccJob.id, status: "queued" }); } catch {}
