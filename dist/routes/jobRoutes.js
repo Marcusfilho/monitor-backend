@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/jobRoutes.ts
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
+const requireWorkerKey_1 = require("../middleware/requireWorkerKey");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
 function pickCanSnapshotFromCompleteBody(root) {
     const first = (v) => Array.isArray(v) && v.length ? v[0] : null;
@@ -427,9 +428,77 @@ function _getVhclActivationData(vehicleId, clientId) {
     });
 }
 // =============================================================================
-async function _enqueueSchemeBuilderAfterHtml5(job, result) {
+function _alreadyHasChangeCompany(installationId) {
+    try {
+        return (0, jobStore_1.listJobs)().some((j) => j?.type === "resolver_change_company" &&
+            String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(installationId) &&
+            j?.status !== "error");
+    }
+    catch {
+        return false;
+    }
+}
+function _enqueueChangeCompanyAfterHtml5(job, result) {
     try {
         if (!job || String(job.type || "") !== "html5_install")
+            return;
+        if (!_resultOk(result))
+            return;
+        const installationId = _getInstallationId(job);
+        if (!installationId)
+            return;
+        const confirmed = job.payload?.confirmed_change_company === true ||
+            job.payload?.confirmed_change_company === "true" ||
+            job.payload?.confirmed_change_company === "True";
+        if (!confirmed)
+            return;
+        if (_alreadyHasChangeCompany(installationId))
+            return;
+        const vehicle_id = job.payload?.vehicle_id_final ??
+            job.payload?.vehicle_id ??
+            job.payload?.VEHICLE_ID ??
+            job.payload?.vehicleId ?? null;
+        const plate_real = job.payload?.plate_real ??
+            job.payload?.plate ??
+            job.payload?.LICENSE_NMBR ?? null;
+        const client_descr = job.payload?.client_descr ??
+            job.payload?.clientName ??
+            job.payload?.client_name ?? null;
+        if (!vehicle_id || !plate_real || !client_descr) {
+            console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
+            return;
+        }
+        const ccJob = (0, jobStore_1.createJob)("resolver_change_company", {
+            flow: "CHANGE_COMPANY",
+            vehicle_id,
+            plate_real,
+            client_descr,
+            installation_id: installationId,
+        });
+        try {
+            installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "resolver_change_company", job_id: ccJob.id, status: "queued" });
+        }
+        catch { }
+        try {
+            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CHANGE_COMPANY_QUEUED" });
+        }
+        catch { }
+        console.log(`[jobs] [PIPELINE] enqueued resolver_change_company job=${ccJob.id} installation=${installationId} vehicle_id=${vehicle_id} → "${client_descr}"`);
+    }
+    catch (e) {
+        console.log("[jobs] [PIPELINE] enqueue CHANGE_COMPANY failed:", e && (e.message || String(e)));
+    }
+}
+async function _enqueueSchemeBuilderAfterHtml5(job, result) {
+    try {
+        const jobType = String(job?.type || "");
+        // Dispara SB após html5_install (sem CC) OU após resolver_change_company
+        if (jobType !== "html5_install" && jobType !== "resolver_change_company")
+            return;
+        // Se html5_install com change_company confirmado, aguarda CC — SB vem depois do CC
+        if (jobType === "html5_install" && (job.payload?.confirmed_change_company === true ||
+            job.payload?.confirmed_change_company === "true" ||
+            job.payload?.confirmed_change_company === "True"))
             return;
         if (!_resultOk(result))
             return;
@@ -493,8 +562,6 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
                 vehicleId: String(vehicleId),
                 cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
                 interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
-                plate: inst?.payload?.plate_real || inst?.payload?.plateReal || inst?.payload?.plate || null,
-                serial: inst?.payload?.serial || inst?.payload?.serie || null,
             });
             try {
                 installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
@@ -517,8 +584,6 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             clientName,
             vehicleId: String(vehicleId),
             vehicleSettingId: Number(vehicleSettingId),
-            plate: inst?.payload?.plate_real || inst?.payload?.plateReal || inst?.payload?.plate || null,
-            serial: inst?.payload?.serial || inst?.payload?.serie || null,
             comment: (() => { const _b = String((inst && inst.payload && inst.payload.comment) || "").trim(); if (_b)
                 return _b; try {
                 const d = new Date();
@@ -576,8 +641,6 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             mode: "post_sb",
             reboot_sleep_ms: 60000,
             sb_poll_interval_ms: 60000,
-            plate: inst?.payload?.plate_real || inst?.payload?.plateReal || inst?.payload?.plate || job?.payload?.plate || null,
-            serial: inst?.payload?.serial || inst?.payload?.serie || job?.payload?.serial || null,
         });
         try {
             installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
@@ -678,19 +741,6 @@ router.post("/:id/progress", (req, res) => {
     job.progressStage = (typeof body.stage === "string") ? body.stage : null;
     job.progressDetail = (typeof body.detail === "string") ? body.detail : null;
     job.lastProgressAt = new Date().toISOString();
-    // SB_PROGRESS_PERSIST_V1: salvar progress direto na instalação (merge do sb para não perder job_id)
-    try {
-        const instId = job.payload?.installation_id || null;
-        if (instId && installationsStore) {
-            const getOne = installationsStore.getInstallation || installationsStore.getById || installationsStore.read;
-            const patchFn = installationsStore.patchInstallation || installationsStore.patch || installationsStore.update;
-            if (typeof getOne === "function" && typeof patchFn === "function") {
-                const inst = getOne(instId);
-                const sbPrev = (inst?.sb && typeof inst.sb === "object") ? inst.sb : {};
-                patchFn(instId, { sb: Object.assign({}, sbPrev, { progress: Math.round(p), stage: job.progressStage, detail: job.progressDetail }) });
-            }
-        }
-    } catch(_) {}
     return res.json({ ok: true });
 });
 router.post("/:id/complete", (req, res) => {
@@ -745,23 +795,21 @@ router.post("/:id/complete", (req, res) => {
     catch { }
     // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
     if (finalStatus === "completed") {
+        _enqueueChangeCompanyAfterHtml5(job, result);
         _enqueueSchemeBuilderAfterHtml5(job, result);
         _enqueueCanAfterSchemeBuilder(job, result);
     }
     return res.json({ job });
 });
-// ADMIN_CANCEL_V1 — cancela job por id (sem exigir worker key, protegido só por admin key ou sem auth p/ facilitar painel)
-router.post("/:id/cancel", (req, res) => {
-    const { id } = req.params;
-    const job = (0, jobStore_1.getJob)(id);
+router.post("/:id/cancel", requireWorkerKey_1.requireWorkerKey, (req, res) => {
+    const job = (0, jobStore_1.getJob)(req.params.id);
     if (!job)
-        return res.status(404).json({ ok: false, error: "not found" });
-    if (job.status === "completed" || job.status === "cancelled" || job.status === "error") {
-        return res.json({ ok: true, skipped: true, reason: "already_terminal", job });
-    }
-    job.status = "cancelled";
-    job.updatedAt = new Date().toISOString();
-    return res.json({ ok: true, job });
+        return res.status(404).json({ error: "job_not_found" });
+    const terminal = ["completed", "cancelled", "error"];
+    if (terminal.includes(job.status))
+        return res.json({ skipped: true, status: job.status });
+    (0, jobStore_1.updateJob)(req.params.id, { status: "cancelled" });
+    return res.json({ ok: true, id: req.params.id });
 });
 router.get("/:id", (req, res) => {
     const { id } = req.params;

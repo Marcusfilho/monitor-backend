@@ -24,7 +24,8 @@ const POLL_MS      = Number(process.env.RESOLVER_POLL_MS || 4000);
 const TIMEOUT_MS   = Number(process.env.RESOLVER_TIMEOUT_MS || 10000);
 const COOKIEJAR    = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
 const HTML5_URL    = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
-const JOB_TYPE          = "vehicle_resolve";
+const JOB_TYPE_RESOLVE  = "vehicle_resolve";
+const JOB_TYPE_CC       = "resolver_change_company";
 const HTML5_LOGIN_NAME  = (process.env.HTML5_LOGIN_NAME || "").trim();
 const HTML5_PASSWORD    = (process.env.HTML5_PASSWORD   || "").trim();
 const HTML5_BASE        = "https://html5.traffilog.com";
@@ -186,17 +187,18 @@ async function jobServerFetch(path, opts) {
 }
 
 async function fetchNextJob() {
-  try {
-    const r = await jobServerFetch("/api/jobs/next", { params: { type: JOB_TYPE, worker: WORKER_ID } });
-    if (r.status === 204) return null;
-    if (r.status !== 200) { console.log(`[resolver] /next status=${r.status}`); return null; }
-    const job = r.json && (r.json.job || r.json);
-    if (!job || !job.id) return null;
-    return job;
-  } catch (e) {
-    console.log(`[resolver] fetchNextJob err: ${e && e.message}`);
-    return null;
+  for (const jobType of [JOB_TYPE_RESOLVE, JOB_TYPE_CC]) {
+    try {
+      const r = await jobServerFetch("/api/jobs/next", { params: { type: jobType, worker: WORKER_ID } });
+      if (r.status === 204) continue;
+      if (r.status !== 200) { console.log(`[resolver] /next type=${jobType} status=${r.status}`); continue; }
+      const job = r.json && (r.json.job || r.json);
+      if (job && job.id) return job;
+    } catch (e) {
+      console.log(`[resolver] fetchNextJob type=${jobType} err: ${e && e.message}`);
+    }
   }
+  return null;
 }
 
 async function completeJob(id, status, result) {
@@ -439,6 +441,156 @@ async function resolveMaintWithSwap({ licence_nmbr, serial_old, serial_new, clie
 }
 
 // ---------------------------------------------------------------------------
+// changeCompany — helpers e função principal
+// ---------------------------------------------------------------------------
+
+function parseXmlTagAttrs(xml, tagName) {
+  const results = [];
+  const tagRe = new RegExp(`<${tagName}\\s([\\s\\S]*?)\\/?>`, "gi");
+  const attrRe = /(\w+)="([^"]*)"/g;
+  let m;
+  while ((m = tagRe.exec(xml)) !== null) {
+    const obj = {};
+    let a;
+    attrRe.lastIndex = 0;
+    while ((a = attrRe.exec(m[1])) !== null) obj[a[1]] = a[2];
+    if (Object.keys(obj).length > 0) results.push(obj);
+  }
+  return results;
+}
+
+/**
+ * Busca o GROUP_ID cujo GROUP_NAME === clientName E CLIENT_DESCR === clientName
+ * (grupo raiz do cliente, filho direto do QBR Production).
+ */
+function resolveGroupIdByClientName(xml, clientName) {
+  const groups = parseXmlTagAttrs(xml, "GROUP");
+  // Grupo raiz: GROUP_NAME e CLIENT_DESCR batem com o nome do cliente
+  const root = groups.find(g => g.GROUP_NAME === clientName && g.CLIENT_DESCR === clientName);
+  if (root) return root.GROUP_ID || null;
+  // Fallback: qualquer grupo com CLIENT_DESCR igual e sem subgrupos acima
+  const fallback = groups.find(g => g.CLIENT_DESCR === clientName);
+  return fallback ? (fallback.GROUP_ID || null) : null;
+}
+
+/**
+ * Executa a troca de empresa de um veículo no HTML5.
+ * Fluxo: html5Login → LOGIN_USER_GROUPS → ASSET_BASIC_LOAD → ASSET_BASIC_SAVE
+ */
+async function changeCompany(vehicleId, plate, targetClient) {
+  // Sempre faz login fresco para garantir sessão válida
+  console.log(`[changeCompany] Login fresco antes do SAVE...`);
+  const loginOk = await html5Login();
+  if (!loginOk) throw new Error("[changeCompany] html5Login falhou");
+
+  const cookie = readCookieHeader();
+
+  async function html5PostCC(params) {
+    return httpsPost(HTML5_URL, buildBody(params), cookie ? { cookie } : {});
+  }
+
+  // 1) LOGIN_USER_GROUPS — descobre GROUP_ID raiz do cliente alvo
+  console.log(`[changeCompany] LOGIN_USER_GROUPS para "${targetClient}"...`);
+  const groupsXml = await html5PostCC({ action: "LOGIN_USER_GROUPS", VERSION_ID: "2" });
+  const groupId = resolveGroupIdByClientName(groupsXml, targetClient);
+  if (!groupId) {
+    throw new Error(
+      `[changeCompany] GROUP_ID não encontrado para "${targetClient}". ` +
+      `XML (300): ${groupsXml.slice(0, 300)}`
+    );
+  }
+  console.log(`[changeCompany] GROUP_ID=${groupId} para "${targetClient}"`);
+
+  // 2) ASSET_BASIC_LOAD — carrega todos os campos atuais do veículo
+  console.log(`[changeCompany] ASSET_BASIC_LOAD vehicle_id=${vehicleId} plate=${plate}...`);
+  const loadXml = await html5PostCC({
+    ASSET_ID: String(vehicleId),
+    ASSET_DESCRIPTION: plate,
+    action: "ASSET_BASIC_LOAD",
+    VERSION_ID: "2",
+  });
+
+  // Parser para self-closing <DATA ... />
+  const dataM = loadXml.match(/<DATA\s([\s\S]*?)\/>/i);
+  const load = {};
+  if (dataM) {
+    const attrRe = /(\w+)="([^"]*)"/g;
+    let a;
+    while ((a = attrRe.exec(dataM[1])) !== null) load[a[1]] = a[2];
+  }
+
+  if (Object.keys(load).length === 0) {
+    throw new Error(
+      `[changeCompany] ASSET_BASIC_LOAD sem campos. XML (300): ${loadXml.slice(0, 300)}`
+    );
+  }
+  console.log(`[changeCompany] LOAD OK — ${Object.keys(load).length} campos, GROUP_ID atual=${load.GROUP_ID}`);
+
+  // 3) ASSET_BASIC_SAVE — payload espelhando exatamente o que o browser envia
+  const saveBody = {
+    ASSET_ID:                 load.ASSET_ID,
+    ASSET_DESCRIPTION:        load.ASSET_DESCRIPTION,
+    GROUP_ID:                 groupId,               // <-- troca para grupo alvo
+    DRIVER_ID:                "undefined",
+    URL:                      load.URL,
+    VEHICLE_ID:               load.VEHICLE_ID,
+    CLIENT_ID:                load.CLIENT_ID,        // mantém CLIENT_ID original
+    UNIT_TYPE_DESCR:          load.UNIT_TYPE_DESCR,
+    MODEL_CODE:               load.MODEL_CODE,
+    NEXT_SER_KM:              load.NEXT_SER_KM,
+    TOTAL_WEIGHT_1:           load.TOTAL_WEIGHT || "",
+    TIRES:                    load.TIRES,
+    DRAGGING_HOOK:            load.DRAGGING_HOOK,
+    EXPIRATION_DATE:          load.EXPIRATION_DATE,
+    OWNERSHIP_DATE:           load.OWNERSHIP_DATE,
+    REGISTER_DATE:            load.REGISTER_DATE,
+    NEXT_SER_ENG:             load.NEXT_SER_ENG,
+    MODEL_YEAR:               load.MODEL_YEAR,
+    CHASSIS_SERIAL:           load.CHASSIS_SERIAL || "",
+    FUEL_I_VOLUME:            load.FUEL_VOLUME || "",
+    IN_GARAGE:                load.IN_GARAGE,
+    SERVICE_START:            load.SERVICE_START,
+    SERVICE_END:              load.SERVICE_END,
+    INTERNAL_VALUE:           load.INTERNAL_VALUE || "",
+    ASSET_TYPE_DESCR:         load.ASSET_TYPE_DESCR,
+    CLIENT_NAME:              load.CLIENT_NAME,
+    UNIT:                     load.UNIT,
+    GCW:                      "",
+    LICENSE_TYPE_CODE:        load.LICENSE_TYPE_CODE,
+    BODY_CONFIGURATION_CODE:  load.BODY_CONFIGURATION_CODE,
+    LETTERS_SEND_BY_CODE:     load.LETTERS_SEND_BY_CODE,
+    VEHICLE_STATUS_CODE:      load.VEHICLE_STATUS_CODE,
+    FIRMWARE:                 load.FIRMWARE,
+    FUEL_II_VOLUME:           "",
+    VEHICLE_MIN_FUEL_CONS:    "",
+    VEHICLE_MAX_FUEL_CONS:    "",
+    POINT_ZERO_FUEL_CONS:     "",
+    FUEL_COST:                "",
+    POINT_ZERO:               load.POINT_ZERO,
+    DOD:                      load.DOD,
+    UNIT_END_OF_WARRANTY_DATE: load.UNIT_END_OF_WARRANTY_DATE,
+    MONTHLY_MILEAGE_LIMIT:    "",
+    PARKING_SCM_ID:           "",
+    FUEL_TYPE_ID:             "",
+    action:                   "ASSET_BASIC_SAVE",
+    VERSION_ID:               "2",
+  };
+
+  console.log(`[changeCompany] ASSET_BASIC_SAVE GROUP_ID=${groupId}...`);
+  const saveXml = await html5PostCC(saveBody);
+
+  // Verifica se SAVE teve sucesso (resposta contém GROUP_DESCR do alvo)
+  const saveOk = saveXml.includes(`GROUP_DESCR="${targetClient}"`) ||
+                 saveXml.includes("USER_ASSETS") && !saveXml.includes("<MESSAGE");
+  if (!saveOk) {
+    throw new Error(`[changeCompany] SAVE retornou erro: ${saveXml.slice(0, 300)}`);
+  }
+
+  console.log(`[changeCompany] SAVE OK — empresa alterada para "${targetClient}"`);
+  return { group_id_applied: groupId, client_descr: targetClient };
+}
+
+// ---------------------------------------------------------------------------
 // Loop principal
 // ---------------------------------------------------------------------------
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -466,6 +618,18 @@ async function processJob(job) {
         serial_new:   String(payload.serial_new || payload.serial || "").trim(),
         client_descr: String(payload.client_descr || payload.clientName || "").trim(),
       });
+    } else if (flow === "CHANGE_COMPANY") {
+      const vehicle_id   = payload.vehicle_id   ?? payload.vehicleId   ?? payload.VEHICLE_ID   ?? null;
+      const plate_real   = payload.plate_real    ?? payload.plate       ?? payload.LICENSE_NMBR  ?? null;
+      const client_descr = payload.client_descr  ?? payload.clientName  ?? payload.client_name   ?? null;
+
+      if (!vehicle_id || !plate_real || !client_descr) {
+        throw new Error(`[CHANGE_COMPANY] Campos faltando: vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
+      }
+      console.log(`[job:CHANGE_COMPANY] vehicle_id=${vehicle_id} plate=${plate_real} → "${client_descr}"`);
+      const ccResult = await changeCompany(vehicle_id, plate_real, client_descr);
+      result = { status: "OK", ...ccResult, vehicle_id, plate_real };
+      console.log(`[job:CHANGE_COMPANY] concluído:`, result);
     } else {
       result = { status: "ERROR", error_message: `flow inválido: ${flow}` };
     }
