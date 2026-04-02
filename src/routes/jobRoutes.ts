@@ -401,9 +401,85 @@ function _getVhclActivationData(vehicleId: string|number, clientId: string|numbe
 }
 // =============================================================================
 
-async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
+function _alreadyHasChangeCompany(installationId: string): boolean {
+  try {
+    return listJobs().some((j: any) =>
+      j?.type === "html5_change_company" &&
+      String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(installationId) &&
+      j?.status !== "error"
+    );
+  } catch { return false; }
+}
+
+function _enqueueChangeCompanyAfterHtml5(job: any, result: any) {
   try {
     if (!job || String(job.type || "") !== "html5_install") return;
+    if (!_resultOk(result)) return;
+
+    const installationId = _getInstallationId(job);
+    if (!installationId) return;
+
+    // Só enfileira se o app confirmou a troca de empresa
+    const confirmed =
+      job.payload?.confirmed_change_company === true ||
+      job.payload?.confirmed_change_company === "true" ||
+      job.payload?.confirmed_change_company === "True";
+    if (!confirmed) return;
+
+    if (_alreadyHasChangeCompany(installationId)) return;
+
+    const vehicle_id =
+      job.payload?.vehicle_id_final ??
+      job.payload?.vehicle_id ??
+      job.payload?.VEHICLE_ID ??
+      job.payload?.vehicleId ?? null;
+
+    const plate_real =
+      job.payload?.plate_real ??
+      job.payload?.plate ??
+      job.payload?.LICENSE_NMBR ?? null;
+
+    const client_descr =
+      job.payload?.client_descr ??
+      job.payload?.clientName ??
+      job.payload?.client_name ?? null;
+
+    if (!vehicle_id || !plate_real || !client_descr) {
+      console.log(
+        `[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando ` +
+        `vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`
+      );
+      return;
+    }
+
+    const ccJob = createJob("html5_change_company", {
+      flow: "CHANGE_COMPANY",
+      vehicle_id,
+      plate_real,
+      client_descr,
+      installation_id: installationId,
+    });
+
+    try { installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "html5_change_company", job_id: ccJob.id, status: "queued" }); } catch {}
+    try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CHANGE_COMPANY_QUEUED" }); } catch {}
+
+    console.log(`[jobs] [PIPELINE] enqueued html5_change_company job=${ccJob.id} installation=${installationId} vehicle_id=${vehicle_id} → "${client_descr}"`);
+  } catch (e: any) {
+    console.log("[jobs] [PIPELINE] enqueue CHANGE_COMPANY failed:", e && (e.message || String(e)));
+  }
+}
+
+async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
+  try {
+    const jobType = String(job?.type || "");
+    // Dispara SB após html5_install (sem change_company) OU após html5_change_company
+    if (jobType !== "html5_install" && jobType !== "html5_change_company") return;
+    // Se é html5_install com change_company pendente, aguarda — o SB vem depois do CC
+    if (jobType === "html5_install" && (
+      job.payload?.confirmed_change_company === true ||
+      job.payload?.confirmed_change_company === "true" ||
+      job.payload?.confirmed_change_company === "True"
+    )) return;
     if (!_resultOk(result)) return;
 
     const installationId = _getInstallationId(job);
@@ -670,6 +746,7 @@ try {
 
   // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
   if (finalStatus === "completed") {
+    _enqueueChangeCompanyAfterHtml5(job, result);
     _enqueueSchemeBuilderAfterHtml5(job, result);
     _enqueueCanAfterSchemeBuilder(job, result);
   }
