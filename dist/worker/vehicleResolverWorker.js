@@ -460,24 +460,57 @@ function parseXmlTagAttrs(xml, tagName) {
 }
 
 /**
- * Busca o GROUP_ID cujo GROUP_NAME === clientName E CLIENT_DESCR === clientName
- * (grupo raiz do cliente, filho direto do QBR Production).
+ * Busca o DEFAULT_GROUP_NAME de um cliente pelo CLIENT_ID no endpoint CLIENTS.
+ * Esse nome é o GROUP_NAME raiz usado no LOGIN_USER_GROUPS — match exato garantido.
  */
-function resolveGroupIdByClientName(xml, clientName) {
+async function resolveGroupNameByClientId(clientId, cookie) {
+  console.log(`[changeCompany] CLIENTS — buscando DEFAULT_GROUP_NAME para CLIENT_ID=${clientId}...`);
+  const xml = await httpsPost(
+    HTML5_URL,
+    buildBody({ REFRESH_FLG: "1", action: "CLIENTS", VERSION_ID: "2" }),
+    cookie ? { cookie } : {}
+  );
+  const re = /<CLIENT\s[^>]*CLIENT_ID="(\d+)"[^>]*DEFAULT_GROUP_NAME="([^"]+)"/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    if (m[1] === String(clientId)) {
+      console.log(`[changeCompany] DEFAULT_GROUP_NAME="${m[2]}" para CLIENT_ID=${clientId}`);
+      return m[2];
+    }
+  }
+  // Tenta ordem invertida dos atributos
+  const re2 = /<CLIENT\s[^>]*DEFAULT_GROUP_NAME="([^"]+)"[^>]*CLIENT_ID="(\d+)"/g;
+  while ((m = re2.exec(xml)) !== null) {
+    if (m[2] === String(clientId)) {
+      console.log(`[changeCompany] DEFAULT_GROUP_NAME="${m[1]}" para CLIENT_ID=${clientId}`);
+      return m[1];
+    }
+  }
+  console.warn(`[changeCompany] DEFAULT_GROUP_NAME não encontrado para CLIENT_ID=${clientId}`);
+  return null;
+}
+
+/**
+ * Busca o GROUP_ID no LOGIN_USER_GROUPS pelo GROUP_NAME exato.
+ */
+function resolveGroupIdByGroupName(xml, groupName) {
   const groups = parseXmlTagAttrs(xml, "GROUP");
-  // Grupo raiz: GROUP_NAME e CLIENT_DESCR batem com o nome do cliente
-  const root = groups.find(g => g.GROUP_NAME === clientName && g.CLIENT_DESCR === clientName);
-  if (root) return root.GROUP_ID || null;
-  // Fallback: qualquer grupo com CLIENT_DESCR igual e sem subgrupos acima
-  const fallback = groups.find(g => g.CLIENT_DESCR === clientName);
-  return fallback ? (fallback.GROUP_ID || null) : null;
+  const norm = s => String(s || "").trim().toLowerCase();
+  const n = norm(groupName);
+  const found = groups.find(g => norm(g.GROUP_NAME) === n);
+  return found ? (found.GROUP_ID || null) : null;
 }
 
 /**
  * Executa a troca de empresa de um veículo no HTML5.
- * Fluxo: html5Login → LOGIN_USER_GROUPS → ASSET_BASIC_LOAD → ASSET_BASIC_SAVE
+ * Fluxo: html5Login → CLIENTS (resolve GROUP_NAME) → LOGIN_USER_GROUPS → ASSET_BASIC_LOAD → ASSET_BASIC_SAVE
+ *
+ * @param {number|string} vehicleId    - ASSET_ID do veículo
+ * @param {string}        plate        - Placa real (ASSET_DESCRIPTION)
+ * @param {string}        targetClient - Nome do cliente (fallback se clientId não disponível)
+ * @param {number|string} clientId     - CLIENT_ID do cliente destino (fonte mais confiável)
  */
-async function changeCompany(vehicleId, plate, targetClient) {
+async function changeCompany(vehicleId, plate, targetClient, clientId) {
   // Sempre faz login fresco para garantir sessão válida
   console.log(`[changeCompany] Login fresco antes do SAVE...`);
   const loginOk = await html5Login();
@@ -489,19 +522,30 @@ async function changeCompany(vehicleId, plate, targetClient) {
     return httpsPost(HTML5_URL, buildBody(params), cookie ? { cookie } : {});
   }
 
-  // 1) LOGIN_USER_GROUPS — descobre GROUP_ID raiz do cliente alvo
-  console.log(`[changeCompany] LOGIN_USER_GROUPS para "${targetClient}"...`);
+  // 1) Resolve GROUP_NAME pelo CLIENT_ID via endpoint CLIENTS (match exato e confiável)
+  let groupName = null;
+  if (clientId) {
+    groupName = await resolveGroupNameByClientId(clientId, cookie);
+  }
+  // Fallback: usa targetClient como GROUP_NAME
+  if (!groupName) {
+    console.warn(`[changeCompany] Fallback: usando targetClient="${targetClient}" como GROUP_NAME`);
+    groupName = targetClient;
+  }
+
+  // 2) LOGIN_USER_GROUPS — descobre GROUP_ID pelo GROUP_NAME exato
+  console.log(`[changeCompany] LOGIN_USER_GROUPS para GROUP_NAME="${groupName}"...`);
   const groupsXml = await html5PostCC({ action: "LOGIN_USER_GROUPS", VERSION_ID: "2" });
-  const groupId = resolveGroupIdByClientName(groupsXml, targetClient);
+  const groupId = resolveGroupIdByGroupName(groupsXml, groupName);
   if (!groupId) {
     throw new Error(
-      `[changeCompany] GROUP_ID não encontrado para "${targetClient}". ` +
+      `[changeCompany] GROUP_ID não encontrado para GROUP_NAME="${groupName}". ` +
       `XML (300): ${groupsXml.slice(0, 300)}`
     );
   }
-  console.log(`[changeCompany] GROUP_ID=${groupId} para "${targetClient}"`);
+  console.log(`[changeCompany] GROUP_ID=${groupId} para "${groupName}"`);
 
-  // 2) ASSET_BASIC_LOAD — carrega todos os campos atuais do veículo
+  // 3) ASSET_BASIC_LOAD — carrega todos os campos atuais do veículo
   console.log(`[changeCompany] ASSET_BASIC_LOAD vehicle_id=${vehicleId} plate=${plate}...`);
   const loadXml = await html5PostCC({
     ASSET_ID: String(vehicleId),
@@ -510,7 +554,6 @@ async function changeCompany(vehicleId, plate, targetClient) {
     VERSION_ID: "2",
   });
 
-  // Parser para self-closing <DATA ... />
   const dataM = loadXml.match(/<DATA\s([\s\S]*?)\/>/i);
   const load = {};
   if (dataM) {
@@ -526,15 +569,15 @@ async function changeCompany(vehicleId, plate, targetClient) {
   }
   console.log(`[changeCompany] LOAD OK — ${Object.keys(load).length} campos, GROUP_ID atual=${load.GROUP_ID}`);
 
-  // 3) ASSET_BASIC_SAVE — payload espelhando exatamente o que o browser envia
+  // 4) ASSET_BASIC_SAVE — payload espelhando exatamente o que o browser envia
   const saveBody = {
     ASSET_ID:                 load.ASSET_ID,
     ASSET_DESCRIPTION:        load.ASSET_DESCRIPTION,
-    GROUP_ID:                 groupId,               // <-- troca para grupo alvo
+    GROUP_ID:                 groupId,
     DRIVER_ID:                "undefined",
     URL:                      load.URL,
     VEHICLE_ID:               load.VEHICLE_ID,
-    CLIENT_ID:                load.CLIENT_ID,        // mantém CLIENT_ID original
+    CLIENT_ID:                load.CLIENT_ID,
     UNIT_TYPE_DESCR:          load.UNIT_TYPE_DESCR,
     MODEL_CODE:               load.MODEL_CODE,
     NEXT_SER_KM:              load.NEXT_SER_KM,
@@ -579,15 +622,13 @@ async function changeCompany(vehicleId, plate, targetClient) {
   console.log(`[changeCompany] ASSET_BASIC_SAVE GROUP_ID=${groupId}...`);
   const saveXml = await html5PostCC(saveBody);
 
-  // Verifica se SAVE teve sucesso (resposta contém GROUP_DESCR do alvo)
-  const saveOk = saveXml.includes(`GROUP_DESCR="${targetClient}"`) ||
-                 saveXml.includes("USER_ASSETS") && !saveXml.includes("<MESSAGE");
+  const saveOk = saveXml.includes("USER_ASSETS") && !saveXml.includes("<MESSAGE");
   if (!saveOk) {
     throw new Error(`[changeCompany] SAVE retornou erro: ${saveXml.slice(0, 300)}`);
   }
 
-  console.log(`[changeCompany] SAVE OK — empresa alterada para "${targetClient}"`);
-  return { group_id_applied: groupId, client_descr: targetClient };
+  console.log(`[changeCompany] SAVE OK — empresa alterada para "${groupName}"`);
+  return { group_id_applied: groupId, group_name: groupName, client_descr: targetClient };
 }
 
 // ---------------------------------------------------------------------------
@@ -622,12 +663,13 @@ async function processJob(job) {
       const vehicle_id   = payload.vehicle_id   ?? payload.vehicleId   ?? payload.VEHICLE_ID   ?? null;
       const plate_real   = payload.plate_real    ?? payload.plate       ?? payload.LICENSE_NMBR  ?? null;
       const client_descr = payload.client_descr  ?? payload.clientName  ?? payload.client_name   ?? null;
+      const client_id    = payload.client_id     ?? payload.target_client_id ?? null;
 
-      if (!vehicle_id || !plate_real || !client_descr) {
-        throw new Error(`[CHANGE_COMPANY] Campos faltando: vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
+      if (!vehicle_id || !plate_real || (!client_descr && !client_id)) {
+        throw new Error(`[CHANGE_COMPANY] Campos faltando: vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr} client_id=${client_id}`);
       }
-      console.log(`[job:CHANGE_COMPANY] vehicle_id=${vehicle_id} plate=${plate_real} → "${client_descr}"`);
-      const ccResult = await changeCompany(vehicle_id, plate_real, client_descr);
+      console.log(`[job:CHANGE_COMPANY] vehicle_id=${vehicle_id} plate=${plate_real} → client_id=${client_id} "${client_descr}"`);
+      const ccResult = await changeCompany(vehicle_id, plate_real, client_descr, client_id);
       result = { status: "OK", ...ccResult, vehicle_id, plate_real };
       console.log(`[job:CHANGE_COMPANY] concluído:`, result);
     } else {

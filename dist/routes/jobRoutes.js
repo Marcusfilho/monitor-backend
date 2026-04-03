@@ -461,17 +461,18 @@ function _enqueueChangeCompanyAfterHtml5(job, result) {
         const plate_real = job.payload?.plate_real ??
             job.payload?.plate ??
             job.payload?.LICENSE_NMBR ?? null;
-        // Busca clientName: catalogs pelo target_client_id é a fonte mais confiável
+        // client_id é a fonte mais confiável — resolve o GROUP_NAME via endpoint CLIENTS
+        const client_id = _num(job.payload?.target_client_id ??
+            job.payload?.client_id_target ??
+            job.payload?.client_id);
         const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
-        const targetClientId = _num(job.payload?.target_client_id ?? job.payload?.client_id_target ??
-            inst?.payload?.target_client_id ?? inst?.resolved?.target_client_id);
-        const catalogClient = (targetClientId && catalogs?.getClient) ? catalogs.getClient(targetClientId) : null;
-        const client_descr = (catalogClient?.clientName || null) ??
-            job.payload?.client_descr ??
+        const client_id_final = client_id ?? _num(inst?.payload?.target_client_id ?? inst?.resolved?.target_client_id);
+        // client_descr como fallback para log
+        const client_descr = job.payload?.client_descr ??
             job.payload?.clientName ??
             inst?.payload?.clientName ?? null;
-        if (!vehicle_id || !plate_real || !client_descr) {
-            console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_descr=${client_descr}`);
+        if (!vehicle_id || !plate_real || !client_id_final) {
+            console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_id=${client_id_final}`);
             return;
         }
         const service = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service);
@@ -479,6 +480,7 @@ function _enqueueChangeCompanyAfterHtml5(job, result) {
             flow: "CHANGE_COMPANY",
             vehicle_id,
             plate_real,
+            client_id: client_id_final,
             client_descr,
             installation_id: installationId,
             service,
@@ -491,7 +493,7 @@ function _enqueueChangeCompanyAfterHtml5(job, result) {
             installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CHANGE_COMPANY_QUEUED" });
         }
         catch { }
-        console.log(`[jobs] [PIPELINE] enqueued resolver_change_company job=${ccJob.id} installation=${installationId} vehicle_id=${vehicle_id} → "${client_descr}"`);
+        console.log(`[jobs] [PIPELINE] enqueued resolver_change_company job=${ccJob.id} installation=${installationId} vehicle_id=${vehicle_id} client_id=${client_id_final}`);
     }
     catch (e) {
         console.log("[jobs] [PIPELINE] enqueue CHANGE_COMPANY failed:", e && (e.message || String(e)));
