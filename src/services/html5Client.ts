@@ -182,3 +182,50 @@ export function normalizeSerial(v: string): string {
 export function serialsMatch(a: string, b: string): boolean {
   return normalizeSerial(a) === normalizeSerial(b);
 }
+
+// ---------------------------------------------------------------------------
+// CLIENTS — lista todos os clientes disponíveis na sessão HTML5
+// ---------------------------------------------------------------------------
+
+export interface ClientRecord {
+  client_id: number;
+  client_descr: string;
+  default_group_name: string;
+}
+
+function parseClientsXml(xml: string): ClientRecord[] {
+  const records: ClientRecord[] = [];
+
+  // Tenta <CLIENT CLIENT_ID="..." CLIENT_DESCR="..." DEFAULT_GROUP_NAME="..." />
+  const re = /<CLIENT\s([^>]*?)\/>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+
+    function attr(name: string): string {
+      const hit = attrs.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i"));
+      return hit ? hit[1].trim() : "";
+    }
+
+    const clientId = Number(attr("CLIENT_ID"));
+    if (!clientId) continue;
+
+    records.push({
+      client_id:          clientId,
+      client_descr:       attr("CLIENT_DESCR"),
+      default_group_name: attr("DEFAULT_GROUP_NAME"),
+    });
+  }
+
+  return records;
+}
+
+export async function clientsQuery(): Promise<ClientRecord[]> {
+  const xml = await html5Post({
+    REFRESH_FLG: "1",
+    action:      "CLIENTS",
+    VERSION_ID:  "2",
+  });
+  return parseClientsXml(xml);
+}

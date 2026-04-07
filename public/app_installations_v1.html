@@ -306,6 +306,18 @@
   </div>
 </div>
 
+<!-- aviso de HTML5 demorando (>30s) -->
+<div id="html5SlowRow" class="hidden" style="margin-top:12px">
+  <div class="pill" style="border-color:#854d0e;background:#1c1002;color:var(--warn)">
+    <span class="dot warn"></span>
+    <b>HTML5 demorou mais que o esperado</b>
+    <span style="font-weight:600;margin-left:4px" id="html5SlowMsg">Verifique a sessão VPN</span>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="btnRetryHtml5Slow" class="secondary">Reenviar cadastro</button>
+  </div>
+</div>
+
     <div class="list" id="canHeader"></div>
 
     <div class="chips" id="msChips" style="margin-top:12px"></div>
@@ -449,6 +461,40 @@
       showToast("Falha ao carregar catálogos (JSON).", "bad");
       console.error(e);
     }
+
+    // Busca clientes do servidor e faz merge com JSON pelo clientId
+    // Se o endpoint falhar, usa só o JSON (fallback silencioso)
+    try {
+      const rc = await api("/api/clients");
+      if (rc.ok && Array.isArray(rc.data?.clients)) {
+        const serverClients = rc.data.clients; // [{client_id, client_descr}, ...]
+        // Para cada item do JSON, atualiza o clientName com o nome real do servidor
+        for (const local of CATALOG_SETTINGS) {
+          const srv = serverClients.find(sc => String(sc.client_id) === String(local.clientId));
+          if (srv && srv.client_descr) local._serverName = srv.client_descr;
+        }
+        // Também inclui clientes do servidor que NÃO estão no JSON (sem vehicleSettingId)
+        // — útil para listar mas ficam desabilitados no select
+        const newEntries = [];
+        for (const sc of serverClients) {
+          const alreadyIn = CATALOG_SETTINGS.some(l => String(l.clientId) === String(sc.client_id));
+          if (!alreadyIn) {
+            newEntries.push({
+              clientId: sc.client_id,
+              clientName: sc.client_descr,
+              profileKey: "default",
+              vehicleSettingId: null,
+              _noScheme: true,
+            });
+          }
+        }
+        CATALOG_SETTINGS.push(...newEntries);
+      }
+    } catch (e) {
+      // falha silenciosa — usa só o JSON
+      console.warn("Falha ao buscar /api/clients:", e);
+    }
+
     renderClients();
     renderManufacturers();
     renderGsSelectors();
@@ -462,20 +508,31 @@
     sel.innerHTML = "";
 
     const items = CATALOG_SETTINGS.slice().sort((a,b)=>
-      String(a.clientName).localeCompare(String(b.clientName)) ||
+      String(a._serverName || a.clientName).localeCompare(String(b._serverName || b.clientName)) ||
       String(a.profileKey).localeCompare(String(b.profileKey))
     );
 
     for (const it of items){
       const o = document.createElement("option");
-      o.value = String(it.clientId) + "|" + String(it.profileKey) + "|" + String(it.vehicleSettingId);
-      o.textContent = `${it.clientName}` + (it.isDefault ? " (default)" : "");
+      const displayName = it._serverName || it.clientName;
+      o.value = String(it.clientId) + "|" + String(it.profileKey || "default") + "|" + String(it.vehicleSettingId || "");
+      if (it._noScheme) {
+        o.textContent = `${displayName} (sem scheme)`;
+        o.disabled = true;
+        o.style.color = "#4a5a6e";
+      } else {
+        o.textContent = `${displayName}` + (it.isDefault ? " (default)" : "");
+      }
       sel.appendChild(o);
     }
 
-    // default: TransLima default (se existir), senão primeiro
-    const idx = items.findIndex(x => x.clientName === "TransLima" && x.profileKey === "default");
+    // default: TransLima default (se existir), senão primeiro habilitado
+    const idx = items.findIndex(x => (x._serverName || x.clientName) === "TransLima" && x.profileKey === "default");
     if (idx >= 0) sel.selectedIndex = idx;
+    else {
+      const firstEnabled = items.findIndex(x => !x._noScheme);
+      if (firstEnabled >= 0) sel.selectedIndex = firstEnabled;
+    }
 
     applyClientSelection();
   }
@@ -1265,8 +1322,8 @@
     if (!x) return "criada";
     const MAP = {
       "CREATED":          "criada",
-      "HTML5_QUEUED":     "aguardando cadastro",
-      "HTML5_RUNNING":    "cadastrando...",
+      "HTML5_QUEUED":     "aguardando cadastro…",
+      "HTML5_RUNNING":    "cadastrando no sistema…",
       "HTML5_DONE":       "cadastrado",
       "SB_QUEUED":        "aguardando config.",
       "SB_RUNNING":       "configurando...",
@@ -1499,6 +1556,35 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     const isSbQueued   = st === "SB_QUEUED";
     const isSbRunning  = st.includes("SB_RUNNING");
     const isSbDone     = st.includes("SB_DONE") || st.includes("WAITING_REBOOT") || st.includes("CAN_") || st.includes("GS_") || st === "COMPLETED";
+
+    // --- HTML5: timer visual ---
+    const isHtml5Active = st === "HTML5_QUEUED" || st === "HTML5_RUNNING";
+    if (isHtml5Active) {
+      if (!state._html5Start) state._html5Start = Date.now();
+    } else {
+      state._html5Start = null;
+    }
+    // atualiza o subline com tempo decorrido durante HTML5
+    if (isHtml5Active && state._html5Start) {
+      const elapsed = Math.round((Date.now() - state._html5Start) / 1000);
+      const elStr = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed/60)}m${elapsed%60}s`;
+      const label = st === "HTML5_QUEUED" ? "Na fila…" : "Cadastrando no sistema…";
+      setSubline(`${label} (${elStr})`);
+      // aviso de lentidão após 30s
+      const slowRow = $("html5SlowRow");
+      if (slowRow) {
+        if (elapsed >= 30) {
+          slowRow.classList.remove("hidden");
+          const msg = $("html5SlowMsg");
+          if (msg) msg.textContent = elapsed >= 60 ? `Já faz ${elStr} — verifique VPN` : "Verifique a sessão VPN";
+        } else {
+          slowRow.classList.add("hidden");
+        }
+      }
+    } else {
+      const slowRow = $("html5SlowRow");
+      if (slowRow) slowRow.classList.add("hidden");
+    }
 
     // --- barra de progresso animada ---
     // SB_QUEUED: mantém barra em 5% (indicativo de "aguardando SB iniciar")
@@ -1734,7 +1820,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     if (st.includes("WAITING_REBOOT")) return 1000;
     if (st.includes("SB_RUNNING")) return 1000;
     if (st.includes("SB_QUEUED"))  return 1000;
-    if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 2000;
+    if (st.includes("HTML5_QUEUED") || st.includes("HTML5_RUNNING")) return 1200; // mais agressivo: cadastro deve ser rápido
     return state.pollMs;
   }
 
@@ -2015,6 +2101,12 @@ $("btnRetryHtml5").onclick = async () => {
     $("btnRetryHtml5").disabled = false;
   }
 };
+
+// Botão de retry HTML5 do aviso de lentidão — mesmo comportamento
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = $("btnRetryHtml5Slow");
+  if (btn) btn.onclick = () => $("btnRetryHtml5").onclick?.call($("btnRetryHtml5"));
+});
 
 // ====== boot ======
   (function init(){

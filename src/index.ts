@@ -9,6 +9,7 @@ import jobRoutes from "./routes/jobRoutes";
 import adminCatalogRoutes from "./routes/adminCatalogRoutes";
 
 import installationsRoutes from "./routes/installationsRoutes";
+import clientRoutes from "./routes/clientRoutes";
 import { initSessionTokenStore, getSessionTokenStatus } from "./services/sessionTokenStore";
 import { migrateIfNeeded } from "./db/migrate";
 import cors from "cors";
@@ -127,6 +128,7 @@ app.use("/api/admin/catalogs", adminCatalogRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/monitor", monitorRoutes);
 app.use("/api/installations", installationsRoutes);
+app.use("/api/clients", clientRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/scheme-builder", schemeBuilderRoutes);
 
