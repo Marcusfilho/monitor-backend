@@ -307,6 +307,7 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
     if (ok) {
       // limpa erro anterior
       try { installationsStore.patchInstallation(installationId, { last_error: null }); } catch {}
+      try { installationsStore.patchInstallation(installationId, { status: "HTML5_DONE" }); } catch {}
       return;
     }
 
