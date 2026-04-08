@@ -216,10 +216,66 @@ router.get("/", async (_req, res) => {
 // ---------------------------------------------------------------------------
 // POST /api/clients/reload-schemes
 // Recarrega scheme_ids.txt + catalog sem restart do servidor.
-// Upload do TXT via endpoint virá em sessão futura.
 // ---------------------------------------------------------------------------
 router.post("/reload-schemes", (_req, res) => {
     reloadSchemeSources();
     res.json({ status: "ok", message: "Fontes recarregadas e cache invalidado" });
+});
+// ---------------------------------------------------------------------------
+// POST /api/clients/sync-cookie
+// Recebe o cookie HTML5 do worker (VM) e salva no filesystem do Render.
+// Permite que /api/clients use a sessão autenticada do Traffilog.
+// Header obrigatório: x-sync-secret (deve bater com env COOKIE_SYNC_SECRET)
+// ---------------------------------------------------------------------------
+const COOKIEJAR_PATH = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
+const SYNC_SECRET = (process.env.COOKIE_SYNC_SECRET || "").trim();
+router.post("/sync-cookie", (req, res) => {
+    if (SYNC_SECRET) {
+        const provided = (req.headers["x-sync-secret"] || "").toString().trim();
+        if (provided !== SYNC_SECRET) {
+            return res.status(401).json({ status: "error", message: "unauthorized" });
+        }
+    }
+    const body = req.body;
+    if (!body?.cookie || typeof body.cookie !== "string") {
+        return res.status(400).json({ status: "error", message: "campo 'cookie' obrigatório" });
+    }
+    try {
+        const payload = {
+            cookie: body.cookie,
+            keys: body.keys || [],
+            updatedAt: body.updatedAt || new Date().toISOString(),
+            meta: body.meta || {},
+            syncedAt: new Date().toISOString(),
+            source: "worker-push",
+        };
+        fs.writeFileSync(COOKIEJAR_PATH, JSON.stringify(payload, null, 2), { encoding: "utf8", mode: 0o600 });
+        clientsCache = null; // invalida cache para forçar novo fetch com cookie novo
+        console.log(`[sync-cookie] Cookie sincronizado — keys: ${payload.keys.join(", ") || "(nenhuma)"}`);
+        return res.json({ status: "ok", syncedAt: payload.syncedAt });
+    }
+    catch (err) {
+        console.error("[sync-cookie] Falha ao salvar cookie:", err?.message);
+        return res.status(500).json({ status: "error", message: err?.message });
+    }
+});
+// GET /api/clients/sync-cookie/status — quando foi sincronizado pela última vez
+router.get("/sync-cookie/status", (_req, res) => {
+    try {
+        if (!fs.existsSync(COOKIEJAR_PATH)) {
+            return res.json({ status: "missing", syncedAt: null });
+        }
+        const raw = JSON.parse(fs.readFileSync(COOKIEJAR_PATH, "utf8"));
+        return res.json({
+            status: "ok",
+            syncedAt: raw.syncedAt || null,
+            updatedAt: raw.updatedAt || null,
+            source: raw.source || "unknown",
+            keys: raw.keys || [],
+        });
+    }
+    catch {
+        return res.json({ status: "error", syncedAt: null });
+    }
 });
 exports.default = router;
