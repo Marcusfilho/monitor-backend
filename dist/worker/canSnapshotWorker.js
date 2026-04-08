@@ -636,7 +636,7 @@ function __cs_summarizeSnapshot(snap){
     serial: hdr.serial || hdr.inner_id || null,
     license_nmbr: hdr.license_nmbr || hdr.license_number || null,
     license_number: hdr.license_number || hdr.license_nmbr || null,
-    driver_code: hdr.driver_code || null,
+    driver_code: hdr.driver_code || (hdr.raw && hdr.raw.driver_code) || null,
     communication: hdr.communication || hdr.server_time || null,
     server_time: hdr.server_time || hdr.communication || null,
     gps: hdr.gps || null,

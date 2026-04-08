@@ -304,14 +304,14 @@ async function processJob(job) {
                 GS_ENABLE: "0",
                 GS_ONLY: "0",
             }),
+            SB_JOB_ID: job.id,
+            SB_JOB_SERVER_URL: JOB_SERVER_BASE_URL,
+            SB_WORKER_KEY: WORKER_KEY,
         };
-        const SB_SPAWN_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutos — equipamento desligado não trava para sempre
-        const r = (0, child_process_1.spawnSync)(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8", timeout: SB_SPAWN_TIMEOUT_MS });
-        if (r.signal === "SIGTERM" || r.error?.code === "ETIMEDOUT")
-            throw new Error(`[sb_run_vm] timeout após ${SB_SPAWN_TIMEOUT_MS/1000}s — equipamento pode estar desligado ou VPN caiu`);
+        const r = (0, child_process_1.spawnSync)(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
         if (r.status !== 0)
             throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
-        await completeJob(job.id, "ok", { status: "ok", stdout: r.stdout, stderr: r.stderr });
+        await completeJob(job.id, "ok", { status: "ok" });
     }
     catch (err) {
         console.error(`[worker] Erro no job ${job.id}:`, err?.message || err);

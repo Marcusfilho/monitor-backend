@@ -146,30 +146,28 @@ async function collectVehicleMonitorSnapshot(opts) {
     }).catch(() => { });
     if (!header.unit_key)
         throw new Error("[vm] unit_key ausente no get_vehicle_info");
-    // Buscar moduleState ANTES da janela — disponível desde o primeiro pacote parcial
-    let earlyModuleState = [];
-    try {
-        const msEarly = await mux.sendAction("get_monitor_module_state", {
-            tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
-        });
-        earlyModuleState = (msEarly?.data ?? []).map((r) => ({
-            id: String(r?.id ?? ""),
-            module: String(r?.module_descr ?? ""),
-            sub: String(r?.sub_module_descr ?? ""),
-            name: String(r?.module_descr ?? ""),
-            last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-            active: asBool01(r?.active),
-            was_ok: asBool01(r?.was_ok),
-            ok: asBool01(r?.ok),
-            error: asBool01(r?.error),
-            error_descr: r?.error_descr != null ? String(r.error_descr) : null,
-        }));
-    } catch(_e_ms) { /* best-effort — moduleState é opcional no parcial */ }
     // Captura refresh UNIT_PARAMETERS por janela
     const latest = new Map();
     let unitParametersEvents = 0;
     let unitMessagesEvents = 0;
     let unitConnEvents = 0;
+    // Module State buscado ANTES da janela — disponível desde o primeiro snapshot parcial
+    const ms = await mux.sendAction("get_monitor_module_state", {
+        tag: "loading_screen",
+        filter: "",
+        vehicle_id: String(opts.vehicleId),
+    });
+    const moduleState = (ms?.data ?? []).map((r) => ({
+        id: String(r?.id ?? ""),
+        module: String(r?.module_descr ?? ""),
+        sub: String(r?.sub_module_descr ?? ""),
+        last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+        active: asBool01(r?.active),
+        was_ok: asBool01(r?.was_ok),
+        ok: asBool01(r?.ok),
+        error: asBool01(r?.error),
+        error_descr: r?.error_descr != null ? String(r.error_descr) : null,
+    }));
     const off = mux.onRefresh((props) => {
         const ds = String(props?.data_source ?? "");
         if (ds === "UNIT_PARAMETERS") {
@@ -198,13 +196,12 @@ async function collectVehicleMonitorSnapshot(opts) {
                     inner_id: row?.inner_id != null ? String(row.inner_id) : prev?.inner_id ?? null,
                 });
             }
-            // STREAMING PROGRESSIVO: notifica caller com snapshot parcial a cada pacote
-            // Passa header e moduleState já disponíveis — worker usa no partialSnap
+            // STREAMING PROGRESSIVO: passa header e moduleState já disponíveis desde o início
             if (opts.onPartialParams) {
                 try {
                     const allParams = Array.from(latest.values());
                     const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
-                    opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents }, header, earlyModuleState);
+                    opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents }, header, moduleState);
                 }
                 catch { /* best-effort */ }
             }
@@ -212,13 +209,13 @@ async function collectVehicleMonitorSnapshot(opts) {
         }
         if (ds === "UNIT_MESSAGES") {
             unitMessagesEvents++;
-            // Capturar driverCode do frame UNIT_MESSAGES
-            // O Monitor envia driverCode em cada frame de posição
+            // Captura driver_code dos pacotes UNIT_MESSAGES — preenchido quando iButton/keypad está ativo
             const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
             for (const row of rows) {
-                const dc = row?.driverCode ?? row?.driver_code ?? row?.DriverCode ?? null;
-                if (dc != null && String(dc).trim() !== "") {
-                    header.driver_code = String(dc).trim();
+                const dc = row?.driver_code != null ? String(row.driver_code).trim() : "";
+                if (dc) {
+                    header.driver_code = dc;
+                    break;
                 }
             }
             return;
@@ -238,23 +235,6 @@ async function collectVehicleMonitorSnapshot(opts) {
     await sleep(waitAfterCmdMs);
     await sleep(windowMs);
     off();
-    // Module State (regra robusta: NÃO confiar em id fixo, usar module/sub)
-    const ms = await mux.sendAction("get_monitor_module_state", {
-        tag: "loading_screen",
-        filter: "",
-        vehicle_id: String(opts.vehicleId),
-    });
-    const moduleState = (ms?.data ?? []).map((r) => ({
-        id: String(r?.id ?? ""),
-        module: String(r?.module_descr ?? ""),
-        sub: String(r?.sub_module_descr ?? ""),
-        last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-        active: asBool01(r?.active),
-        was_ok: asBool01(r?.was_ok),
-        ok: asBool01(r?.ok),
-        error: asBool01(r?.error),
-        error_descr: r?.error_descr != null ? String(r.error_descr) : null,
-    }));
     await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => { });
     return {
         capturedAt: new Date().toISOString(),

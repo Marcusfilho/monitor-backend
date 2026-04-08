@@ -39,7 +39,6 @@ export type VmHeader = {
   unit_version?: string | null;
   configuration_key_db?: string | null;
   configuration_key_unit?: string | null;
-  driver_code?: string | null;
   raw?: JsonObj;
 };
 
@@ -175,7 +174,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
   urlEncode?: boolean;
   // Callback chamado a cada pacote UNIT_PARAMETERS recebido durante a janela.
   // Permite que o caller publique snapshots parciais sem aguardar o fim da janela.
-  onPartialParams?: (params: VmParam[], counts: { total: number; withValue: number; events: number }) => void;
+  onPartialParams?: (params: VmParam[], counts: { total: number; withValue: number; events: number }, header: VmHeader, moduleState: VmModuleStateRow[]) => void;
 }): Promise<VmSnapshot> {
   // PERF: janela padrão reduzida de 8s → 5s. Veículos respondem rápido; 8s era conservador demais.
   const windowMs = opts.windowMs ?? 5000;
@@ -201,7 +200,6 @@ export async function collectVehicleMonitorSnapshot(opts: {
     unit_version: vi.unit_version != null ? String(vi.unit_version) : null,
     configuration_key_db: vi.configuration_key_db != null ? String(vi.configuration_key_db) : null,
     configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit) : null,
-    driver_code: (vi.driver_code != null && String(vi.driver_code).trim() !== "") ? safeDecodeURIComponent(String(vi.driver_code)) : null,
     raw: vi,
   };
 
@@ -245,6 +243,25 @@ export async function collectVehicleMonitorSnapshot(opts: {
   let unitMessagesEvents = 0;
   let unitConnEvents = 0;
 
+  // Module State buscado ANTES da janela — disponível desde o primeiro snapshot parcial
+  const ms = await mux.sendAction<any>("get_monitor_module_state", {
+    tag: "loading_screen",
+    filter: "",
+    vehicle_id: String(opts.vehicleId),
+  });
+
+  const moduleState: VmModuleStateRow[] = (ms?.data ?? []).map((r: any) => ({
+    id: String(r?.id ?? ""),
+    module: String(r?.module_descr ?? ""),
+    sub: String(r?.sub_module_descr ?? ""),
+    last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+    active: asBool01(r?.active),
+    was_ok: asBool01(r?.was_ok),
+    ok: asBool01(r?.ok),
+    error: asBool01(r?.error),
+    error_descr: r?.error_descr != null ? String(r.error_descr) : null,
+  }));
+
   const off = mux.onRefresh((props) => {
     const ds = String(props?.data_source ?? "");
 
@@ -280,27 +297,27 @@ export async function collectVehicleMonitorSnapshot(opts: {
         });
       }
 
-      // STREAMING PROGRESSIVO: notifica caller com snapshot parcial a cada pacote
+      // STREAMING PROGRESSIVO: passa header e moduleState já disponíveis desde o início
       if (opts.onPartialParams) {
         try {
           const allParams = Array.from(latest.values());
           const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
-          opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents });
+          opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents }, header, moduleState);
         } catch { /* best-effort */ }
       }
       return;
     }
 
     if (ds === "UNIT_MESSAGES") {
-          unitMessagesEvents++;
-          // Captura driver_code dos pacotes UNIT_MESSAGES — preenchido quando iButton/keypad está ativo
-          const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
-          for (const row of rows) {
-            const dc = row?.driver_code != null ? String(row.driver_code).trim() : "";
-            if (dc) { header.driver_code = dc; break; }
-          }
-          return;
-        }
+      unitMessagesEvents++;
+      // Captura driver_code dos pacotes UNIT_MESSAGES — preenchido quando iButton/keypad está ativo
+      const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
+      for (const row of rows) {
+        const dc = row?.driver_code != null ? String(row.driver_code).trim() : "";
+        if (dc) { header.driver_code = dc; break; }
+      }
+      return;
+    }
     if (ds === "unit_connection_status") { unitConnEvents++; return; }
   });
 
@@ -315,25 +332,6 @@ export async function collectVehicleMonitorSnapshot(opts: {
   await sleep(waitAfterCmdMs);
   await sleep(windowMs);
   off();
-
-  // Module State (regra robusta: NÃO confiar em id fixo, usar module/sub)
-  const ms = await mux.sendAction<any>("get_monitor_module_state", {
-    tag: "loading_screen",
-    filter: "",
-    vehicle_id: String(opts.vehicleId),
-  });
-
-  const moduleState: VmModuleStateRow[] = (ms?.data ?? []).map((r: any) => ({
-    id: String(r?.id ?? ""),
-    module: String(r?.module_descr ?? ""),
-    sub: String(r?.sub_module_descr ?? ""),
-    last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-    active: asBool01(r?.active),
-    was_ok: asBool01(r?.was_ok),
-    ok: asBool01(r?.ok),
-    error: asBool01(r?.error),
-    error_descr: r?.error_descr != null ? String(r.error_descr) : null,
-  }));
 
   await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => {});
 

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createJob = createJob;
 exports.getNextJob = getNextJob;
 exports.completeJob = completeJob;
+exports.updateJob = updateJob;
 exports.getJob = getJob;
 exports.listJobs = listJobs;
 const crypto_1 = __importDefault(require("crypto"));
@@ -121,6 +122,16 @@ function completeJob(id, status, result, workerId) {
     job.updatedAt = new Date().toISOString();
     if (workerId)
         job.workerId = workerId;
+    save();
+    return job;
+}
+function updateJob(id, patch) {
+    loadOnce();
+    const job = jobs.find((j) => j.id === id);
+    if (!job)
+        return null;
+    Object.assign(job, patch);
+    job.updatedAt = new Date().toISOString();
     save();
     return job;
 }

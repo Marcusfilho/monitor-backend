@@ -1,45 +1,265 @@
 // src/routes/clientRoutes.ts
-// GET /api/clients — retorna lista de clientes disponíveis na sessão HTML5.
-// Usado pelo frontend para exibir nomes reais dos clientes (evita divergência com o JSON local).
+// GET /api/clients — retorna lista de clientes disponíveis na sessão HTML5,
+// enriquecida com vehicle_setting_id e profiles.
+//
+// FONTES DE DADOS:
+//   config/scheme_ids.txt                  → fonte de verdade para o vehicle_setting_id DEFAULT
+//   config/catalog_vehicle_settings.json   → define profiles alternativos (multi-profile)
+//
+// REGRA DE MERGE:
+//   1. Para cada cliente, o default é sempre o que está no scheme_ids.txt
+//   2. Se o catalog tiver profiles alternativos para aquele clientId,
+//      eles são incluídos como opções extras — mas o default do TXT prevalece
+//   3. Clientes no TXT mas não no catalog → entram com 1 profile (o do TXT)
+//   4. Clientes no catalog mas não no TXT → sem vehicle_setting_id (has_scheme: false)
 
 import { Router } from "express";
+import * as fs from "fs";
+import * as path from "path";
 import { clientsQuery } from "../services/html5Client";
 
 const router = Router();
 
-/**
- * GET /api/clients
- *
- * Resposta:
- * {
- *   "status": "ok",
- *   "clients": [
- *     { "client_id": 219007, "client_descr": "Rápido Araguaia", "default_group_name": "Rápido Araguaia" },
- *     ...
- *   ]
- * }
- *
- * Em caso de sessão expirada, retorna lista vazia (não erro) — o frontend
- * usa o JSON local como fallback silencioso.
- */
-router.get("/", async (_req, res) => {
-  try {
-    const clients = await clientsQuery();
+// ---------------------------------------------------------------------------
+// Caminhos dos arquivos de configuração
+// ---------------------------------------------------------------------------
 
-    if (clients.length === 0) {
-      // Sessão provavelmente expirada — retorna vazio para o frontend usar fallback
+const SCHEME_IDS_PATH = path.resolve(
+  process.env.SCHEME_IDS_PATH ||
+  path.join(__dirname, "../../config/scheme_ids.txt")
+);
+
+const CATALOG_PATH = path.resolve(
+  process.env.CATALOG_PATH ||
+  path.join(__dirname, "../../config/catalog_vehicle_settings.json")
+);
+
+// ---------------------------------------------------------------------------
+// Tipos
+// ---------------------------------------------------------------------------
+
+export interface ClientProfile {
+  key: string;
+  label: string;
+  vehicle_setting_id: number;
+  is_default: boolean;
+}
+
+export interface EnrichedClient {
+  client_id: number;
+  client_descr: string;
+  default_group_name: string;
+  vehicle_setting_id: number | null;
+  profiles: ClientProfile[];
+  has_scheme: boolean;
+  multi_profile: boolean;
+}
+
+interface SchemeEntry {
+  clientId: number;
+  clientName: string;
+  vehicleSettingId: number;
+}
+
+interface CatalogItem {
+  clientId: number;
+  clientName: string;
+  profileKey: string;
+  settingName: string;
+  vehicleSettingId: number;
+  isDefault: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Carregamento das fontes
+// ---------------------------------------------------------------------------
+
+function loadSchemeIds(): Map<number, SchemeEntry> {
+  const map = new Map<number, SchemeEntry>();
+  try {
+    const lines = fs.readFileSync(SCHEME_IDS_PATH, "utf8")
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith("CLIENT_ID"));
+
+    for (const line of lines) {
+      const parts = line.split(";");
+      if (parts.length < 3) continue;
+      const clientId = Number(parts[0].trim());
+      const clientName = parts[1].trim();
+      const vehicleSettingId = Number(parts[2].trim());
+      if (!clientId || !vehicleSettingId) continue;
+      map.set(clientId, { clientId, clientName, vehicleSettingId });
+    }
+    console.log(`[schemes] ${map.size} clientes carregados de scheme_ids.txt`);
+  } catch (err: any) {
+    console.error("[schemes] Falha ao carregar scheme_ids.txt:", err?.message);
+  }
+  return map;
+}
+
+function loadCatalogIndex(): Map<number, CatalogItem[]> {
+  const map = new Map<number, CatalogItem[]>();
+  try {
+    const raw = fs.readFileSync(CATALOG_PATH, "utf8");
+    const catalog: { items: CatalogItem[] } = JSON.parse(raw);
+    for (const item of catalog.items) {
+      if (!map.has(item.clientId)) map.set(item.clientId, []);
+      map.get(item.clientId)!.push(item);
+    }
+    console.log(`[catalog] ${catalog.items.length} profiles carregados (${map.size} clientes)`);
+  } catch (err: any) {
+    console.error("[catalog] Falha ao carregar catalog_vehicle_settings.json:", err?.message);
+  }
+  return map;
+}
+
+let schemeIds    = loadSchemeIds();
+let catalogIndex = loadCatalogIndex();
+
+export function reloadSchemeSources(): void {
+  schemeIds    = loadSchemeIds();
+  catalogIndex = loadCatalogIndex();
+  clientsCache = null;
+  console.log("[schemes] Fontes recarregadas, cache invalidado");
+}
+
+// ---------------------------------------------------------------------------
+// Merge: scheme_ids.txt + catalog → profiles do cliente
+// ---------------------------------------------------------------------------
+
+function buildProfiles(clientId: number): ClientProfile[] {
+  const schemeEntry  = schemeIds.get(clientId);
+  const catalogItems = catalogIndex.get(clientId) ?? [];
+
+  if (!schemeEntry && catalogItems.length === 0) return [];
+
+  // Está no catalog mas não no TXT → sem default definido
+  if (!schemeEntry) return [];
+
+  // Só no TXT → 1 profile simples
+  if (catalogItems.length === 0) {
+    return [{
+      key:               "default",
+      label:             schemeEntry.clientName,
+      vehicle_setting_id: schemeEntry.vehicleSettingId,
+      is_default:        true,
+    }];
+  }
+
+  // Nos dois → profiles do catalog, default = vehicleSettingId do TXT
+  const defaultVsId = schemeEntry.vehicleSettingId;
+
+  const profiles: ClientProfile[] = catalogItems.map(item => ({
+    key:               item.profileKey,
+    label:             item.settingName,
+    vehicle_setting_id: item.vehicleSettingId,
+    is_default:        item.vehicleSettingId === defaultVsId,
+  }));
+
+  // Fallback defensivo: se nenhum bateu, marca o primeiro isDefault do catalog
+  if (!profiles.some(p => p.is_default)) {
+    const fallback = catalogItems.find(i => i.isDefault) ?? catalogItems[0];
+    const p = profiles.find(p => p.vehicle_setting_id === fallback.vehicleSettingId);
+    if (p) p.is_default = true;
+  }
+
+  // Default sempre primeiro
+  profiles.sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0));
+  return profiles;
+}
+
+// ---------------------------------------------------------------------------
+// Cache em memória
+// ---------------------------------------------------------------------------
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface ClientCache {
+  data: EnrichedClient[];
+  fetchedAt: number;
+}
+
+let clientsCache: ClientCache | null = null;
+
+function isCacheValid(): boolean {
+  return clientsCache !== null && Date.now() - clientsCache.fetchedAt < CACHE_TTL_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Join: resposta Traffilog + fontes locais → EnrichedClient[]
+// ---------------------------------------------------------------------------
+
+function enrichClients(rawClients: Awaited<ReturnType<typeof clientsQuery>>): EnrichedClient[] {
+  return rawClients.map(c => {
+    const profiles = buildProfiles(c.client_id);
+    const defaultProfile = profiles.find(p => p.is_default) ?? profiles[0] ?? null;
+    return {
+      client_id:          c.client_id,
+      client_descr:       c.client_descr,
+      default_group_name: c.default_group_name,
+      vehicle_setting_id: defaultProfile?.vehicle_setting_id ?? null,
+      profiles,
+      has_scheme:    profiles.length > 0,
+      multi_profile: profiles.length > 1,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/clients
+// ---------------------------------------------------------------------------
+
+router.get("/", async (_req, res) => {
+  if (isCacheValid()) {
+    return res.json({ status: "ok", cached: true, clients: clientsCache!.data });
+  }
+
+  try {
+    const rawClients = await clientsQuery();
+
+    if (rawClients.length === 0) {
       console.warn("[GET /api/clients] Lista vazia — sessão HTML5 pode estar expirada");
-      return res.json({ status: "ok", clients: [], warning: "session_may_be_expired" });
+      return res.json({ status: "ok", cached: false, clients: [], warning: "session_may_be_expired" });
     }
 
-    console.log(`[GET /api/clients] ${clients.length} clientes retornados`);
-    return res.json({ status: "ok", clients });
+    const enriched = enrichClients(rawClients);
+    clientsCache = { data: enriched, fetchedAt: Date.now() };
+
+    const withScheme    = enriched.filter(c => c.has_scheme).length;
+    const withoutScheme = enriched.filter(c => !c.has_scheme).length;
+    const multiProfile  = enriched.filter(c => c.multi_profile).length;
+    console.log(
+      `[GET /api/clients] ${enriched.length} clientes — ` +
+      `com scheme: ${withScheme}, sem scheme: ${withoutScheme}, multi-profile: ${multiProfile}`
+    );
+
+    return res.json({ status: "ok", cached: false, clients: enriched });
 
   } catch (err: any) {
     console.error("[GET /api/clients] Erro:", err?.message || err);
-    // Retorna vazio — frontend usa JSON como fallback, não trava o usuário
-    return res.json({ status: "ok", clients: [], warning: "fetch_error", detail: err?.message });
+
+    if (clientsCache) {
+      console.warn("[GET /api/clients] Servindo cache expirado como fallback");
+      return res.json({
+        status: "ok", cached: true, stale: true,
+        clients: clientsCache.data,
+        warning: "fetch_error_using_stale_cache",
+      });
+    }
+
+    return res.json({ status: "ok", cached: false, clients: [], warning: "fetch_error", detail: err?.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/clients/reload-schemes
+// Recarrega scheme_ids.txt + catalog sem restart do servidor.
+// Upload do TXT via endpoint virá em sessão futura.
+// ---------------------------------------------------------------------------
+router.post("/reload-schemes", (_req, res) => {
+  reloadSchemeSources();
+  res.json({ status: "ok", message: "Fontes recarregadas e cache invalidado" });
 });
 
 export default router;

@@ -325,12 +325,15 @@ await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=$
         GS_ENABLE: "0",
         GS_ONLY: "0",
       }),
+      SB_JOB_ID: job.id,
+      SB_JOB_SERVER_URL: JOB_SERVER_BASE_URL,
+      SB_WORKER_KEY: WORKER_KEY,
     } as NodeJS.ProcessEnv;
 
     const r = spawnSync(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
     if (r.status !== 0) throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
 
-    await completeJob(job.id, "ok", { status: "ok", stdout: r.stdout, stderr: r.stderr });
+    await completeJob(job.id, "ok", { status: "ok" });
   } catch (err: any) {
     console.error(`[worker] Erro no job ${job.id}:`, err?.message || err);
     await completeJob(job.id, "error", { status: "error", message: err?.message || "erro" });
