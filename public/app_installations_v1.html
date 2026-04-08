@@ -849,6 +849,8 @@
     for (let i = 0; i < 8; i++){
       if (!cur || typeof cur !== "object") break;
       if (Array.isArray(cur)) { cur = canLastOf(cur); continue; }
+      // Já está no nível certo: tem header ou parameters — não desembrulhar mais
+      if (cur.header || Array.isArray(cur.parameters) || Array.isArray(cur.moduleState) || cur.counts) break;
       if (cur.snapshot) { cur = cur.snapshot; continue; }
       if (cur.data) { cur = cur.data; continue; }
       if (cur.payload) { cur = cur.payload; continue; }
@@ -901,9 +903,10 @@
   function canExtractHeaderObj(snap){
     const s = canUnwrapSnapshot(snap);
     if (!s || typeof s !== "object") return {};
-    const h = canPick(s, [["header", "raw"], ["headerLite", "raw"], ["meta", "header", "raw"], ["summary", "header", "raw"]]) ||
-              canPick(s, [["header"], ["headerLite"], ["meta", "header"], ["summary", "header"]]) ||
-              {};
+    // hdrLite do worker já vem flat em snap.header (sem .raw)
+    const h = canPick(s, [["header"], ["headerLite"], ["meta", "header"], ["summary", "header"]]) || {};
+    // se vier com .raw dentro (formato antigo), mescla .raw no topo
+    if (h && h.raw && typeof h.raw === "object") return Object.assign({}, h.raw, h);
     return (h && typeof h === "object") ? h : {};
   }
 
@@ -1641,9 +1644,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       $("detailsDebug").classList.add("hidden");
     }
 
-    // status line
+    // status line — não sobrescrever se o timer HTML5 estiver ativo
     if (!id) setSubline("Pronto");
-    else {
+    else if (!isHtml5Active) {
       const human = statusToLabel(status);
       setSubline(human);
     }
