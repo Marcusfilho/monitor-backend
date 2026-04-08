@@ -1936,11 +1936,29 @@ async function loadCookieJar(){
   }
 }
 
+async function _syncCookieToRender(payload){
+  const base=(process.env.JOB_SERVER_BASE_URL||"").replace(/\/+$/,"");
+  const secret=(process.env.COOKIE_SYNC_SECRET||"").trim();
+  if(!base)return;
+  try{
+    const https=base.startsWith("https")?require("https"):require("http");
+    const body=Buffer.from(JSON.stringify(payload),"utf8");
+    await new Promise((resolve)=>{
+      const u=new URL(base+"/api/session/html5-cookie");
+      const req=https.request({hostname:u.hostname,port:u.port||(base.startsWith("https")?443:80),path:u.pathname,method:"POST",headers:{"content-type":"application/json","content-length":body.length,...(secret?{"x-sync-secret":secret}:{})}},
+      (res)=>{res.resume();console.log("[html5_v8] cookie sync HTTP",res.statusCode);resolve(null);});
+      req.setTimeout(5000,()=>{req.destroy();resolve(null);});
+      req.on("error",(e)=>{console.warn("[html5_v8] cookie sync erro:",e.message);resolve(null);});
+      req.write(body);req.end();
+    });
+  }catch(e){console.warn("[html5_v8] _syncCookieToRender falhou:",e.message);}
+}
 async function saveCookieJar(cookieHeader, meta){
   const cookie = ensureCookieDefaults(cookieHeader || "");
   const keys = cookieKeysFromCookieHeader(cookie);
   const payload = { cookie, keys, updatedAt: nowISO(), meta: meta || {} };
   await fsp.writeFile(COOKIEJAR_PATH, JSON.stringify(payload, null, 2), { encoding:"utf-8", mode:0o600 });
+  _syncCookieToRender(payload).catch(()=>{});
   return keys;
 }
 function extractSetCookies(headers){
