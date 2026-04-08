@@ -39,6 +39,7 @@ export type VmHeader = {
   unit_version?: string | null;
   configuration_key_db?: string | null;
   configuration_key_unit?: string | null;
+  driver_code?: string | null;
   raw?: JsonObj;
 };
 

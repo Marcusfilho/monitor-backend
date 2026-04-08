@@ -439,7 +439,6 @@
 
   // ====== catalogs ======
   let CATALOG_TYPES = [];      // catalog_vehicle_type.json
-  let CATALOG_SETTINGS = [];   // catalog_vehicle_settings.json
   let GS_COMMANDS = [];        // g-sensor_commands.json
 
   function uniqSorted(arr){ return [...new Set(arr)].sort((a,b)=>String(a).localeCompare(String(b))); }
@@ -450,11 +449,48 @@
     return r.json();
   }
 
+  // ====== clientes (endpoint enriquecido) ======
+  // _clientsData: lista de EnrichedClient vindos de /api/clients
+  // Estrutura: { client_id, client_descr, default_group_name, vehicle_setting_id,
+  //              profiles:[{key,label,vehicle_setting_id,is_default}], has_scheme, multi_profile }
+  let _clientsData = [];
+  let _clientsFetchPromise = null;
+  let _clientsFetched = false;
+
+  function prefetchClients(){
+    if (_clientsFetched || _clientsFetchPromise) return;
+    _clientsFetchPromise = _doFetchClients();
+  }
+
+  async function _doFetchClients(){
+    try {
+      const rc = await api("/api/clients");
+      if (rc.ok && Array.isArray(rc.data?.clients)){
+        _clientsData = rc.data.clients;
+        _clientsFetched = true;
+        console.log(`[clients] ${_clientsData.length} carregados` + (rc.data.cached ? " (cache)" : " (live)"));
+      } else {
+        console.warn("[clients] resposta inesperada:", rc.data);
+      }
+    } catch(e){
+      console.error("[clients] falha no pré-fetch:", e);
+    } finally {
+      _clientsFetchPromise = null;
+    }
+  }
+
+  async function ensureClients(){
+    if (_clientsFetched) return;
+    if (_clientsFetchPromise){ await _clientsFetchPromise; return; }
+    await _doFetchClients();
+  }
+
   async function loadCatalogs(){
+    // Dispara pré-fetch de clientes em paralelo com os JSONs locais
+    prefetchClients();
+
     try {
       CATALOG_TYPES = await loadJson("catalog_vehicle_type.json");
-      const s = await loadJson("catalog_vehicle_settings.json");
-      CATALOG_SETTINGS = (s && s.items) ? s.items : [];
       const g = await loadJson("g-sensor_commands.json");
       GS_COMMANDS = (g && g.commands) ? g.commands : [];
     } catch (e) {
@@ -462,44 +498,14 @@
       console.error(e);
     }
 
-    // Busca clientes do servidor e faz merge com JSON pelo clientId
-    // Se o endpoint falhar, usa só o JSON (fallback silencioso)
-    try {
-      const rc = await api("/api/clients");
-      if (rc.ok && Array.isArray(rc.data?.clients)) {
-        const serverClients = rc.data.clients; // [{client_id, client_descr}, ...]
-        // Para cada item do JSON, atualiza o clientName com o nome real do servidor
-        for (const local of CATALOG_SETTINGS) {
-          const srv = serverClients.find(sc => String(sc.client_id) === String(local.clientId));
-          if (srv && srv.client_descr) local._serverName = srv.client_descr;
-        }
-        // Também inclui clientes do servidor que NÃO estão no JSON (sem vehicleSettingId)
-        // — útil para listar mas ficam desabilitados no select
-        const newEntries = [];
-        for (const sc of serverClients) {
-          const alreadyIn = CATALOG_SETTINGS.some(l => String(l.clientId) === String(sc.client_id));
-          if (!alreadyIn) {
-            newEntries.push({
-              clientId: sc.client_id,
-              clientName: sc.client_descr,
-              profileKey: "default",
-              vehicleSettingId: null,
-              _noScheme: true,
-            });
-          }
-        }
-        CATALOG_SETTINGS.push(...newEntries);
-      }
-    } catch (e) {
-      // falha silenciosa — usa só o JSON
-      console.warn("Falha ao buscar /api/clients:", e);
-    }
+    // Aguarda clientes antes de renderizar o select
+    await ensureClients();
 
     renderClients();
     renderManufacturers();
     renderGsSelectors();
     applyServiceUI();
-  updateBtnLabel();
+    updateBtnLabel();
     refreshAdvancedPreview();
   }
 
@@ -507,32 +513,61 @@
     const sel = $("clientSelect");
     sel.innerHTML = "";
 
-    const items = CATALOG_SETTINGS.slice().sort((a,b)=>
-      String(a._serverName || a.clientName).localeCompare(String(b._serverName || b.clientName)) ||
-      String(a.profileKey).localeCompare(String(b.profileKey))
+    if (_clientsData.length === 0){
+      sel.innerHTML = '<option value="">— Erro ao carregar clientes —</option>';
+      return;
+    }
+
+    // Opção vazia inicial
+    const ph = document.createElement("option");
+    ph.value = ""; ph.textContent = "Selecione o cliente...";
+    sel.appendChild(ph);
+
+    // Dois grupos: com scheme e sem scheme
+    const grpCom = document.createElement("optgroup");
+    grpCom.label = "Com scheme cadastrado";
+    const grpSem = document.createElement("optgroup");
+    grpSem.label = "Sem scheme (não disponível)";
+    let hasCom = false, hasSem = false;
+
+    // Ordena alfabeticamente por nome
+    const sorted = _clientsData.slice().sort((a,b) =>
+      a.client_descr.localeCompare(b.client_descr, "pt-BR")
     );
 
-    for (const it of items){
-      const o = document.createElement("option");
-      const displayName = it._serverName || it.clientName;
-      o.value = String(it.clientId) + "|" + String(it.profileKey || "default") + "|" + String(it.vehicleSettingId || "");
-      if (it._noScheme) {
-        o.textContent = `${displayName} (sem scheme)`;
+    for (const c of sorted){
+      if (c.has_scheme && c.multi_profile){
+        // Um <option> por profile
+        for (const p of c.profiles){
+          const o = document.createElement("option");
+          o.value = `${c.client_id}|${p.key}|${p.vehicle_setting_id}`;
+          o.textContent = `${c.client_descr} — ${p.label}` + (p.is_default ? " ★" : "");
+          grpCom.appendChild(o);
+          hasCom = true;
+        }
+      } else if (c.has_scheme){
+        const o = document.createElement("option");
+        o.value = `${c.client_id}|default|${c.vehicle_setting_id}`;
+        o.textContent = c.client_descr;
+        grpCom.appendChild(o);
+        hasCom = true;
+      } else {
+        const o = document.createElement("option");
+        o.value = "";
+        o.textContent = `${c.client_descr} (sem scheme)`;
         o.disabled = true;
         o.style.color = "#4a5a6e";
-      } else {
-        o.textContent = `${displayName}` + (it.isDefault ? " (default)" : "");
+        grpSem.appendChild(o);
+        hasSem = true;
       }
-      sel.appendChild(o);
     }
 
-    // default: TransLima default (se existir), senão primeiro habilitado
-    const idx = items.findIndex(x => (x._serverName || x.clientName) === "TransLima" && x.profileKey === "default");
-    if (idx >= 0) sel.selectedIndex = idx;
-    else {
-      const firstEnabled = items.findIndex(x => !x._noScheme);
-      if (firstEnabled >= 0) sel.selectedIndex = firstEnabled;
-    }
+    if (hasCom) sel.appendChild(grpCom);
+    if (hasSem) sel.appendChild(grpSem);
+
+    // Seleciona primeiro habilitado por padrão
+    const firstEnabled = [...sel.options].findIndex(o => !o.disabled && o.value);
+    if (firstEnabled >= 0) sel.selectedIndex = firstEnabled;
 
     applyClientSelection();
   }
@@ -541,7 +576,9 @@
     const v = $("clientSelect").value || "";
     const [clientId, profileKey, vehicleSettingId] = v.split("|");
     $("vehicleSettingId").value = vehicleSettingId || "";
-    $("clientMeta").textContent = `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`;
+    $("clientMeta").textContent = clientId
+      ? `clientId=${clientId} profileKey=${profileKey} vehicleSettingId=${vehicleSettingId}`
+      : "";
     refreshAdvancedPreview();
   }
   $("clientSelect").addEventListener("change", applyClientSelection);
