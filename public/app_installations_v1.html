@@ -849,12 +849,17 @@
     for (let i = 0; i < 8; i++){
       if (!cur || typeof cur !== "object") break;
       if (Array.isArray(cur)) { cur = canLastOf(cur); continue; }
-      // Já está no nível certo: tem header ou parameters — não desembrulhar mais
-      if (cur.header || Array.isArray(cur.parameters) || Array.isArray(cur.moduleState) || cur.counts) break;
+      // Para quando já está no nível certo do snapshot resumido do worker:
+      // tem header preenchido, ou parameters/moduleState com itens, ou counts
+      const hasHeader = cur.header && typeof cur.header === "object";
+      const hasParams = Array.isArray(cur.parameters) && cur.parameters.length > 0;
+      const hasMs     = Array.isArray(cur.moduleState) && cur.moduleState.length > 0;
+      const hasCounts = cur.counts && typeof cur.counts === "object";
+      if (hasHeader || hasParams || hasMs || hasCounts) break;
       if (cur.snapshot) { cur = cur.snapshot; continue; }
-      if (cur.data) { cur = cur.data; continue; }
-      if (cur.payload) { cur = cur.payload; continue; }
-      if (cur.result) { cur = cur.result; continue; }
+      if (cur.data)     { cur = cur.data;     continue; }
+      if (cur.payload)  { cur = cur.payload;  continue; }
+      if (cur.result)   { cur = cur.result;   continue; }
       break;
     }
     return cur && typeof cur === "object" ? cur : null;
@@ -903,11 +908,17 @@
   function canExtractHeaderObj(snap){
     const s = canUnwrapSnapshot(snap);
     if (!s || typeof s !== "object") return {};
-    // hdrLite do worker já vem flat em snap.header (sem .raw)
+    // hdrLite do worker vem flat em snap.header (campos processados + .raw com dados brutos URL-encoded)
     const h = canPick(s, [["header"], ["headerLite"], ["meta", "header"], ["summary", "header"]]) || {};
-    // se vier com .raw dentro (formato antigo), mescla .raw no topo
-    if (h && h.raw && typeof h.raw === "object") return Object.assign({}, h.raw, h);
-    return (h && typeof h === "object") ? h : {};
+    if (!h || typeof h !== "object") return {};
+    // Mescla: .raw por baixo, campos processados do hdrLite por cima (prevalecem)
+    // Campos vazios do .raw não sobrescrevem campos preenchidos do hdrLite
+    if (h.raw && typeof h.raw === "object") {
+      const merged = Object.assign({}, h.raw, h);
+      delete merged.raw; // evita recursão
+      return merged;
+    }
+    return h;
   }
 
   function parsePacketAge(snapshot){

@@ -201,7 +201,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
     unit_version: vi.unit_version != null ? String(vi.unit_version) : null,
     configuration_key_db: vi.configuration_key_db != null ? String(vi.configuration_key_db) : null,
     configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit) : null,
-    driver_code: vi.driver_code != null ? safeDecodeURIComponent(String(vi.driver_code)) : null,
+    driver_code: (vi.driver_code != null && String(vi.driver_code).trim() !== "") ? safeDecodeURIComponent(String(vi.driver_code)) : null,
     raw: vi,
   };
 
@@ -291,7 +291,16 @@ export async function collectVehicleMonitorSnapshot(opts: {
       return;
     }
 
-    if (ds === "UNIT_MESSAGES") { unitMessagesEvents++; return; }
+    if (ds === "UNIT_MESSAGES") {
+          unitMessagesEvents++;
+          // Captura driver_code dos pacotes UNIT_MESSAGES — preenchido quando iButton/keypad está ativo
+          const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
+          for (const row of rows) {
+            const dc = row?.driver_code != null ? String(row.driver_code).trim() : "";
+            if (dc) { header.driver_code = dc; break; }
+          }
+          return;
+        }
     if (ds === "unit_connection_status") { unitConnEvents++; return; }
   });
 
