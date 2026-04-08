@@ -39,6 +39,7 @@ export type VmHeader = {
   unit_version?: string | null;
   configuration_key_db?: string | null;
   configuration_key_unit?: string | null;
+  driver_code?: string | null;
   raw?: JsonObj;
 };
 
@@ -200,6 +201,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
     unit_version: vi.unit_version != null ? String(vi.unit_version) : null,
     configuration_key_db: vi.configuration_key_db != null ? String(vi.configuration_key_db) : null,
     configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit) : null,
+    driver_code: vi.driver_code != null ? safeDecodeURIComponent(String(vi.driver_code)) : null,
     raw: vi,
   };
 
