@@ -124,7 +124,11 @@ function _resultOk(result: any): boolean {
   if (!result || typeof result !== "object") return false;
   if ((result as any).ok === true) return true;
   const st = String((result as any).status || "").toLowerCase();
-  return st === "ok" || st === "success" || st === "done" || st === "completed";
+  if (st === "ok" || st === "success" || st === "done" || st === "completed") return true;
+  // MAINT_WITH_SWAP: worker retorna result sem ok/status mas com flow+vehicle_id
+  const flow = String((result as any).flow || "").toUpperCase();
+  if (flow === "MAINT_WITH_SWAP" && (result as any).vehicle_id) return true;
+  return false;
 }
 function _pickVehicleId(job: any, result: any): number | null {
   const meta = (result && typeof result === "object") ? (result as any).meta : null;
