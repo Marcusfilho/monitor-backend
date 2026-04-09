@@ -128,7 +128,11 @@ function _resultOk(result: any): boolean {
 }
 function _pickVehicleId(job: any, result: any): number | null {
   const meta = (result && typeof result === "object") ? (result as any).meta : null;
-  return _num(meta?.vehicle_id ?? meta?.VEHICLE_ID ?? (result as any)?.vehicle_id ?? (result as any)?.VEHICLE_ID);
+  return _num(
+    meta?.vehicle_id ?? meta?.VEHICLE_ID ??
+    (result as any)?.vehicle_id ?? (result as any)?.VEHICLE_ID ??
+    job?.payload?.vehicle_id_final ?? job?.payload?.vehicle_id ?? job?.payload?.VEHICLE_ID ?? job?.payload?.vehicleId
+  );
 }
 function _pickClientId(inst: any, job: any, result: any): number | null {
   return _num(
