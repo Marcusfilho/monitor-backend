@@ -11,7 +11,9 @@ export async function migrateIfNeeded(): Promise<void> {
     return;
   }
 
-const pool = getDbPool();
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getDbPool } = require("./pool") as typeof import("./pool");
+  const pool = getDbPool();
   const client = await pool.connect();
   try {
     await client.query(`
