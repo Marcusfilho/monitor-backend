@@ -12,17 +12,55 @@ const COOKIEJAR_PATH = (
   process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json"
 ).trim();
 
-// Token simples para proteger o endpoint de escrita
-// Defina COOKIE_SYNC_SECRET nas env vars do Render e do worker_secrets.env
 const SYNC_SECRET = (process.env.COOKIE_SYNC_SECRET || "").trim();
+
+// ---------------------------------------------------------------------------
+// Render cookie persistence
+// ---------------------------------------------------------------------------
+const RENDER_API_KEY    = (process.env.RENDER_API_KEY    || "").trim();
+const RENDER_SERVICE_ID = (process.env.RENDER_SERVICE_ID || "").trim();
+
+function persistCookieToRender(cookieJson: string): void {
+  setImmediate(async () => {
+    if (!RENDER_API_KEY || !RENDER_SERVICE_ID) return;
+    try {
+      const https = require("https");
+      const value = cookieJson.length > 4000 ? cookieJson.slice(0, 4000) : cookieJson;
+      const body  = Buffer.from(JSON.stringify([{ key: "HTML5_COOKIE_PERSIST", value }]));
+      await new Promise<void>((resolve) => {
+        const req = https.request({
+          hostname: "api.render.com",
+          path:     `/v1/services/${RENDER_SERVICE_ID}/env-vars`,
+          method:   "PUT",
+          headers:  { "authorization": `Bearer ${RENDER_API_KEY}`, "content-type": "application/json", "content-length": body.length, "accept": "application/json" },
+        }, (res: any) => {
+          let d = ""; res.on("data", (c: any) => d += c);
+          res.on("end", () => { console.log(`[cookie-persist] Render API status=${res.statusCode}`); resolve(); });
+        });
+        req.on("error", (e: any) => { console.log("[cookie-persist] erro:", e?.message); resolve(); });
+        req.write(body); req.end();
+      });
+    } catch (e: any) { console.log("[cookie-persist] exception:", e?.message); }
+  });
+}
+
+function restoreCookieFromEnvOnBoot(): void {
+  try {
+    if (fs.existsSync(COOKIEJAR_PATH)) return;
+    const persisted = (process.env.HTML5_COOKIE_PERSIST || "").trim();
+    if (!persisted) { console.log("[cookie-boot] sem HTML5_COOKIE_PERSIST — skip"); return; }
+    JSON.parse(persisted); // valida JSON
+    fs.writeFileSync(COOKIEJAR_PATH, persisted, { encoding: "utf8", mode: 0o600 });
+    console.log("[cookie-boot] ✅ Cookie restaurado de HTML5_COOKIE_PERSIST");
+  } catch (e: any) { console.log("[cookie-boot] falha:", e?.message); }
+}
+restoreCookieFromEnvOnBoot();
+// ---------------------------------------------------------------------------
 
 /**
  * POST /api/session/html5-cookie
- * Body: { cookie: string, keys?: string[], updatedAt?: string, meta?: object }
- * Header: x-sync-secret: <COOKIE_SYNC_SECRET>
  */
 router.post("/", (req, res) => {
-  // Validação do secret
   if (SYNC_SECRET) {
     const provided = (req.headers["x-sync-secret"] || "").toString().trim();
     if (provided !== SYNC_SECRET) {
@@ -46,6 +84,7 @@ router.post("/", (req, res) => {
     };
 
     fs.writeFileSync(COOKIEJAR_PATH, JSON.stringify(payload, null, 2), { encoding: "utf8", mode: 0o600 });
+    persistCookieToRender(JSON.stringify(payload, null, 2)); // persiste na env var do Render
 
     console.log(`[html5-cookie] Cookie sincronizado do worker — keys: ${payload.keys.join(", ") || "(nenhuma)"}`);
     return res.json({ status: "ok", syncedAt: payload.syncedAt });
@@ -58,7 +97,6 @@ router.post("/", (req, res) => {
 
 /**
  * GET /api/session/html5-cookie/status
- * Retorna quando o cookie foi sincronizado pela última vez (sem expor o valor).
  */
 router.get("/status", (_req, res) => {
   try {
