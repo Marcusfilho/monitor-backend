@@ -22,25 +22,23 @@ const RENDER_SERVICE_ID = (process.env.RENDER_SERVICE_ID || "").trim();
 
 function persistCookieToRender(cookieJson: string): void {
   setImmediate(async () => {
-    if (!RENDER_API_KEY || !RENDER_SERVICE_ID) return;
+    if (!RENDER_API_KEY || !RENDER_SERVICE_ID) { console.log("[cookie-persist] keys ausentes — skip"); return; }
     try {
       const https = require("https");
       const value = cookieJson.length > 4000 ? cookieJson.slice(0, 4000) : cookieJson;
-      const body  = Buffer.from(JSON.stringify([{ key: "HTML5_COOKIE_PERSIST", value }]));
-      await new Promise<void>((resolve) => {
-        const req = https.request({
-          hostname: "api.render.com",
-          path:     `/v1/services/${RENDER_SERVICE_ID}/env-vars`,
-          method:   "PUT",
-          headers:  { "authorization": `Bearer ${RENDER_API_KEY}`, "content-type": "application/json", "content-length": body.length, "accept": "application/json" },
-        }, (res: any) => {
-          let d = ""; res.on("data", (c: any) => d += c);
-          res.on("end", () => { console.log(`[cookie-persist] Render API status=${res.statusCode}`); resolve(); });
-        });
-        req.on("error", (e: any) => { console.log("[cookie-persist] erro:", e?.message); resolve(); });
-        req.write(body); req.end();
+      const current: Array<{key:string,value:string}> = await new Promise((resolve) => {
+        const r = https.request({ hostname:"api.render.com", path:`/v1/services/${RENDER_SERVICE_ID}/env-vars`, method:"GET", headers:{"authorization":`Bearer ${RENDER_API_KEY}`,"accept":"application/json"} }, (res:any) => {
+          let d=""; res.on("data",(c:any)=>d+=c); res.on("end",()=>{ try{ resolve(JSON.parse(d).map((e:any)=>({key:e.envVar.key,value:e.envVar.value}))); }catch{ resolve([]); } });
+        }); r.on("error",()=>resolve([])); r.end();
       });
-    } catch (e: any) { console.log("[cookie-persist] exception:", e?.message); }
+      const merged = [...current.filter(e=>e.key!=="HTML5_COOKIE_PERSIST"), { key:"HTML5_COOKIE_PERSIST", value }];
+      const body = Buffer.from(JSON.stringify(merged));
+      await new Promise<void>((resolve) => {
+        const req = https.request({ hostname:"api.render.com", path:`/v1/services/${RENDER_SERVICE_ID}/env-vars`, method:"PUT", headers:{"authorization":`Bearer ${RENDER_API_KEY}`,"content-type":"application/json","content-length":body.length,"accept":"application/json"} }, (res:any) => {
+          let d=""; res.on("data",(c:any)=>d+=c); res.on("end",()=>{ console.log(`[cookie-persist] status=${res.statusCode} vars=${merged.length}`); resolve(); });
+        }); req.on("error",(e:any)=>{ console.log("[cookie-persist] erro:",e?.message); resolve(); }); req.write(body); req.end();
+      });
+    } catch(e:any) { console.log("[cookie-persist] exception:",e?.message); }
   });
 }
 
