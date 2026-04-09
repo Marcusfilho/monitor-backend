@@ -416,6 +416,30 @@ let sessionToken = process.env.MONITOR_SESSION_TOKEN || "";
     return u.toString();
   }
 
+
+  // === TOKEN PROBE ============================================================
+  async function __probeSessionToken(tok) {
+    if (!tok || tok.length < 20) return false;
+    try {
+      const body = { action: { name: "get_clients_list", parameters: { session_token: tok } } };
+      const r = await fetch(__TOKEN_API_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
+      });
+      const txt = await r.text();
+      let j; try { j = JSON.parse(txt); } catch { j = null; }
+      const av = j?.response?.properties?.action_value ?? j?.response?.properties?.data?.[0]?.action_value ?? "";
+      const valid = String(av) === "0";
+      console.log(`[sb] token probe: action_value=${av} -> ${valid ? "VALID" : "EXPIRED"}`);
+      return valid;
+    } catch (e) {
+      console.log("[sb] token probe erro (assumindo válido):", e?.message || e);
+      return true;
+    }
+  }
+  // === /TOKEN PROBE ===========================================================
+
   async function __ensureLocalTokenAndWsUrl() {
     if (!url) throw new Error("Faltou MONITOR_WS_URL.");
     const u = new URL(url);
@@ -433,10 +457,19 @@ let sessionToken = process.env.MONITOR_SESSION_TOKEN || "";
       return;
     }
 
-    // se já veio token real na URL, use também como sessionToken (evita login via WS)
+    // se já veio token real na URL, valida contra a API antes de adotar
     if (!String(sessionToken || "").trim() && tok.length >= 20) {
-      sessionToken = tok;
-      console.log("[sb] sessionToken adotado do WS_URL (tokenLen=" + sessionToken.length + ")");
+      const tokenValid = await __probeSessionToken(tok);
+      if (tokenValid) {
+        sessionToken = tok;
+        console.log("[sb] sessionToken adotado do WS_URL (tokenLen=" + sessionToken.length + ")");
+      } else {
+        console.log("[sb] token expirado no WS_URL — forçando re-login via HTTP...");
+        const newTok = await __getSessionTokenViaHttp();
+        sessionToken = newTok;
+        url = __patchWsUrlWithToken(url, newTok);
+        console.log("[sb] token renovado via HTTP (tokenLen=" + newTok.length + ")");
+      }
     }
   }
   // ===========================================================================

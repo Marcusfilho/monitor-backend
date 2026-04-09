@@ -143,11 +143,19 @@ function _resultOk(result) {
     if (result.ok === true)
         return true;
     const st = String(result.status || "").toLowerCase();
-    return st === "ok" || st === "success" || st === "done" || st === "completed";
+    if (st === "ok" || st === "success" || st === "done" || st === "completed")
+        return true;
+    // MAINT_WITH_SWAP: worker retorna result sem ok/status mas com flow+vehicle_id
+    const flow = String(result.flow || "").toUpperCase();
+    if (flow === "MAINT_WITH_SWAP" && result.vehicle_id)
+        return true;
+    return false;
 }
 function _pickVehicleId(job, result) {
     const meta = (result && typeof result === "object") ? result.meta : null;
-    return _num(meta?.vehicle_id ?? meta?.VEHICLE_ID ?? result?.vehicle_id ?? result?.VEHICLE_ID);
+    return _num(meta?.vehicle_id ?? meta?.VEHICLE_ID ??
+        result?.vehicle_id ?? result?.VEHICLE_ID ??
+        job?.payload?.vehicle_id_final ?? job?.payload?.vehicle_id ?? job?.payload?.VEHICLE_ID ?? job?.payload?.vehicleId);
 }
 function _pickClientId(inst, job, result) {
     return _num(inst?.payload?.target_client_id ??
@@ -320,6 +328,10 @@ function _handleHtml5CompleteToInstallation(job, result, finalStatus, jobId) {
             // limpa erro anterior
             try {
                 installationsStore.patchInstallation(installationId, { last_error: null });
+            }
+            catch { }
+            try {
+                installationsStore.patchInstallation(installationId, { status: "HTML5_DONE" });
             }
             catch { }
             return;
@@ -646,8 +658,7 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             vehicleId: String(vehicleId),
             cycles,
             interval_ms,
-            mode: "post_sb",
-            reboot_sleep_ms: 60000,
+            ...(service === "INSTALL" ? { mode: "post_sb", reboot_sleep_ms: 60000 } : {}),
             sb_poll_interval_ms: 60000,
         });
         try {

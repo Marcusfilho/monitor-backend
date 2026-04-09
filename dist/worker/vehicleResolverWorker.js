@@ -398,7 +398,7 @@ async function resolveMaintWithSwap({ licence_nmbr, serial_old, serial_new, clie
   if (isEmpty(plateRec.inner_id)) {
     vehicle_id_final = plateRec.vehicle_id;
     serial_old_found = "";
-  } else if (match(plateRec.inner_id, serial_old)) {
+  } else if (isEmpty(serial_old) || match(plateRec.inner_id, serial_old)) {
     vehicle_id_final = plateRec.vehicle_id;
     serial_old_found = plateRec.inner_id;
   } else {

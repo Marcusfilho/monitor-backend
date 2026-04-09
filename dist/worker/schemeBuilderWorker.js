@@ -114,16 +114,28 @@ const TRAFFILOG_API_BASE_URL = (process.env.TRAFFILOG_API_BASE_URL || process.en
 const TRAFFILOG_LOGIN_URL = (process.env.TRAFFILOG_LOGIN_URL || "").trim(); // opcional (se quiser apontar direto no /user_login/)
 const WS_LOGIN_NAME = (process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN_NAME || "").trim();
 const WS_PASSWORD = (process.env.WS_PASSWORD || process.env.MONITOR_PASSWORD || "").trim();
+// Formato do arquivo: <timestamp_ms>:<token>\n
+// Isso torna a validade independente do mtime (enganoso após boot/restore)
 function readTokenIfFresh() {
     try {
-        const st = fs.statSync(MONITOR_SESSION_TOKEN_PATH);
-        const age = Date.now() - st.mtimeMs;
-        if (age > MONITOR_SESSION_TOKEN_TTL_MS)
+        const raw = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
+        if (!raw)
             return null;
-        const tok = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
-        if (tok.length < 20)
-            return null;
-        return tok;
+        const colonIdx = raw.indexOf(":");
+        if (colonIdx > 0) {
+            const ts = Number(raw.slice(0, colonIdx));
+            const tok = raw.slice(colonIdx + 1).trim();
+            if (!isNaN(ts) && tok.length >= 20) {
+                const age = Date.now() - ts;
+                if (age > MONITOR_SESSION_TOKEN_TTL_MS) {
+                    console.log(`[worker] session_token expirado (age=${Math.round(age / 1000)}s) — renovando`);
+                    return null;
+                }
+                return tok;
+            }
+        }
+        console.log("[worker] session_token sem timestamp interno — forçando renovação");
+        return null;
     }
     catch {
         return null;
@@ -165,7 +177,9 @@ async function ensureLocalSessionTokenFile() {
     }
     const tok = await userLoginAndGetToken();
     try {
-        fs.writeFileSync(MONITOR_SESSION_TOKEN_PATH, tok + "\n", { mode: 0o600 });
+        // Grava timestamp:token para validação independente de mtime
+        const ts = Date.now();
+        fs.writeFileSync(MONITOR_SESSION_TOKEN_PATH, `${ts}:${tok}\n`, { mode: 0o600 });
     }
     catch {
         // mesmo se não conseguir gravar, mantém em memória
@@ -321,6 +335,14 @@ async function processJob(job) {
 async function mainLoop() {
     assertJobServerIsSafe(JOB_SERVER_BASE_URL);
     console.log(`[worker] Iniciando. JOB_SERVER_BASE_URL=${JOB_SERVER_BASE_URL}, WORKER_ID=${WORKER_ID}`);
+    // Renova token no boot — não espera chegar um job com token expirado
+    try {
+        const tok = await ensureLocalSessionTokenFile();
+        console.log(`[worker] session_token renovado no boot (len=${tok.length})`);
+    }
+    catch (e) {
+        console.error("[worker] AVISO: falha ao renovar token no boot:", e?.message || e);
+    }
     let pollMs = BASE_POLL_INTERVAL_MS;
     while (true) {
         const job = await fetchNextJob();

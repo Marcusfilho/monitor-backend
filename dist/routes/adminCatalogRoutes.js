@@ -4,7 +4,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const pool_1 = require("../db/pool");
+// Lazy load — evita crash quando DB_DISABLED=1
+function getPool() {
+    const disabled = ["1", "true", "yes", "on"].includes(String(process.env.DB_DISABLED || "").trim().toLowerCase());
+    if (disabled)
+        throw new Error("DB_DISABLED=1 — operações de DB não disponíveis");
+    return require("../db/pool").getPool();
+}
 const r = express_1.default.Router();
 function requireAdmin(req, res, next) {
     const expected = (process.env.SESSION_TOKEN_ADMIN_KEY || "").trim();
@@ -24,7 +30,7 @@ function normKey(s) {
 // --- DB status
 r.get("/db/status", requireAdmin, async (_req, res) => {
     try {
-        const pool = (0, pool_1.getDbPool)();
+        const pool = getPool();
         const q = await pool.query("select now() as now");
         await pool.end();
         res.json({ ok: true, now: q.rows[0]?.now });
@@ -36,7 +42,7 @@ r.get("/db/status", requireAdmin, async (_req, res) => {
 // --- Vehicle Settings (DE/PARA)
 r.get("/vehicle-settings", requireAdmin, async (req, res) => {
     const clientId = (req.query.clientId || "").toString().trim();
-    const pool = (0, pool_1.getDbPool)();
+    const pool = getPool();
     try {
         const q = clientId
             ? await pool.query("select * from catalog_vehicle_settings where client_id=$1 order by profile_key", [Number(clientId)])
@@ -52,7 +58,7 @@ r.post("/vehicle-settings/bulk-upsert", requireAdmin, express_1.default.json({ l
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length)
         return res.status(400).json({ error: "items[] required" });
-    const pool = (0, pool_1.getDbPool)();
+    const pool = getPool();
     const client = await pool.connect();
     try {
         await client.query("begin");
@@ -99,7 +105,7 @@ r.post("/vehicle-settings/bulk-upsert", requireAdmin, express_1.default.json({ l
 // --- Vehicle Models (modelo -> vehicle_type_id)
 r.get("/vehicle-models", requireAdmin, async (req, res) => {
     const q = (req.query.q || "").toString();
-    const pool = (0, pool_1.getDbPool)();
+    const pool = getPool();
     try {
         if (!q) {
             const out = await pool.query("select * from catalog_vehicle_models order by model_key limit 200");
@@ -118,7 +124,7 @@ r.post("/vehicle-models/bulk-upsert", requireAdmin, express_1.default.json({ lim
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length)
         return res.status(400).json({ error: "items[] required" });
-    const pool = (0, pool_1.getDbPool)();
+    const pool = getPool();
     const client = await pool.connect();
     try {
         await client.query("begin");

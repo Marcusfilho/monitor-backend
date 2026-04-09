@@ -1944,7 +1944,7 @@ async function _syncCookieToRender(payload){
     const https=base.startsWith("https")?require("https"):require("http");
     const body=Buffer.from(JSON.stringify(payload),"utf8");
     await new Promise((resolve)=>{
-      const u=new URL(base+"/api/session/html5-cookie");
+      const u=new URL(base+"/api/clients/sync-cookie");
       const req=https.request({hostname:u.hostname,port:u.port||(base.startsWith("https")?443:80),path:u.pathname,method:"POST",headers:{"content-type":"application/json","content-length":body.length,...(secret?{"x-sync-secret":secret}:{})}},
       (res)=>{res.resume();console.log("[html5_v8] cookie sync HTTP",res.statusCode);resolve(null);});
       req.setTimeout(5000,()=>{req.destroy();resolve(null);});
