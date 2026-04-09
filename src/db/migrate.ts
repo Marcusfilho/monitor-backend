@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { getDbPool } from "./pool";
 
 type MigRow = { id: string };
 
