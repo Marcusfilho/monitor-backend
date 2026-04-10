@@ -666,10 +666,10 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
         }
         catch { }
         try {
-            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "WAITING_REBOOT_CAN" });
+            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: service === "INSTALL" ? "WAITING_REBOOT_CAN" : "CAN_RUNNING" });
         }
         catch { }
-        console.log(`[jobs] [PIPELINE] enqueued monitor_can_snapshot(post_sb) job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+        console.log(`[jobs] [PIPELINE] enqueued monitor_can_snapshot job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
     }
     catch (e) {
         console.log("[jobs] [PIPELINE] enqueue CAN failed:", e && (e.message || String(e)));
