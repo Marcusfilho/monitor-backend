@@ -531,8 +531,17 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
         const mskip = result?.meta ? result.meta.monitor_skip : null;
         if (mskip === 1 || mskip === "1" || mskip === true)
             return;
-        if (!["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"].includes(service))
+        if (!["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"].includes(service)) {
+            // UNINSTALL: HTML5 já fez tudo — avança direto para COMPLETED
+            if (service === "UNINSTALL") {
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
+                }
+                catch { }
+                console.log(`[jobs] [PIPELINE] UNINSTALL → COMPLETED installation=${installationId}`);
+            }
             return;
+        }
         if (_alreadyHasSb(installationId))
             return;
         const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
