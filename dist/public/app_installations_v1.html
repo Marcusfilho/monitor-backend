@@ -242,8 +242,8 @@
     <!-- assetType: mantido no DOM para o JS, mas nunca exibido ao usuário -->
     <div class="hidden" id="assetTypeWrap"><span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span></div>
 
-    <!-- G-Sensor: sempre visível, dois campos lado a lado -->
-    <div style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
+    <!-- G-Sensor: visível exceto em UNINSTALL -->
+    <div id="rowGsensor" style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
       <div class="row" style="margin-top:0">
         <div style="flex:1;min-width:0">
@@ -332,8 +332,8 @@
 
   <!-- Card de conclusão — exibido quando COMPLETED -->
   <section class="card hidden" id="cardCompleted" style="text-align:center;padding:32px 20px">
-    <div style="font-size:48px;margin-bottom:12px">&#x2705;</div>
-    <h2 style="margin:0 0 8px 0;font-size:20px;color:var(--ok)">Instalação concluída!</h2>
+    <div style="font-size:48px;margin-bottom:12px" id="completedIcon">&#x2705;</div>
+    <h2 style="margin:0 0 8px 0;font-size:20px;color:var(--ok)" id="completedTitle">Instalação concluída!</h2>
     <p id="completedPlate" style="margin:0 0 6px 0;font-size:14px;color:var(--text)">—</p>
     <p id="completedSerial" style="margin:0 0 24px 0;font-size:12px;color:var(--muted);font-family:var(--mono)">—</p>
     <button id="btnNewFromCompletion" style="padding:12px 28px;border-radius:14px;font-weight:700;font-size:14px;background:var(--accent);color:#000;border:none;cursor:pointer">
@@ -654,6 +654,10 @@
     const isInstall = (svc === "INSTALL");
     $("rowInstallModel").classList.toggle("hidden", !isInstall);
     $("assetTypeWrap").classList.toggle("hidden", !isInstall);
+
+    // G-Sensor: oculto em UNINSTALL (não há rastreador para configurar)
+    const isUninstall = (svc === "UNINSTALL");
+    $("rowGsensor").classList.toggle("hidden", isUninstall);
 
     refreshAdvancedPreview();
   }
@@ -1548,8 +1552,13 @@ if (st === "COMPLETED") {
   const serial = inst?.payload?.serial || inst?.serial || inst?.inner_id || inst?.innerId || "—";
   const model  = inst?.payload?.vehicle?.manufacturer && inst?.payload?.vehicle?.model
     ? inst.payload.vehicle.manufacturer + " " + inst.payload.vehicle.model : "";
+  const isUninstall = String(inst?.payload?.service || inst?.service || "").toUpperCase() === "UNINSTALL";
   $("completedPlate").textContent  = plate !== "—" ? plate : (inst?.payload?.plate || "—");
-  $("completedSerial").textContent = "Serial: " + serial + (model ? " • " + model : "");
+  $("completedSerial").textContent = (isUninstall ? "Placa: " : "Serial: ") + (isUninstall ? plate : serial) + (model ? " • " + model : "");
+  $("completedTitle").textContent  = isUninstall ? "Desinstalação concluída!" : "Instalação concluída!";
+  $("completedIcon").textContent   = isUninstall ? "🔴" : "✅";
+  const btnLabel = $("btnNewFromCompletion");
+  if (btnLabel) btnLabel.textContent = isUninstall ? "+ Nova operação" : "+ Nova instalação";
   $("cardCompleted").classList.remove("hidden");
   $("cardCan").classList.add("hidden");
   stopPoll();
@@ -1975,6 +1984,20 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
       const svc = String(payload.service || "").toUpperCase();
       const needsResolve = (svc === "INSTALL" || svc === "MAINT_WITH_SWAP");
+
+      // === Confirmação obrigatória para UNINSTALL ===
+      if (svc === "UNINSTALL") {
+        const plate = (payload.plate_real || "—").toUpperCase();
+        const ok = await showConfirm(
+          "Confirmar desinstalação",
+          `Deseja realmente desinstalar o rastreador do veículo ${plate}?\n\nEsta ação irá descadastrar o dispositivo do sistema.`
+        );
+        if (!ok) {
+          showToast("Desinstalação cancelada", "warn");
+          return;
+        }
+      }
+      // === /Confirmação UNINSTALL ===
 
       let resolveResult = null;
       let confirmedChangeCompany = false;
