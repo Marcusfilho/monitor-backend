@@ -520,28 +520,32 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             job.payload?.confirmed_change_company === "true" ||
             job.payload?.confirmed_change_company === "True"))
             return;
-        if (!_resultOk(result))
-            return;
+        // UNINSTALL: verificar antes do _resultOk pois result.status pode ser null
+        // mesmo com o step tendo ok:true
         const installationId = _getInstallationId(job);
         if (!installationId)
             return;
         const service = _upper(job?.payload?.service ?? job?.payload?.servico);
         if (!service)
             return;
+        if (service === "UNINSTALL") {
+            // HTML5 já fez tudo — avança direto para COMPLETED independente do result.status
+            const html5Ok = !!(result && (result.ok === true || (Array.isArray(result.steps) && result.steps.some((s) => s.ok === true))));
+            const finalSt = html5Ok ? "COMPLETED" : "HTML5_ERROR";
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: finalSt });
+            }
+            catch { }
+            console.log(`[jobs] [PIPELINE] UNINSTALL → ${finalSt} installation=${installationId}`);
+            return;
+        }
+        if (!_resultOk(result))
+            return;
         const mskip = result?.meta ? result.meta.monitor_skip : null;
         if (mskip === 1 || mskip === "1" || mskip === true)
             return;
-        if (!["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"].includes(service)) {
-            // UNINSTALL: HTML5 já fez tudo — avança direto para COMPLETED
-            if (service === "UNINSTALL") {
-                try {
-                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
-                }
-                catch { }
-                console.log(`[jobs] [PIPELINE] UNINSTALL → COMPLETED installation=${installationId}`);
-            }
+        if (!["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"].includes(service))
             return;
-        }
         if (_alreadyHasSb(installationId))
             return;
         const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
