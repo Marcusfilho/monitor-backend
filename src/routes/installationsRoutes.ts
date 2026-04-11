@@ -887,3 +887,4 @@ router.post("/:id/actions/approve-can", async (req, res) => {
 // =============================================================================
 
 // ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router;
+export default router;

@@ -574,3 +574,4 @@ router.post("/:id/actions/approve-can", async (req, res) => {
 // Nenhuma ação destrutiva é executada aqui.
 // =============================================================================
 // ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router;
+exports.default = router;
