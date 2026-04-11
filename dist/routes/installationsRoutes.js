@@ -268,6 +268,26 @@ router.post("/:id/cancel", async (req, res) => {
         return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
 });
+// ---------------------------------------------------------------------------
+// GET /api/installations/vhcls-lookup?plate=XXX
+// Proxy para buscar o serial instalado na placa via VHCLS (evita CORS no browser)
+// ---------------------------------------------------------------------------
+router.get("/vhcls-lookup", async (req, res) => {
+    try {
+        const plate = String(req.query.plate || "").trim();
+        if (!plate)
+            return res.status(400).json({ ok: false, error: "plate obrigatório" });
+        const records = await (0, html5Client_1.vhclsQueryByPlate)(plate);
+        const match = records.find(r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase());
+        if (!match || (0, html5Client_1.isEmptyInnerId)(match.inner_id)) {
+            return res.json({ ok: true, serial: null });
+        }
+        return res.json({ ok: true, serial: (0, html5Client_1.normalizeSerial)(match.inner_id) });
+    }
+    catch (e) {
+        return res.status(500).json({ ok: false, error: e.message || "erro interno" });
+    }
+});
 router.get("/:id", async (req, res) => {
     try {
         const id = String(req.params.id || "");
@@ -553,25 +573,4 @@ router.post("/:id/actions/approve-can", async (req, res) => {
 // O app chama esse endpoint ANTES de criar a instalação.
 // Nenhuma ação destrutiva é executada aqui.
 // =============================================================================
-// ATENÇÃO: esse bloco deve ser adicionado ANTES do "
-// ---------------------------------------------------------------------------
-// GET /api/installations/vhcls-lookup?plate=XXX
-// Proxy para buscar o serial instalado na placa via VHCLS (evita CORS no browser)
-// ---------------------------------------------------------------------------
-router.get("/vhcls-lookup", async (req, res) => {
-    try {
-        const plate = String(req.query.plate || "").trim();
-        if (!plate)
-            return res.status(400).json({ ok: false, error: "plate obrigatório" });
-        const records = await (0, html5Client_1.vhclsQueryByPlate)(plate);
-        const match = records.find(r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase());
-        if (!match || (0, html5Client_1.isEmptyInnerId)(match.inner_id)) {
-            return res.json({ ok: true, serial: null });
-        }
-        return res.json({ ok: true, serial: (0, html5Client_1.normalizeSerial)(match.inner_id) });
-    }
-    catch (e) {
-        return res.status(500).json({ ok: false, error: e.message || "erro interno" });
-    }
-});
-exports.default = router;
+// ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router;
