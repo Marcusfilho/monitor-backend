@@ -520,16 +520,14 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             job.payload?.confirmed_change_company === "true" ||
             job.payload?.confirmed_change_company === "True"))
             return;
-        // UNINSTALL: verificar antes do _resultOk pois result.status pode ser null
-        // mesmo com o step tendo ok:true
         const installationId = _getInstallationId(job);
         if (!installationId)
             return;
         const service = _upper(job?.payload?.service ?? job?.payload?.servico);
         if (!service)
             return;
+        // UNINSTALL: marca COMPLETED direto — result.status é null mesmo com sucesso
         if (service === "UNINSTALL") {
-            // HTML5 já fez tudo — avança direto para COMPLETED independente do result.status
             const html5Ok = !!(result && (result.ok === true || (Array.isArray(result.steps) && result.steps.some((s) => s.ok === true))));
             const finalSt = html5Ok ? "COMPLETED" : "HTML5_ERROR";
             try {
@@ -671,7 +669,8 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
             vehicleId: String(vehicleId),
             cycles,
             interval_ms,
-            ...(service === "INSTALL" ? { mode: "post_sb", reboot_sleep_ms: 60000 } : {}),
+            mode: "post_sb",
+            reboot_sleep_ms: 60000,
             sb_poll_interval_ms: 60000,
         });
         try {
@@ -679,10 +678,10 @@ function _enqueueCanAfterSchemeBuilder(job, result) {
         }
         catch { }
         try {
-            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: service === "INSTALL" ? "WAITING_REBOOT_CAN" : "CAN_RUNNING" });
+            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "WAITING_REBOOT_CAN" });
         }
         catch { }
-        console.log(`[jobs] [PIPELINE] enqueued monitor_can_snapshot job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+        console.log(`[jobs] [PIPELINE] enqueued monitor_can_snapshot(post_sb) job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
     }
     catch (e) {
         console.log("[jobs] [PIPELINE] enqueue CAN failed:", e && (e.message || String(e)));

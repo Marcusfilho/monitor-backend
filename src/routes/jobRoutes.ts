@@ -498,13 +498,21 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
       job.payload?.confirmed_change_company === "true" ||
       job.payload?.confirmed_change_company === "True"
     )) return;
-    if (!_resultOk(result)) return;
-
     const installationId = _getInstallationId(job);
     if (!installationId) return;
 
     const service = _upper(job?.payload?.service ?? job?.payload?.servico);
     if (!service) return;
+
+    // UNINSTALL: marca COMPLETED direto — result.status é null mesmo com sucesso
+    if (service === "UNINSTALL") {
+      const html5Ok = !!(result && (result.ok === true || (Array.isArray(result.steps) && result.steps.some((s: any) => s.ok === true))));
+      const finalSt = html5Ok ? "COMPLETED" : "HTML5_ERROR";
+      try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: finalSt }); } catch {}
+      console.log(`[jobs] [PIPELINE] UNINSTALL → ${finalSt} installation=${installationId}`);
+      return;
+    }
+    if (!_resultOk(result)) return;
 
     const mskip = (result as any)?.meta ? (result as any).meta.monitor_skip : null;
     if (mskip === 1 || mskip === "1" || mskip === true) return;
