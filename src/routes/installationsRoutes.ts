@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { resolveForInstall, resolveForMaintWithSwap } from "../services/vehicleResolver";
+import { vhclsQueryByPlate, isEmptyInnerId, normalizeSerial } from "../services/html5Client";
 import { requireWorkerKey } from "../middleware/requireWorkerKey";
 
 const router = Router();
@@ -863,11 +864,34 @@ router.post("/:id/actions/approve-can", async (req, res) => {
 // Nenhuma ação destrutiva é executada aqui.
 // =============================================================================
 
-// ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router"
+// ATENÇÃO: esse bloco deve ser adicionado ANTES do "
+// ---------------------------------------------------------------------------
+// GET /api/installations/vhcls-lookup?plate=XXX
+// Proxy para buscar o serial instalado na placa via VHCLS (evita CORS no browser)
+// ---------------------------------------------------------------------------
+router.get("/vhcls-lookup", async (req, res) => {
+  try {
+    const plate = String(req.query.plate || "").trim();
+    if (!plate) return res.status(400).json({ ok: false, error: "plate obrigatório" });
+    const records = await vhclsQueryByPlate(plate);
+    const match = records.find(
+      r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase()
+    );
+    if (!match || isEmptyInnerId(match.inner_id)) {
+      return res.json({ ok: true, serial: null });
+    }
+    return res.json({ ok: true, serial: normalizeSerial(match.inner_id) });
+  } catch (e: any) {
+    return res.status(500).json({ ok: false, error: e.message || "erro interno" });
+  }
+});
+
+export default router"
 // no arquivo src/routes/installationsRoutes.ts
 
 // Adicione este import no topo do arquivo (junto aos outros imports):
 // import { resolveForInstall, resolveForMaintWithSwap } from "../services/vehicleResolver";
+import { vhclsQueryByPlate, isEmptyInnerId, normalizeSerial } from "../services/html5Client";
 
 router.post("/resolve", async (req, res) => {
   try {
@@ -970,6 +994,28 @@ router.post("/resolve", async (req, res) => {
   } catch (e: any) {
     console.error("[installationsRoutes] /resolve error:", e && (e.stack || e.message || String(e)));
     return res.status(500).json({ ok: false, error: "Internal Server Error" });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// GET /api/installations/vhcls-lookup?plate=XXX
+// Proxy para buscar o serial instalado na placa via VHCLS (evita CORS no browser)
+// ---------------------------------------------------------------------------
+router.get("/vhcls-lookup", async (req, res) => {
+  try {
+    const plate = String(req.query.plate || "").trim();
+    if (!plate) return res.status(400).json({ ok: false, error: "plate obrigatório" });
+    const records = await vhclsQueryByPlate(plate);
+    const match = records.find(
+      r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase()
+    );
+    if (!match || isEmptyInnerId(match.inner_id)) {
+      return res.json({ ok: true, serial: null });
+    }
+    return res.json({ ok: true, serial: normalizeSerial(match.inner_id) });
+  } catch (e: any) {
+    return res.status(500).json({ ok: false, error: e.message || "erro interno" });
   }
 });
 

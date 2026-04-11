@@ -1988,31 +1988,13 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       // === Confirmação obrigatória para UNINSTALL ===
       if (svc === "UNINSTALL") {
         const plate = (payload.plate_real || "—").toUpperCase();
-        // Busca o serial instalado direto via VHCLS (usa cookies de sessão já ativos)
+        // Busca o serial instalado via proxy backend (evita CORS)
         let serialInstalado = null;
         try {
           setSubline("Buscando equipamento…");
-          const body = new URLSearchParams({
-            REFRESH_FLG: "1", LICENSE_NMBR: payload.plate_real || "",
-            CLIENT_DESCR: "", OWNER_DESCR: "", DIAL_NMBR: "", INNER_ID: "",
-            action: "VHCLS", VERSION_ID: "2"
-          });
-          const resp = await fetch("https://html5.traffilog.com/AppEngine_2_1/default.aspx", {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            credentials: "include",
-            body: body.toString()
-          });
-          if (resp.ok) {
-            const xml = await resp.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(xml, "text/xml");
-            const dataNode = doc.querySelector("DATA");
-            if (dataNode) {
-              const innerId = dataNode.getAttribute("INNER_ID") || "";
-              // Remove zeros à esquerda para exibir só os dígitos significativos
-              serialInstalado = innerId.replace(/^0+/, "") || null;
-            }
+          const resp = await api("/api/installations/vhcls-lookup?plate=" + encodeURIComponent(payload.plate_real || ""));
+          if (resp.ok && resp.data?.serial) {
+            serialInstalado = resp.data.serial;
           }
         } catch (_) { /* silencioso — modal abre mesmo sem serial */ }
         setSubline("");
