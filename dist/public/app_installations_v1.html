@@ -1988,10 +1988,20 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       // === Confirmação obrigatória para UNINSTALL ===
       if (svc === "UNINSTALL") {
         const plate = (payload.plate_real || "—").toUpperCase();
-        const ok = await showConfirm(
-          "Confirmar desinstalação",
-          `Deseja realmente desinstalar o rastreador do veículo ${plate}?\n\nEsta ação irá descadastrar o dispositivo do sistema.`
-        );
+        // Busca o serial instalado via proxy backend (evita CORS)
+        let serialInstalado = null;
+        try {
+          setSubline("Buscando equipamento…");
+          const resp = await api("/api/installations/vhcls-lookup?plate=" + encodeURIComponent(payload.plate_real || ""));
+          if (resp.ok && resp.data?.serial) {
+            serialInstalado = resp.data.serial;
+          }
+        } catch (_) { /* silencioso — modal abre mesmo sem serial */ }
+        setSubline("");
+        const serialLabel = serialInstalado
+          ? `O equipamento ${serialInstalado} será removido da placa ${plate}. Tem certeza?`
+          : `O rastreador da placa ${plate} será removido. Tem certeza?`;
+        const ok = await showConfirm("Confirmar desinstalação", serialLabel);
         if (!ok) {
           showToast("Desinstalação cancelada", "warn");
           return;
@@ -2056,6 +2066,38 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       const tok = inst?.installation_token || inst?.token || null;
 
       if (id && tok) saveLs(String(id), String(tok));
+
+      // UNINSTALL: pula cardCan — aguarda COMPLETED em background e vai direto para tela final
+      if (svc === "UNINSTALL") {
+        $("cardForm").classList.add("hidden");
+        $("cardCan").classList.add("hidden");
+        setSubline("Desinstalando…");
+        showToast("Desinstalação em andamento…", "warn");
+        const deadline = Date.now() + 120000;
+        const pollUninstall = async () => {
+          if (!id) return;
+          try {
+            const rp = await api("/api/installations/" + encodeURIComponent(id));
+            const current = rp.data;
+            const st = String(current?.status || "").toUpperCase();
+            if (st === "COMPLETED") {
+              state.inst = current;
+              renderAll(current);
+              return;
+            }
+            if (st.includes("ERROR")) {
+              showToast("Erro na desinstalação: " + (current?.last_error?.message || st), "bad");
+              $("cardCan").classList.remove("hidden");
+              renderAll(current);
+              return;
+            }
+          } catch(_) {}
+          if (Date.now() < deadline) setTimeout(pollUninstall, 1500);
+          else showToast("Timeout aguardando desinstalação", "bad");
+        };
+        setTimeout(pollUninstall, 1500);
+        return;
+      }
 
       renderAll(inst);
 

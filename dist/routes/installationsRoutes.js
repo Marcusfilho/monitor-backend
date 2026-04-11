@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const html5Client_1 = require("../services/html5Client");
 const requireWorkerKey_1 = require("../middleware/requireWorkerKey");
 const router = (0, express_1.Router)();
 // require(any) pra não travar por typings enquanto estabiliza V1
@@ -552,99 +553,25 @@ router.post("/:id/actions/approve-can", async (req, res) => {
 // O app chama esse endpoint ANTES de criar a instalação.
 // Nenhuma ação destrutiva é executada aqui.
 // =============================================================================
-// ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router"
-// no arquivo src/routes/installationsRoutes.ts
-// Adicione este import no topo do arquivo (junto aos outros imports):
-// import { resolveForInstall, resolveForMaintWithSwap } from "../services/vehicleResolver";
-router.post("/resolve", async (req, res) => {
+// ATENÇÃO: esse bloco deve ser adicionado ANTES do "
+// ---------------------------------------------------------------------------
+// GET /api/installations/vhcls-lookup?plate=XXX
+// Proxy para buscar o serial instalado na placa via VHCLS (evita CORS no browser)
+// ---------------------------------------------------------------------------
+router.get("/vhcls-lookup", async (req, res) => {
     try {
-        const body = (req.body && typeof req.body === "object") ? req.body : {};
-        const flow = String(body.flow || "").trim().toUpperCase();
-        // -------------------------------------------------------------------------
-        // INSTALL
-        // -------------------------------------------------------------------------
-        if (flow === "INSTALL") {
-            const licence_nmbr = String(body.licence_nmbr || body.plate || body.placa || "").trim();
-            const serial = String(body.serial || body.inner_id || body.innerId || "").trim();
-            const client_descr = String(body.client_descr || body.clientName || body.client_name || "").trim();
-            if (!licence_nmbr || !serial || !client_descr) {
-                return res.status(400).json({
-                    ok: false,
-                    error: "missing_fields",
-                    detail: "Obrigatório: licence_nmbr, serial, client_descr",
-                });
-            }
-            const { resolveForInstall } = require("../services/vehicleResolver");
-            const result = await resolveForInstall({ licence_nmbr, serial, client_descr });
-            if (result.status !== "OK") {
-                return res.status(422).json({
-                    ok: false,
-                    status: result.status,
-                    error: result.error_message,
-                    resolution_path: result.resolution_path,
-                });
-            }
-            return res.json({
-                ok: true,
-                flow: "INSTALL",
-                vehicle_id_final: result.vehicle_id_final ?? null, // null = criar novo
-                licence_nmbr_final: result.licence_nmbr_final,
-                client_descr_current: result.client_descr_current ?? null,
-                client_id_current: result.client_id_current ?? null,
-                client_mismatch: result.client_mismatch ?? false,
-                needs_uninstall_cmdt: result.needs_uninstall_cmdt ?? false,
-                resolution_path: result.resolution_path,
-            });
+        const plate = String(req.query.plate || "").trim();
+        if (!plate)
+            return res.status(400).json({ ok: false, error: "plate obrigatório" });
+        const records = await (0, html5Client_1.vhclsQueryByPlate)(plate);
+        const match = records.find(r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase());
+        if (!match || (0, html5Client_1.isEmptyInnerId)(match.inner_id)) {
+            return res.json({ ok: true, serial: null });
         }
-        // -------------------------------------------------------------------------
-        // MAINT_WITH_SWAP
-        // -------------------------------------------------------------------------
-        if (flow === "MAINT_WITH_SWAP") {
-            const licence_nmbr = String(body.licence_nmbr || body.plate || body.placa || "").trim();
-            const serial_old = String(body.serial_old || body.serialOld || "").trim();
-            const serial_new = String(body.serial_new || body.serialNew || body.serial || "").trim();
-            const client_descr = String(body.client_descr || body.clientName || body.client_name || "").trim();
-            if (!licence_nmbr || !serial_new || !client_descr) {
-                return res.status(400).json({
-                    ok: false,
-                    error: "missing_fields",
-                    detail: "Obrigatório: licence_nmbr, serial_new, client_descr",
-                });
-            }
-            const { resolveForMaintWithSwap } = require("../services/vehicleResolver");
-            const result = await resolveForMaintWithSwap({ licence_nmbr, serial_old, serial_new, client_descr });
-            if (result.status !== "OK") {
-                return res.status(422).json({
-                    ok: false,
-                    status: result.status,
-                    error: result.error_message,
-                    resolution_path: result.resolution_path,
-                });
-            }
-            return res.json({
-                ok: true,
-                flow: "MAINT_WITH_SWAP",
-                vehicle_id_final: result.vehicle_id_final,
-                serial_old_found: result.serial_old_found ?? "",
-                client_descr_current: result.client_descr_current ?? null,
-                client_id_current: result.client_id_current ?? null,
-                client_mismatch: result.client_mismatch ?? false,
-                needs_uninstall_cmdt: result.needs_uninstall_cmdt ?? false,
-                resolution_path: result.resolution_path,
-            });
-        }
-        // -------------------------------------------------------------------------
-        // Flow não reconhecido
-        // -------------------------------------------------------------------------
-        return res.status(400).json({
-            ok: false,
-            error: "invalid_flow",
-            detail: "flow deve ser INSTALL ou MAINT_WITH_SWAP",
-        });
+        return res.json({ ok: true, serial: (0, html5Client_1.normalizeSerial)(match.inner_id) });
     }
     catch (e) {
-        console.error("[installationsRoutes] /resolve error:", e && (e.stack || e.message || String(e)));
-        return res.status(500).json({ ok: false, error: "Internal Server Error" });
+        return res.status(500).json({ ok: false, error: e.message || "erro interno" });
     }
 });
 exports.default = router;
