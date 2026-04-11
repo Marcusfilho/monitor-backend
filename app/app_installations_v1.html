@@ -1988,39 +1988,30 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       // === Confirmação obrigatória para UNINSTALL ===
       if (svc === "UNINSTALL") {
         const plate = (payload.plate_real || "—").toUpperCase();
-        // Busca o serial instalado via vehicle_resolve (mesmo padrão do MAINT_WITH_SWAP)
+        // Busca o serial instalado direto via VHCLS (usa cookies de sessão já ativos)
         let serialInstalado = null;
         try {
           setSubline("Buscando equipamento…");
-          const rJob = await api("/api/jobs", {
-            method: "POST",
-            json: {
-              type: "vehicle_resolve",
-              payload: {
-                flow:         "MAINT_WITH_SWAP",
-                licence_nmbr: payload.plate_real || "",
-                serial:       "",
-                serial_old:   "",
-                serial_new:   "",
-                client_descr: payload.clientName || "",
-              }
-            }
+          const body = new URLSearchParams({
+            REFRESH_FLG: "1", LICENSE_NMBR: payload.plate_real || "",
+            CLIENT_DESCR: "", OWNER_DESCR: "", DIAL_NMBR: "", INNER_ID: "",
+            action: "VHCLS", VERSION_ID: "2"
           });
-          if (rJob.ok) {
-            const jobId = rJob.data?.job?.id || rJob.data?.id;
-            if (jobId) {
-              const deadline = Date.now() + 15000;
-              while (Date.now() < deadline) {
-                await new Promise(r => setTimeout(r, 1200));
-                const rPoll = await api("/api/jobs/" + encodeURIComponent(jobId));
-                if (!rPoll.ok) continue;
-                const job = rPoll.data?.job || rPoll.data;
-                if (job?.status === "completed") {
-                  serialInstalado = job.result?.serial_old_found || null;
-                  break;
-                }
-                if (job?.status === "error") break;
-              }
+          const resp = await fetch("https://html5.traffilog.com/AppEngine_2_1/default.aspx", {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            credentials: "include",
+            body: body.toString()
+          });
+          if (resp.ok) {
+            const xml = await resp.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(xml, "text/xml");
+            const dataNode = doc.querySelector("DATA");
+            if (dataNode) {
+              const innerId = dataNode.getAttribute("INNER_ID") || "";
+              // Remove zeros à esquerda para exibir só os dígitos significativos
+              serialInstalado = innerId.replace(/^0+/, "") || null;
             }
           }
         } catch (_) { /* silencioso — modal abre mesmo sem serial */ }
