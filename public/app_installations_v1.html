@@ -1988,10 +1988,47 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       // === Confirmação obrigatória para UNINSTALL ===
       if (svc === "UNINSTALL") {
         const plate = (payload.plate_real || "—").toUpperCase();
-        const ok = await showConfirm(
-          "Confirmar desinstalação",
-          `Deseja realmente desinstalar o rastreador do veículo ${plate}?\n\nEsta ação irá descadastrar o dispositivo do sistema.`
-        );
+        // Busca o serial instalado via vehicle_resolve (mesmo padrão do MAINT_WITH_SWAP)
+        let serialInstalado = null;
+        try {
+          setSubline("Buscando equipamento…");
+          const rJob = await api("/api/jobs", {
+            method: "POST",
+            json: {
+              type: "vehicle_resolve",
+              payload: {
+                flow:         "MAINT_WITH_SWAP",
+                licence_nmbr: payload.plate_real || "",
+                serial:       "",
+                serial_old:   "",
+                serial_new:   "",
+                client_descr: payload.clientName || "",
+              }
+            }
+          });
+          if (rJob.ok) {
+            const jobId = rJob.data?.job?.id || rJob.data?.id;
+            if (jobId) {
+              const deadline = Date.now() + 15000;
+              while (Date.now() < deadline) {
+                await new Promise(r => setTimeout(r, 1200));
+                const rPoll = await api("/api/jobs/" + encodeURIComponent(jobId));
+                if (!rPoll.ok) continue;
+                const job = rPoll.data?.job || rPoll.data;
+                if (job?.status === "completed") {
+                  serialInstalado = job.result?.serial_old_found || null;
+                  break;
+                }
+                if (job?.status === "error") break;
+              }
+            }
+          }
+        } catch (_) { /* silencioso — modal abre mesmo sem serial */ }
+        setSubline("");
+        const serialLabel = serialInstalado
+          ? `O equipamento ${serialInstalado} será removido da placa ${plate}. Tem certeza?`
+          : `O rastreador da placa ${plate} será removido. Tem certeza?`;
+        const ok = await showConfirm("Confirmar desinstalação", serialLabel);
         if (!ok) {
           showToast("Desinstalação cancelada", "warn");
           return;
