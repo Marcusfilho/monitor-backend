@@ -589,6 +589,18 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         const svc = String(inst?.service || inst?.payload?.service || "").toUpperCase();
         if (svc !== "MAINT_NO_SWAP")
             return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
+        // Cancelar job CAN pendente para não continuar enviando refreshes ao Monitor
+        try {
+            const allJobs = jobStore?.listJobs ? jobStore.listJobs() : [];
+            const canJob = allJobs.find((j) => j?.type === "monitor_can_snapshot" &&
+                String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(id) &&
+                !["completed", "cancelled", "error"].includes(String(j?.status || "")));
+            if (canJob) {
+                jobStore.updateJob(canJob.id, { status: "cancelled" });
+                console.log(`[installationsRoutes] complete-maint: CAN job=${canJob.id} cancelado`);
+            }
+        }
+        catch (_) { }
         installationsStore.patchInstallation(id, { status: "COMPLETED" });
         console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
         return res.json({ ok: true, status: "COMPLETED" });
