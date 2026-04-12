@@ -886,5 +886,27 @@ router.post("/:id/actions/approve-can", async (req, res) => {
 // Nenhuma ação destrutiva é executada aqui.
 // =============================================================================
 
+// =============================================================================
+// COMPLETE_MAINT_V1
+// POST /api/installations/:id/actions/complete-maint
+// Finaliza MAINT_NO_SWAP sem validação CAN — seta status COMPLETED diretamente.
+// =============================================================================
+router.post("/:id/actions/complete-maint", async (req, res) => {
+  try {
+    const id = String(req.params.id || "");
+    if (!id) return res.status(400).json({ ok: false, error: "missing id" });
+    const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(id) : null;
+    if (!inst) return res.status(404).json({ ok: false, error: "installation not found" });
+    const svc = String(inst?.service || inst?.payload?.service || "").toUpperCase();
+    if (svc !== "MAINT_NO_SWAP") return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
+    installationsStore.patchInstallation(id, { status: "COMPLETED" });
+    console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
+    return res.json({ ok: true, status: "COMPLETED" });
+  } catch (e: any) {
+    console.error("[installationsRoutes] complete-maint error:", e && (e.stack || e.message || String(e)));
+    return res.status(500).json({ ok: false, error: "Internal Server Error" });
+  }
+});
+
 // ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router;
 export default router;

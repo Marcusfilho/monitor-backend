@@ -348,8 +348,8 @@
     <h3 id="confirmTitle">Confirmar</h3>
     <p id="confirmMsg"></p>
     <div class="row">
-      <button id="confirmOk">Continuar</button>
-      <button class="secondary" id="confirmCancel">Corrigir</button>
+      <button id="confirmOk">Sim</button>
+      <button class="secondary" id="confirmCancel">Não</button>
     </div>
   </div>
 </div>
@@ -2111,33 +2111,20 @@ $("btnRefresh").disabled = !canRefreshEnabled;
           "Deseja validar a CAN do veículo agora?"
         );
         if (!querCAN) {
-          // Sem validação CAN — aguarda COMPLETED e vai para tela de conclusão
+          // Sem validação CAN — chama complete-maint e vai direto para tela de conclusão
           $("cardForm").classList.add("hidden");
           $("cardCan").classList.add("hidden");
           setSubline("Finalizando manutenção…");
-          showToast("Manutenção registrada.", "good");
-          const deadline = Date.now() + 120000;
-          const pollNoSwap = async () => {
-            if (!id) return;
-            try {
-              const rp = await api("/api/installations/" + encodeURIComponent(id));
-              const current = rp.data;
-              const st = String(current?.status || "").toUpperCase();
-              if (st === "COMPLETED") {
-                state.inst = current;
-                renderAll(current);
-                return;
-              }
-              if (st.includes("ERROR")) {
-                showToast("Erro na manutenção: " + (current?.last_error?.message || st), "bad");
-                renderAll(current);
-                return;
-              }
-            } catch(_) {}
-            if (Date.now() < deadline) setTimeout(pollNoSwap, 1500);
-            else showToast("Timeout aguardando conclusão", "bad");
-          };
-          setTimeout(pollNoSwap, 1500);
+          try {
+            await api("/api/installations/" + encodeURIComponent(id) + "/actions/complete-maint", {
+              method: "POST",
+              headers: { "x-installation-token": tok }
+            });
+          } catch(_) {}
+          showToast("Manutenção finalizada.", "good");
+          const fresh = await api("/api/installations/" + encodeURIComponent(id));
+          state.inst = fresh.data;
+          renderAll(fresh.data);
           return;
         }
         // Com validação CAN — exibe cardCan e inicia polling normalmente
