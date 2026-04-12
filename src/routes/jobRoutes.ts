@@ -492,7 +492,7 @@ function _enqueueChangeCompanyAfterHtml5(job: any, result: any) {
 async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
   try {
     const jobType = String(job?.type || "");
-    if (jobType !== "html5_install" && jobType !== "resolver_change_company") return;
+    if (jobType !== "html5_install" && jobType !== "html5_maint_no_swap" && jobType !== "resolver_change_company") return;
     if (jobType === "html5_install" && (
       job.payload?.confirmed_change_company === true ||
       job.payload?.confirmed_change_company === "true" ||
