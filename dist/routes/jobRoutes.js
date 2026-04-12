@@ -539,15 +539,36 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
         }
         if (!_resultOk(result))
             return;
+        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
+        const vehicleId = _pickVehicleId(job, result);
         const mskip = result?.meta ? result.meta.monitor_skip : null;
-        if (mskip === 1 || mskip === "1" || mskip === true)
+        if (mskip === 1 || mskip === "1" || mskip === true) {
+            // MAINT_NO_SWAP com monitor_skip: não muta HTML5, mas ainda enfileira CAN
+            if (service === "MAINT_NO_SWAP" && vehicleId) {
+                const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
+                    installation_id: installationId,
+                    service,
+                    vehicleId: String(vehicleId),
+                    cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
+                    interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+                });
+                try {
+                    installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
+                }
+                catch { }
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" });
+                }
+                catch { }
+                console.log(`[jobs] MAINT_NO_SWAP monitor_skip → CAN enfileirado job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+                return;
+            }
             return;
+        }
         if (!["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"].includes(service))
             return;
         if (_alreadyHasSb(installationId))
             return;
-        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
-        const vehicleId = _pickVehicleId(job, result);
         const clientId = _pickClientId(inst, job, result);
         const vehicleSettingId = _pickVehicleSettingId(inst, job, result);
         if (vehicleId) {
