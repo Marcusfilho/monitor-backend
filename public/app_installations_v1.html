@@ -1545,7 +1545,10 @@ function renderAll(inst){
 
     
 const status = inst?.status || "";
-const st = String(status || "").toUpperCase();
+// MAINT_NO_SWAP: HTML5_DONE significa resolve concluído — pula SB e vai direto para CAN
+const __isMns = String(inst?.payload?.service || inst?.service || "").toUpperCase() === "MAINT_NO_SWAP";
+const __rawSt = String(status || "").toUpperCase();
+const st = (__isMns && __rawSt === "HTML5_DONE") ? "CAN_RUNNING" : __rawSt;
 
 // --- Tela de conclusão: exibe card especial quando COMPLETED ---
 if (st === "COMPLETED") {
