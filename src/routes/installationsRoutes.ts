@@ -78,7 +78,7 @@ router.post("/", async (req, res) => {
 
     // 2) enqueue job inicial (via loopback /api/jobs)
     const svc = payload.service || inst?.service || null;
-    const jobType = "html5_install"; // compat: worker busca html5_install; service decide o fluxo
+    const jobType = jobTypeFromService(svc); // usa tipo correto por service (ex: html5_maint_no_swap)
 
 
     // normalize/allowlist: manter job pequeno, mas completo para INSTALL
