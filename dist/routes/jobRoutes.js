@@ -606,6 +606,34 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result) {
             return;
         }
         // =========================================================================
+        // MAINT_NO_SWAP: nunca envia SB — vai direto para CAN
+        if (service === "MAINT_NO_SWAP") {
+            if (!vehicleId) {
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
+                }
+                catch { }
+                console.log(`[jobs] MAINT_NO_SWAP → COMPLETED (sem vehicleId para CAN).`);
+                return;
+            }
+            const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
+                installation_id: installationId,
+                service,
+                vehicleId: String(vehicleId),
+                cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
+                interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+            });
+            try {
+                installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
+            }
+            catch { }
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" });
+            }
+            catch { }
+            console.log(`[jobs] MAINT_NO_SWAP → CAN enfileirado job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+            return;
+        }
         const c = catalogs?.getClient ? catalogs.getClient(clientId) : null;
         const clientName = String((c && c.clientName) ? c.clientName : clientId);
         const sb = (0, jobStore_1.createJob)("scheme_builder", {
