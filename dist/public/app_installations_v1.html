@@ -655,9 +655,10 @@
     $("rowInstallModel").classList.toggle("hidden", !isInstall);
     $("assetTypeWrap").classList.toggle("hidden", !isInstall);
 
-    // G-Sensor: oculto em UNINSTALL (não há rastreador para configurar)
+    // G-Sensor: oculto em UNINSTALL e MAINT_NO_SWAP (sem troca de equipamento)
     const isUninstall = (svc === "UNINSTALL");
-    $("rowGsensor").classList.toggle("hidden", isUninstall);
+    const isNoSwap = (svc === "MAINT_NO_SWAP");
+    $("rowGsensor").classList.toggle("hidden", isUninstall || isNoSwap);
 
     refreshAdvancedPreview();
   }
@@ -1544,7 +1545,10 @@ function renderAll(inst){
 
     
 const status = inst?.status || "";
-const st = String(status || "").toUpperCase();
+// MAINT_NO_SWAP: HTML5_DONE significa resolve concluído — pula SB e vai direto para CAN
+const __isMns = String(inst?.payload?.service || inst?.service || "").toUpperCase() === "MAINT_NO_SWAP";
+const __rawSt = String(status || "").toUpperCase();
+const st = (__isMns && __rawSt === "HTML5_DONE") ? "CAN_RUNNING" : __rawSt;
 
 // --- Tela de conclusão: exibe card especial quando COMPLETED ---
 if (st === "COMPLETED") {
@@ -1553,12 +1557,13 @@ if (st === "COMPLETED") {
   const model  = inst?.payload?.vehicle?.manufacturer && inst?.payload?.vehicle?.model
     ? inst.payload.vehicle.manufacturer + " " + inst.payload.vehicle.model : "";
   const isUninstall = String(inst?.payload?.service || inst?.service || "").toUpperCase() === "UNINSTALL";
+  const isNoSwap    = String(inst?.payload?.service || inst?.service || "").toUpperCase() === "MAINT_NO_SWAP";
   $("completedPlate").textContent  = plate !== "—" ? plate : (inst?.payload?.plate || "—");
   $("completedSerial").textContent = (isUninstall ? "Placa: " : "Serial: ") + (isUninstall ? plate : serial) + (model ? " • " + model : "");
-  $("completedTitle").textContent  = isUninstall ? "Desinstalação concluída!" : "Instalação concluída!";
-  $("completedIcon").textContent   = isUninstall ? "🔴" : "✅";
+  $("completedTitle").textContent  = isUninstall ? "Desinstalação concluída!" : isNoSwap ? "Manutenção realizada!" : "Instalação concluída!";
+  $("completedIcon").textContent   = isUninstall ? "🔴" : isNoSwap ? "🔧" : "✅";
   const btnLabel = $("btnNewFromCompletion");
-  if (btnLabel) btnLabel.textContent = isUninstall ? "+ Nova operação" : "+ Nova instalação";
+  if (btnLabel) btnLabel.textContent = (isUninstall || isNoSwap) ? "+ Nova operação" : "+ Nova instalação";
   $("cardCompleted").classList.remove("hidden");
   $("cardCan").classList.add("hidden");
   stopPoll();
@@ -2096,6 +2101,51 @@ $("btnRefresh").disabled = !canRefreshEnabled;
           else showToast("Timeout aguardando desinstalação", "bad");
         };
         setTimeout(pollUninstall, 1500);
+        return;
+      }
+
+      // MAINT_NO_SWAP: pergunta se deseja validar CAN
+      if (svc === "MAINT_NO_SWAP") {
+        const querCAN = await showConfirm(
+          "Validar CAN?",
+          "Deseja validar a CAN do veículo agora?"
+        );
+        if (!querCAN) {
+          // Sem validação CAN — aguarda COMPLETED e vai para tela de conclusão
+          $("cardForm").classList.add("hidden");
+          $("cardCan").classList.add("hidden");
+          setSubline("Finalizando manutenção…");
+          showToast("Manutenção registrada.", "good");
+          const deadline = Date.now() + 120000;
+          const pollNoSwap = async () => {
+            if (!id) return;
+            try {
+              const rp = await api("/api/installations/" + encodeURIComponent(id));
+              const current = rp.data;
+              const st = String(current?.status || "").toUpperCase();
+              if (st === "COMPLETED") {
+                state.inst = current;
+                renderAll(current);
+                return;
+              }
+              if (st.includes("ERROR")) {
+                showToast("Erro na manutenção: " + (current?.last_error?.message || st), "bad");
+                renderAll(current);
+                return;
+              }
+            } catch(_) {}
+            if (Date.now() < deadline) setTimeout(pollNoSwap, 1500);
+            else showToast("Timeout aguardando conclusão", "bad");
+          };
+          setTimeout(pollNoSwap, 1500);
+          return;
+        }
+        // Com validação CAN — exibe cardCan e inicia polling normalmente
+        renderAll(inst);
+        $("cardForm").classList.add("hidden");
+        showToast("Manutenção registrada. Iniciando validação CAN…", "good");
+        document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
+        startPoll();
         return;
       }
 
