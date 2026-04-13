@@ -310,7 +310,7 @@ async function resolveInstall({ licence_nmbr, serial, client_descr }) {
       if (match(innerRec.inner_id, innerRec.licence_nmbr)) {
         vehicle_id_final = innerRec.vehicle_id;
         resolution_path  = "SERIAL_INNER_FREE";
-      } else if (upper(innerRec.licence_nmbr) === "CMDT") {
+      } else if (upper(innerRec.licence_nmbr).includes("CMDT")) {
         vehicle_id_final     = innerRec.vehicle_id;
         needs_uninstall_cmdt = true;
         resolution_path      = "SERIAL_INNER_CMDT";
@@ -416,7 +416,7 @@ async function resolveMaintWithSwap({ licence_nmbr, serial_old, serial_new, clie
   if (newRec) {
     if (match(newRec.inner_id, newRec.licence_nmbr)) {
       // disponível para reaproveitamento
-    } else if (upper(newRec.licence_nmbr) === "CMDT") {
+    } else if (upper(newRec.licence_nmbr).includes("CMDT")) {
       needs_uninstall_cmdt = true;
     } else {
       return { status: "ERROR_SERIAL_NEW_ALREADY_USED", error_message: "Serial novo já está em uso em outro veículo" };

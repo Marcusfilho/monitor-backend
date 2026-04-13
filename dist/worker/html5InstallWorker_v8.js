@@ -764,6 +764,228 @@ async function ensureVehicleIdByVhcls_(ctx, payload) {
 }
 // === END PATCH_VHCLS_DIRECT_VEHICLE_ID v1 ===
 
+
+
+// =============================================================================
+// BLOCO A V2 — Substitui a função _checkAndFreeCmdtSerial existente
+// =============================================================================
+
+/* PATCH_CMDT_FREE_SERIAL_V2 — verifica se o serial a instalar está preso em
+ * veículo CMDT e, se sim, faz DEACTIVATE para liberá-lo.
+ *
+ * Retorna:
+ *   { freed: true,  vid_freed: N, plate_freed: "CMDT xxx" } → serial estava em CMDT, foi liberado
+ *   { freed: false, blocked: false }                         → serial livre (bancada ou não encontrado)
+ *   { freed: false, blocked: true,
+ *     vid_blocked: N, plate_blocked: "XYZ" }                 → serial em veículo real, não mexe
+ *   { freed: false, error: "..." }                           → falha ao verificar (não bloqueia)
+ */
+async function _checkAndFreeCmdtSerial(newSerial, jobId, payload) {
+  const TAG = "CMDT_FREE_V2";
+  try {
+    if (!newSerial) return { freed: false, blocked: false };
+
+    const serial = String(newSerial).trim();
+    console.log(`[${TAG}] checking serial=${serial} job=${jobId}`);
+
+    // Função auxiliar: faz VHCLS com um campo específico e retorna { vid, licenseNmbr }
+    async function _vhclsLookup(fieldName, fieldValue) {
+      try {
+        const fields = {
+          VERSION_ID: "2",
+          REFRESH_FLG: "1",
+          LICENSE_NMBR: "",
+          CLIENT_DESCR: "",
+          OWNER_DESCR: "",
+          DIAL_NMBR: "",
+          INNER_ID: "",
+        };
+        fields[fieldName] = String(fieldValue).trim();
+
+        const r = await __va_appenginePost("VHCLS", fields, `${TAG}_${fieldName}`);
+        const txt = String(r.text || "");
+
+        console.log(`[${TAG}] VHCLS field=${fieldName} val=${fieldValue} status=${r.status} len=${txt.length} loginNeg=${r.loginNeg ? 1 : 0} head=${safeSnippet(txt, 160)}`);
+
+        // erro de sessão
+        if (r.loginNeg || /Action:\s*VHCLS\s+error/i.test(txt)) {
+          return { vid: null, licenseNmbr: null, sessionError: true };
+        }
+
+        // extrai todos os <DATA .../> e procura o que tem nosso serial no campo buscado
+        const dataTags = txt.match(/<DATA\b[^>]*\/>/gi) || [];
+
+        for (const tag of dataTags) {
+          const mVid = tag.match(/\bVEHICLE_ID\s*=\s*["']?(\d+)["']?/i);
+          const mLic = tag.match(/\bLICENSE_NMBR\s*=\s*["']([^"']*)["']/i);
+          const mInner = tag.match(/\bINNER_ID\s*=\s*["']([^"']*)["']/i);
+
+          if (!mVid || !mVid[1]) continue;
+
+          const vid = Number(mVid[1]);
+          const licenseNmbr = mLic ? String(mLic[1]).trim() : "";
+          const innerId = mInner ? String(mInner[1]).trim() : "";
+
+          // confirma que é o veículo do nosso serial
+          const matchesSerial =
+            String(innerId).toLowerCase() === serial.toLowerCase() ||
+            String(licenseNmbr).toLowerCase() === serial.toLowerCase();
+
+          if (vid > 0 && matchesSerial) {
+            console.log(`[${TAG}] found via ${fieldName}: vid=${vid} LICENSE_NMBR="${licenseNmbr}" INNER_ID="${innerId}"`);
+            return { vid, licenseNmbr, innerId };
+          }
+        }
+
+        // fallback: se veio só 1 DATA tag e buscamos por INNER_ID, confia nela
+        if (fieldName === "INNER_ID" && dataTags.length === 1) {
+          const tag = dataTags[0];
+          const mVid = tag.match(/\bVEHICLE_ID\s*=\s*["']?(\d+)["']?/i);
+          const mLic = tag.match(/\bLICENSE_NMBR\s*=\s*["']([^"']*)["']/i);
+          const mInner = tag.match(/\bINNER_ID\s*=\s*["']([^"']*)["']/i);
+          if (mVid && mVid[1]) {
+            const vid = Number(mVid[1]);
+            const licenseNmbr = mLic ? String(mLic[1]).trim() : "";
+            const innerId = mInner ? String(mInner[1]).trim() : "";
+            if (vid > 0) {
+              console.log(`[${TAG}] fallback single-tag via ${fieldName}: vid=${vid} LICENSE_NMBR="${licenseNmbr}" INNER_ID="${innerId}"`);
+              return { vid, licenseNmbr, innerId };
+            }
+          }
+        }
+
+        return { vid: null, licenseNmbr: null };
+      } catch (e) {
+        console.log(`[${TAG}] _vhclsLookup error field=${fieldName}: ${e && (e.message || e)}`);
+        return { vid: null, licenseNmbr: null, error: String(e && (e.message || e)) };
+      }
+    }
+
+    // Função auxiliar: avalia o resultado do lookup e decide o que fazer
+    function _classify(vid, licenseNmbr) {
+      if (!vid) return null; // não encontrado
+
+      const lic = String(licenseNmbr || "").trim();
+
+      // LICENSE_NMBR é o próprio serial → veículo de bancada, serial livre
+      if (lic.toLowerCase() === serial.toLowerCase()) {
+        console.log(`[${TAG}] serial=${serial} vid=${vid} -> bancada (LICENSE_NMBR==serial), serial is FREE`);
+        return { status: "free" };
+      }
+
+      // LICENSE_NMBR contém CMDT → veículo fictício de cobrança
+      if (/CMDT/i.test(lic)) {
+        console.log(`[${TAG}] serial=${serial} vid=${vid} LICENSE_NMBR="${lic}" -> CMDT placeholder, will DEACTIVATE`);
+        return { status: "cmdt", vid, licenseNmbr: lic };
+      }
+
+      // LICENSE_NMBR vazia → serial pode estar disponível (sem placa real vinculada)
+      if (!lic) {
+        console.log(`[${TAG}] serial=${serial} vid=${vid} LICENSE_NMBR="" -> no plate, serial considered FREE`);
+        return { status: "free" };
+      }
+
+      // LICENSE_NMBR é outra coisa → veículo real, não mexe
+      console.log(`[${TAG}] serial=${serial} vid=${vid} LICENSE_NMBR="${lic}" -> REAL vehicle, BLOCKED`);
+      return { status: "blocked", vid, licenseNmbr: lic };
+    }
+
+    // Função auxiliar: executa DEACTIVATE no veículo CMDT
+    async function _deactivateCmdt(vid, licenseNmbr) {
+      try {
+        console.log(`[${TAG}] DEACTIVATE vid=${vid} plate="${licenseNmbr}"`);
+        const de = await __va_appenginePost(
+          "DEACTIVATE_VEHICLE_HIST",
+          {
+            VERSION_ID: "2",
+            VEHICLE_ID: String(vid),
+            LICENSE_NMBR: String(licenseNmbr || ""),
+            INSTALLER_NAME: String(
+              payload.installer_name || payload.installer ||
+              payload.INSTALLER_NAME || "installer"
+            ),
+            COMMENTS: "auto-deactivate CMDT placeholder to free serial",
+            REASON_CODE: "5501",
+            DELIVER_CODE: "5511",
+          },
+          "CMDT_DEACTIVATE"
+        );
+
+        const deText = String(de.text || "");
+        const isActionError =
+          /<TEXT>\s*Action:\s*DEACTIVATE_VEHICLE_HIST\s*error/i.test(deText) ||
+          /DEACTIVATE_VEHICLE_HIST\s*error/i.test(deText) ||
+          /<ERROR\b/i.test(deText);
+
+        try { require("fs").writeFileSync(`/tmp/cmdt_deactivate_resp_${jobId}.txt`, deText, "utf8"); } catch (e) {}
+
+        if (isActionError) {
+          console.log(`[${TAG}] DEACTIVATE action_error vid=${vid}: ${safeSnippet(deText, 160)}`);
+          return { ok: false, error: "deactivate_action_error" };
+        }
+
+        console.log(`[${TAG}] DEACTIVATE OK vid=${vid} http=${de.status} loginNeg=${de.loginNeg ? 1 : 0}`);
+        return { ok: true };
+      } catch (e) {
+        console.log(`[${TAG}] DEACTIVATE exception vid=${vid}: ${e && (e.message || e)}`);
+        return { ok: false, error: String(e && (e.message || e)) };
+      }
+    }
+
+    // === FLUXO PRINCIPAL ===
+
+    // 1) Tenta encontrar o serial via INNER_ID
+    let found = await _vhclsLookup("INNER_ID", serial);
+
+    // Se der erro de sessão, tenta relogin e repete
+    if (found.sessionError) {
+      console.log(`[${TAG}] session error on INNER_ID lookup, retrying after relogin`);
+      try { if (typeof __va_ensureHtml5Session === "function") await __va_ensureHtml5Session({ tag: TAG }); } catch (e) {}
+      found = await _vhclsLookup("INNER_ID", serial);
+    }
+
+    // 2) Se não achou via INNER_ID, tenta via LICENSE_NMBR
+    if (!found.vid) {
+      console.log(`[${TAG}] not found via INNER_ID, trying LICENSE_NMBR`);
+      found = await _vhclsLookup("LICENSE_NMBR", serial);
+    }
+
+    // 3) Não achou em nenhum → serial não existe no sistema, deixa o SAVE tentar
+    if (!found.vid) {
+      console.log(`[${TAG}] serial=${serial} not found in INNER_ID or LICENSE_NMBR -> serial free or does not exist`);
+      return { freed: false, blocked: false };
+    }
+
+    // 4) Classifica o que encontrou
+    const classification = _classify(found.vid, found.licenseNmbr);
+    if (!classification) return { freed: false, blocked: false };
+
+    if (classification.status === "free") {
+      return { freed: false, blocked: false };
+    }
+
+    if (classification.status === "blocked") {
+      return { freed: false, blocked: true, vid_blocked: found.vid, plate_blocked: found.licenseNmbr };
+    }
+
+    if (classification.status === "cmdt") {
+      // 5) É CMDT → faz DEACTIVATE
+      const deResult = await _deactivateCmdt(found.vid, found.licenseNmbr);
+      if (!deResult.ok) {
+        return { freed: false, error: deResult.error, vid_freed: found.vid, plate: found.licenseNmbr };
+      }
+      return { freed: true, vid_freed: found.vid, plate_freed: found.licenseNmbr };
+    }
+
+    return { freed: false, blocked: false };
+
+  } catch (e) {
+    console.log(`[CMDT_FREE_V2] unexpected error: ${e && (e.message || e)}`);
+    return { freed: false, error: String(e && (e.message || e)) };
+  }
+}
+// === END PATCH_CMDT_FREE_SERIAL_V2 BLOCO A ===
+
 const patchC8 = (() => {
   try { return require('./patchC8_allowedGroups'); }
   catch (e) {
@@ -3232,6 +3454,38 @@ try {
 
     payload.vehicle_id = vid; payload.VEHICLE_ID = vid; payload.vehicleId = vid;
 
+// PATCH_CMDT_FREE_SERIAL_V1 — verificar se newSerial está preso em veículo CMDT
+    try {
+      const __cmdtCheck = await _checkAndFreeCmdtSerial(newSerial, id, payload);
+      if (__cmdtCheck.freed) {
+        console.log(
+          `[html5_v8] [MAINT_WITH_SWAP] CMDT freed: serial=${newSerial} was in vid=${__cmdtCheck.vid_freed} plate="${__cmdtCheck.plate_freed}" -> continuing swap`
+        );
+      } else if (__cmdtCheck.blocked) {
+        // Serial está em veículo real — aborta
+        await completeJobLogged(id, "error", {
+          flow: "MAINT_WITH_SWAP",
+          plate,
+          vehicle_id: vid,
+          serial_new: newSerial,
+          error: "serial_in_use",
+          detail: `serial already linked to vehicle_id=${__cmdtCheck.vid_blocked} plate="${__cmdtCheck.plate_blocked}" (not a CMDT placeholder)`,
+        });
+        continue;
+      } else if (__cmdtCheck.error) {
+        // Falha ao verificar — loga mas não aborta (melhor tentar do que parar)
+        console.log(
+          `[html5_v8] [MAINT_WITH_SWAP] CMDT check failed (non-blocking): ${__cmdtCheck.error}`
+        );
+      }
+      // freed: false, blocked: false → serial livre, sem ação necessária
+    } catch (__cmdtErr) {
+      console.log(
+        `[html5_v8] [MAINT_WITH_SWAP] CMDT check exception (non-blocking): ${__cmdtErr && (__cmdtErr.message || __cmdtErr)}`
+      );
+    }
+    // === /PATCH_CMDT_FREE_SERIAL_V1 BLOCO B ===
+
     if (!EXECUTE_HTML5) {
       await completeJobLogged(id, "success", { dryRun: true, flow: "MAINT_WITH_SWAP", plate, vehicle_id: vid, serial_new: newSerial });
       continue;
@@ -4162,6 +4416,51 @@ if (service === "INSTALL" && !vId) {
     console.log("[html5_v8] INSTALL preflight VHCLS resolve failed: " + (e && (e.message || e.toString())));
   }
 }
+
+// PATCH_CMDT_FREE_SERIAL_V1 — verificar se o serial a instalar está preso em CMDT
+          try {
+            const __installSerial = String(
+              payload.serial || payload.inner_id || payload.INNER_ID ||
+              payload.serial_new || payload.SERIAL_NEW || ""
+            ).trim();
+            if (__installSerial) {
+              const __cmdtCheck = await _checkAndFreeCmdtSerial(__installSerial, id, payload);
+              if (__cmdtCheck.freed) {
+                console.log(
+                  `[html5_v8] [INSTALL] CMDT freed: serial=${__installSerial} was in vid=${__cmdtCheck.vid_freed} plate="${__cmdtCheck.plate_freed}" -> continuing install`
+                );
+                // Serial liberado: o vehicle_id do CMDT não é o destino da instalação.
+                // Se vId ainda não foi resolvido pela placa real, tenta novamente agora que o serial está livre.
+                if (!vId) {
+                  try {
+                    const __ctx2 = { log: (m) => console.log(String(m)), jobId: id };
+                    const __vv2 = await ensureVehicleIdByVhcls_(__ctx2, payload);
+                    if (__vv2) vId = __vv2;
+                  } catch (e) {
+                    console.log("[html5_v8] [INSTALL] post-CMDT VHCLS re-resolve failed: " + (e && (e.message || e)));
+                  }
+                }
+              } else if (__cmdtCheck.blocked) {
+                // Serial está em veículo real — aborta instalação
+                await completeJobLogged(id, "error", {
+                  flow: "INSTALL",
+                  serial: __installSerial,
+                  error: "serial_in_use",
+                  detail: `serial already linked to vehicle_id=${__cmdtCheck.vid_blocked} plate="${__cmdtCheck.plate_blocked}" (not a CMDT placeholder)`,
+                });
+                return; // sai do handler do job
+              } else if (__cmdtCheck.error) {
+                console.log(
+                  `[html5_v8] [INSTALL] CMDT check failed (non-blocking): ${__cmdtCheck.error}`
+                );
+              }
+            }
+          } catch (__cmdtErr) {
+            console.log(
+              `[html5_v8] [INSTALL] CMDT check exception (non-blocking): ${__cmdtErr && (__cmdtErr.message || __cmdtErr)}`
+            );
+          }
+          // === /PATCH_CMDT_FREE_SERIAL_V1 BLOCO C ===
 
           if (vId) {
             const preload = normalizeStep({
