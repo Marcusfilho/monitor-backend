@@ -158,16 +158,16 @@
     /* === G-SENSOR POSITION PICKER === */
     .gs-section{margin-bottom:12px}
     .gs-section-label{font-size:10px;font-weight:700;color:#4a5a6e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
-    .gs-grid{display:flex;gap:6px;flex-wrap:wrap}
+    .gs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
     .gs-btn{
-      flex:1;min-width:60px;padding:8px 10px;border-radius:10px;border:1px solid #1f2a38;
+      padding:9px 4px;border-radius:10px;border:1px solid #1f2a38;
       background:#070d14;color:#5a7090;font-size:12px;font-weight:700;cursor:pointer;
-      text-align:center;transition:all .15s;white-space:nowrap;letter-spacing:.2px
+      text-align:center;transition:all .15s;white-space:nowrap;letter-spacing:.1px;
+      width:100%
     }
     .gs-btn:hover{border-color:#3b5478;color:#a0bcd8}
     .gs-btn.selected{border-color:#3b82f6;background:#0c1e38;color:#60a5fa}
     .gs-btn:disabled{opacity:.3;cursor:not-allowed}
-    .gs-btn.faded{opacity:.3;pointer-events:none}
     /* === MODAL CONFIRMAÇÃO RESOLVER === */
     .confirm-modal{display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,.75);align-items:flex-end}
     .confirm-modal.open{display:flex}
@@ -260,12 +260,12 @@
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
 
       <div class="gs-section">
-        <div class="gs-section-label">Etiqueta</div>
+        <div class="gs-section-label">Posição da etiqueta</div>
         <div class="gs-grid" id="gs-label-grid"></div>
       </div>
 
       <div class="gs-section" id="gs-harness-section" style="margin-top:10px">
-        <div class="gs-section-label">Chicote</div>
+        <div class="gs-section-label">Saída do chicote</div>
         <div class="gs-grid" id="gs-harness-grid"></div>
       </div>
 
@@ -650,6 +650,13 @@
   $("cat_model").addEventListener("change", updateAssetType);
 
   // ── G-SENSOR picker ───────────────────────────────────────────────────
+  // Tradução das posições para PT-BR
+  const GS_PT = {
+    "BACK":"Traseira","FRONT":"Frontal","LEFT":"Esquerda",
+    "RIGHT":"Direita","UP":"Cima","DOWN":"Baixo"
+  };
+  function gsLabel(v){ return GS_PT[v] || v; }
+
   // Estado interno do picker
   const _gs = { label: "", harness: "" };
 
@@ -679,7 +686,7 @@
     labelGrid.innerHTML = "";
 
     for (const lbl of allLabels){
-      labelGrid.appendChild(_gsMakeBtn(lbl, () => {
+      labelGrid.appendChild(_gsMakeBtn(gsLabel(lbl), () => {
         _gs.label = lbl;
         // reset chicote se não for válido para nova etiqueta
         if (!_gsValidHarnesses(lbl).includes(_gs.harness)) _gs.harness = "";
@@ -706,7 +713,7 @@
     hGrid.innerHTML = "";
 
     for (const h of validHarnesses){
-      hGrid.appendChild(_gsMakeBtn(h, () => {
+      hGrid.appendChild(_gsMakeBtn(gsLabel(h), () => {
         _gs.harness = h;
         _gsRender();
       }));
@@ -1916,7 +1923,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   }
 
   function initAllCustomSelects(){
-    ["service","clientSelect","cat_manufacturer","cat_model","gs_label","gs_harness"].forEach(id => {
+    ["service","clientSelect","cat_manufacturer","cat_model"].forEach(id => {
       const el = document.getElementById(id);
       if (el) initCustomSelect(el);
     });
