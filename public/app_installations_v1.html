@@ -192,10 +192,10 @@
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <span style="font-size:11px;color:var(--muted);flex-shrink:0">Serviço</span>
       <select id="service" style="padding:5px 10px;font-size:12px;border-radius:10px;flex:1;min-width:0">
-        <option value="INSTALL">INSTALL</option>
-        <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
-        <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
-        <option value="UNINSTALL">UNINSTALL</option>
+        <option value="INSTALL">Instalação</option>
+        <option value="MAINT_NO_SWAP">Manutenção sem troca</option>
+        <option value="MAINT_WITH_SWAP">Manutenção com troca</option>
+        <option value="UNINSTALL">Desinstalação</option>
       </select>
     </div>
 
@@ -245,16 +245,13 @@
     <!-- G-Sensor: visível exceto em UNINSTALL -->
     <div id="rowGsensor" style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
-      <div class="row" style="margin-top:0">
-        <div style="flex:1;min-width:0">
-          <label>Etiqueta (label)</label>
-          <select id="gs_label"></select>
-        </div>
-        <div style="flex:1;min-width:0">
-          <label>Chicote (harness)</label>
-          <select id="gs_harness"></select>
-        </div>
+      <div style="margin-top:0">
+        <label>Posição (etiqueta · chicote)</label>
+        <select id="gs_combo"></select>
       </div>
+      <!-- campos ocultos para compatibilidade -->
+      <input type="hidden" id="gs_label" />
+      <input type="hidden" id="gs_harness" />
       <div class="hidden">
         <label>Comando (auto)</label>
         <input id="gs_command" readonly />
@@ -267,11 +264,6 @@
         📷 Tirar foto ou selecionar da galeria<br><span style="font-size:10px;opacity:.7">Funcionalidade em desenvolvimento</span>
       </div>
     </div>
-    <div class="row" style="margin-top:12px">
-      <button id="btnCreate">Criar instalação</button>
-      <button class="secondary" id="btnReset">Limpar</button>
-    </div>
-
     <details id="advancedForm" class="hidden">
       <summary>Avançado (debug)</summary>
       <pre id="payloadPreview">{}</pre>
@@ -360,8 +352,14 @@
   <button class="x" id="toastX">×</button>
 </div>
 
-<div class="bottomBar">
-  <div class="inner">
+<div class="bottomBar" id="bottomBar">
+  <!-- grupo do formulário: visível quando cardForm está aberto -->
+  <div class="inner" id="barForm">
+    <button id="btnCreate">Criar instalação</button>
+    <button class="secondary" id="btnReset">Limpar</button>
+  </div>
+  <!-- grupo da validação CAN: visível após criar job -->
+  <div class="inner hidden" id="barCan">
     <button id="btnApprove" disabled>Validar CAN</button>
     <button id="btnRefresh" class="secondary" disabled>Atualizar CAN</button>
   </div>
@@ -381,6 +379,21 @@
 
   // ====== ui helpers ======
   function setSubline(msg){ $("subline").textContent = msg || ""; }
+
+  // Alterna entre barra de formulário e barra de validação CAN
+  function showBarForm(){
+    $("bottomBar").classList.remove("hidden");
+    $("barForm").classList.remove("hidden");
+    $("barCan").classList.add("hidden");
+  }
+  function showBarCan(){
+    $("bottomBar").classList.remove("hidden");
+    $("barForm").classList.add("hidden");
+    $("barCan").classList.remove("hidden");
+  }
+  function hideBar(){
+    $("bottomBar").classList.add("hidden");
+  }
 
   function pill(text, kind){
     const s = document.createElement("span");
@@ -620,27 +633,38 @@
   $("cat_model").addEventListener("change", updateAssetType);
 
   function renderGsSelectors(){
-    const labels = uniqSorted(GS_COMMANDS.map(x => x.label).filter(Boolean));
-    const harness = uniqSorted(GS_COMMANDS.map(x => x.harness).filter(Boolean));
-
-    const selL = $("gs_label"); selL.innerHTML = "";
-    for (const l of labels){ const o=document.createElement("option"); o.value=l; o.textContent=l; selL.appendChild(o); }
-
-    const selH = $("gs_harness"); selH.innerHTML = "";
-    for (const h of harness){ const o=document.createElement("option"); o.value=h; o.textContent=h; selH.appendChild(o); }
-
+    // Popula o combo com APENAS as combinações reais presentes no catálogo
+    const combo = $("gs_combo");
+    combo.innerHTML = "";
+    // Ordena: por label, depois por harness
+    const sorted = GS_COMMANDS
+      .filter(x => x.label && x.harness)
+      .slice()
+      .sort((a,b) => {
+        const la = String(a.label).localeCompare(String(b.label));
+        return la !== 0 ? la : String(a.harness).localeCompare(String(b.harness));
+      });
+    for (const cmd of sorted){
+      const o = document.createElement("option");
+      o.value = cmd.label + "||" + cmd.harness;
+      o.textContent = "Etiqueta: " + cmd.label + "  ·  Chicote: " + cmd.harness;
+      combo.appendChild(o);
+    }
     updateGsCommand();
+    combo.addEventListener("change", updateGsCommand);
   }
 
   function updateGsCommand(){
-    const l = $("gs_label").value;
-    const h = $("gs_harness").value;
+    const combo = $("gs_combo");
+    const val = combo ? combo.value : "";
+    const [l, h] = val ? val.split("||") : ["", ""];
+    // sincroniza os hidden (usados em buildPayload)
+    $("gs_label").value = l || "";
+    $("gs_harness").value = h || "";
     const it = GS_COMMANDS.find(x => x.label === l && x.harness === h);
     $("gs_command").value = it ? String(it.command) : "";
     refreshAdvancedPreview();
   }
-  $("gs_label").addEventListener("change", updateGsCommand);
-  $("gs_harness").addEventListener("change", updateGsCommand);
 
   // ====== form logic ======
   function applyServiceUI(){
@@ -1566,6 +1590,7 @@ if (st === "COMPLETED") {
   if (btnLabel) btnLabel.textContent = (isUninstall || isNoSwap) ? "+ Nova operação" : "+ Nova instalação";
   $("cardCompleted").classList.remove("hidden");
   $("cardCan").classList.add("hidden");
+  hideBar();
   stopPoll();
   return;
 } else {
@@ -1908,8 +1933,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     state.inst = null;
     state.lastSnapshot = null;
     $("cardCompleted").classList.add("hidden");
-    $("cardCan").classList.remove("hidden");
+    $("cardCan").classList.add("hidden");
     $("cardForm").classList.remove("hidden");
+    showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1919,8 +1945,10 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     stopPoll();
     state.inst = null;
     state.lastSnapshot = null;
-    // não apagar o último installation_id/token ao clicar "Nova" (permite retomar caso o job esteja rodando)
+    // não apagar o último installation_id/token ao clicar "Nova"
     $("cardForm").classList.remove("hidden");
+    $("cardCan").classList.add("hidden");
+    showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2093,6 +2121,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
             if (st.includes("ERROR")) {
               showToast("Erro na desinstalação: " + (current?.last_error?.message || st), "bad");
               $("cardCan").classList.remove("hidden");
+              showBarCan();
               renderAll(current);
               return;
             }
@@ -2130,6 +2159,8 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         // Com validação CAN — exibe cardCan e inicia polling normalmente
         renderAll(inst);
         $("cardForm").classList.add("hidden");
+        $("cardCan").classList.remove("hidden");
+        showBarCan();
         showToast("Manutenção registrada. Iniciando validação CAN…", "good");
         document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
         startPoll();
@@ -2139,6 +2170,8 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       renderAll(inst);
 
       $("cardForm").classList.add("hidden");
+      $("cardCan").classList.remove("hidden");
+      showBarCan();
       showToast("Instalação criada. Vá para a validação CAN.", "good");
       document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -2283,7 +2316,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // Sempre abre a tela de cadastro — nunca retoma instalação anterior automaticamente.
     // Isso evita que o técnico abra o app e se depare com uma instalação inacabada.
     $("cardForm").classList.remove("hidden");
-    $("cardCan").classList.remove("hidden");
+    $("cardCan").classList.add("hidden");      // só aparece após criar job
+    showBarForm();                             // botões do form na barra inferior
   })();
 </script>
 </body>
