@@ -155,6 +155,19 @@
     .sc-label.active{color:var(--warn)}
     .sc-wrap{display:flex;flex-direction:column;align-items:center}
 
+    /* === G-SENSOR POSITION PICKER === */
+    .gs-section{margin-bottom:12px}
+    .gs-section-label{font-size:10px;font-weight:700;color:#4a5a6e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+    .gs-grid{display:flex;gap:6px;flex-wrap:wrap}
+    .gs-btn{
+      flex:1;min-width:60px;padding:8px 10px;border-radius:10px;border:1px solid #1f2a38;
+      background:#070d14;color:#5a7090;font-size:12px;font-weight:700;cursor:pointer;
+      text-align:center;transition:all .15s;white-space:nowrap;letter-spacing:.2px
+    }
+    .gs-btn:hover{border-color:#3b5478;color:#a0bcd8}
+    .gs-btn.selected{border-color:#3b82f6;background:#0c1e38;color:#60a5fa}
+    .gs-btn:disabled{opacity:.3;cursor:not-allowed}
+    .gs-btn.faded{opacity:.3;pointer-events:none}
     /* === MODAL CONFIRMAÇÃO RESOLVER === */
     .confirm-modal{display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,.75);align-items:flex-end}
     .confirm-modal.open{display:flex}
@@ -245,17 +258,21 @@
     <!-- G-Sensor: visível exceto em UNINSTALL -->
     <div id="rowGsensor" style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
-      <div style="margin-top:0">
-        <label>Posição (etiqueta · chicote)</label>
-        <select id="gs_combo"></select>
+
+      <div class="gs-section">
+        <div class="gs-section-label">Etiqueta</div>
+        <div class="gs-grid" id="gs-label-grid"></div>
       </div>
-      <!-- campos ocultos para compatibilidade -->
+
+      <div class="gs-section" id="gs-harness-section" style="margin-top:10px">
+        <div class="gs-section-label">Chicote</div>
+        <div class="gs-grid" id="gs-harness-grid"></div>
+      </div>
+
+      <!-- campos ocultos para compatibilidade com buildPayload -->
       <input type="hidden" id="gs_label" />
       <input type="hidden" id="gs_harness" />
-      <div class="hidden">
-        <label>Comando (auto)</label>
-        <input id="gs_command" readonly />
-      </div>
+      <input type="hidden" id="gs_command" />
     </div>
 
     <div style="margin-top:12px">
@@ -632,38 +649,88 @@
   $("cat_manufacturer").addEventListener("change", renderModels);
   $("cat_model").addEventListener("change", updateAssetType);
 
+  // ── G-SENSOR picker ───────────────────────────────────────────────────
+  // Estado interno do picker
+  const _gs = { label: "", harness: "" };
+
+  function _gsUniqSorted(arr){
+    return [...new Set(arr)].sort((a,b) => String(a).localeCompare(String(b)));
+  }
+
+  function _gsValidHarnesses(label){
+    // quais chicotes existem para a etiqueta selecionada
+    return _gsUniqSorted(
+      GS_COMMANDS.filter(x => x.label === label && x.harness).map(x => x.harness)
+    );
+  }
+
+  function _gsMakeBtn(text, onClick){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "gs-btn";
+    b.textContent = text;
+    b.onclick = onClick;
+    return b;
+  }
+
   function renderGsSelectors(){
-    // Popula o combo com APENAS as combinações reais presentes no catálogo
-    const combo = $("gs_combo");
-    combo.innerHTML = "";
-    // Ordena: por label, depois por harness
-    const sorted = GS_COMMANDS
-      .filter(x => x.label && x.harness)
-      .slice()
-      .sort((a,b) => {
-        const la = String(a.label).localeCompare(String(b.label));
-        return la !== 0 ? la : String(a.harness).localeCompare(String(b.harness));
-      });
-    for (const cmd of sorted){
-      const o = document.createElement("option");
-      o.value = cmd.label + "||" + cmd.harness;
-      o.textContent = "Etiqueta: " + cmd.label + "  ·  Chicote: " + cmd.harness;
-      combo.appendChild(o);
+    const allLabels = _gsUniqSorted(GS_COMMANDS.filter(x => x.label).map(x => x.label));
+    const labelGrid = $("gs-label-grid");
+    labelGrid.innerHTML = "";
+
+    for (const lbl of allLabels){
+      labelGrid.appendChild(_gsMakeBtn(lbl, () => {
+        _gs.label = lbl;
+        // reset chicote se não for válido para nova etiqueta
+        if (!_gsValidHarnesses(lbl).includes(_gs.harness)) _gs.harness = "";
+        _gsRender();
+      }));
     }
-    updateGsCommand();
-    combo.addEventListener("change", updateGsCommand);
+
+    // seleciona o primeiro por padrão
+    if (!_gs.label && allLabels.length) _gs.label = allLabels[0];
+    _gsRender();
+  }
+
+  function _gsRender(){
+    // ── atualiza botões de etiqueta ──
+    const labelBtns = $("gs-label-grid").querySelectorAll(".gs-btn");
+    const allLabels = _gsUniqSorted(GS_COMMANDS.filter(x => x.label).map(x => x.label));
+    labelBtns.forEach((b, i) => {
+      b.classList.toggle("selected", allLabels[i] === _gs.label);
+    });
+
+    // ── reconstrói botões de chicote para a etiqueta atual ──
+    const validHarnesses = _gs.label ? _gsValidHarnesses(_gs.label) : [];
+    const hGrid = $("gs-harness-grid");
+    hGrid.innerHTML = "";
+
+    for (const h of validHarnesses){
+      hGrid.appendChild(_gsMakeBtn(h, () => {
+        _gs.harness = h;
+        _gsRender();
+      }));
+    }
+
+    // seleciona primeiro chicote se nenhum escolhido ainda
+    if (!_gs.harness && validHarnesses.length) _gs.harness = validHarnesses[0];
+
+    // marca botão de chicote selecionado
+    hGrid.querySelectorAll(".gs-btn").forEach((b, i) => {
+      b.classList.toggle("selected", validHarnesses[i] === _gs.harness);
+    });
+
+    // ── sincroniza campos hidden ──
+    $("gs_label").value   = _gs.label   || "";
+    $("gs_harness").value = _gs.harness || "";
+    const cmd = GS_COMMANDS.find(x => x.label === _gs.label && x.harness === _gs.harness);
+    $("gs_command").value = cmd ? String(cmd.command) : "";
+    refreshAdvancedPreview();
   }
 
   function updateGsCommand(){
-    const combo = $("gs_combo");
-    const val = combo ? combo.value : "";
-    const [l, h] = val ? val.split("||") : ["", ""];
-    // sincroniza os hidden (usados em buildPayload)
-    $("gs_label").value = l || "";
-    $("gs_harness").value = h || "";
-    const it = GS_COMMANDS.find(x => x.label === l && x.harness === h);
-    $("gs_command").value = it ? String(it.command) : "";
-    refreshAdvancedPreview();
+    // mantido para compatibilidade — _gsRender já faz tudo
+    _gsRender();
   }
 
   // ====== form logic ======
