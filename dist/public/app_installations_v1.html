@@ -104,6 +104,41 @@
     .csel-item.selected{color:var(--accent)}
     .csel-cancel{padding:14px 16px;font-size:14px;color:var(--muted);text-align:center;cursor:pointer;margin-top:4px}
 
+    /* === TELA WELCOME === */
+    #cardWelcome{
+      position:fixed;inset:0;z-index:50;background:var(--bg);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:24px 20px;gap:0
+    }
+    #cardWelcome.hidden{display:none!important}
+    .welcome-logo{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
+    .welcome-version{font-size:10px;color:#3a4a5c;font-weight:600;margin-left:4px}
+    .welcome-title{font-size:22px;font-weight:700;color:#cfe6ff;margin:24px 0 6px;text-align:center}
+    .welcome-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:28px}
+    .welcome-select-wrap{width:100%;max-width:380px}
+    .welcome-select-wrap label{font-size:11px;color:var(--muted);margin-bottom:6px;display:block}
+    .welcome-select-wrap select{
+      width:100%;padding:12px 14px;border-radius:14px;border:1px solid #273245;
+      background:#0b1118;color:var(--text);font-size:15px;outline:none;
+      appearance:none;-webkit-appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2393a4b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;background-position:right 14px center;
+      padding-right:36px
+    }
+    #btnEnter{
+      width:100%;max-width:380px;margin-top:14px;padding:14px;
+      background:var(--accent);color:#000;border:none;border-radius:14px;
+      font-size:15px;font-weight:700;cursor:pointer
+    }
+    #btnEnter:disabled{opacity:.4;cursor:not-allowed}
+    /* badge técnico no header */
+    #techBadge{
+      display:none;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+      border:1px solid #2a3a52;background:#0b1118;font-size:11px;font-weight:700;
+      color:#cfe6ff;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis
+    }
+    #techBadge.show{display:inline-flex}
+
     @media (max-width:520px){
       .row > *{min-width: 100%}
       header{padding:12px 12px}
@@ -155,6 +190,19 @@
     .sc-label.active{color:var(--warn)}
     .sc-wrap{display:flex;flex-direction:column;align-items:center}
 
+    /* === G-SENSOR POSITION PICKER === */
+    .gs-section{margin-bottom:12px}
+    .gs-section-label{font-size:10px;font-weight:700;color:#4a5a6e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+    .gs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .gs-btn{
+      padding:9px 4px;border-radius:10px;border:1px solid #1f2a38;
+      background:#070d14;color:#5a7090;font-size:12px;font-weight:700;cursor:pointer;
+      text-align:center;transition:all .15s;white-space:nowrap;letter-spacing:.1px;
+      width:100%
+    }
+    .gs-btn:hover{border-color:#3b5478;color:#a0bcd8}
+    .gs-btn.selected{border-color:#3b82f6;background:#0c1e38;color:#60a5fa}
+    .gs-btn:disabled{opacity:.3;cursor:not-allowed}
     /* === MODAL CONFIRMAÇÃO RESOLVER === */
     .confirm-modal{display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,.75);align-items:flex-end}
     .confirm-modal.open{display:flex}
@@ -176,12 +224,30 @@
   <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
     <div class="kv" id="topKv"></div>
     <button id="btnNew" class="secondary" style="padding:7px 12px;border-radius:12px;font-weight:700;font-size:12px">Nova</button>
+    <span id="techBadge"></span>
     <div id="sessionPill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid #2a3a52;background:#0b1118;color:var(--muted)">
       <span id="sessionDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0"></span>
       <span id="sessionTxt">sessão...</span>
     </div>
   </div>
 </header>
+
+<!-- TELA WELCOME -->
+<div id="cardWelcome">
+  <div>
+    <span class="welcome-logo">App Instalador</span>
+    <span class="welcome-version">v1.5</span>
+  </div>
+  <div class="welcome-title">Bem-vindo</div>
+  <div class="welcome-sub">Selecione seu nome para continuar</div>
+  <div class="welcome-select-wrap">
+    <label>Técnico</label>
+    <select id="techSelect">
+      <option value="">Carregando...</option>
+    </select>
+  </div>
+  <button id="btnEnter" disabled>Entrar</button>
+</div>
 
 <div class="wrap">
   <!-- 1) FORM -->
@@ -192,10 +258,10 @@
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <span style="font-size:11px;color:var(--muted);flex-shrink:0">Serviço</span>
       <select id="service" style="padding:5px 10px;font-size:12px;border-radius:10px;flex:1;min-width:0">
-        <option value="INSTALL">INSTALL</option>
-        <option value="MAINT_NO_SWAP">MAINT_NO_SWAP</option>
-        <option value="MAINT_WITH_SWAP">MAINT_WITH_SWAP</option>
-        <option value="UNINSTALL">UNINSTALL</option>
+        <option value="INSTALL">Instalação</option>
+        <option value="MAINT_NO_SWAP">Manutenção sem troca</option>
+        <option value="MAINT_WITH_SWAP">Manutenção com troca</option>
+        <option value="UNINSTALL">Desinstalação</option>
       </select>
     </div>
 
@@ -245,20 +311,21 @@
     <!-- G-Sensor: visível exceto em UNINSTALL -->
     <div id="rowGsensor" style="margin-top:12px;background:#0b1118;border:1px solid #223043;border-radius:14px;padding:12px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:.3px">▼ G‑SENSOR (orientação)</div>
-      <div class="row" style="margin-top:0">
-        <div style="flex:1;min-width:0">
-          <label>Etiqueta (label)</label>
-          <select id="gs_label"></select>
-        </div>
-        <div style="flex:1;min-width:0">
-          <label>Chicote (harness)</label>
-          <select id="gs_harness"></select>
-        </div>
+
+      <div class="gs-section">
+        <div class="gs-section-label">Posição da etiqueta</div>
+        <div class="gs-grid" id="gs-label-grid"></div>
       </div>
-      <div class="hidden">
-        <label>Comando (auto)</label>
-        <input id="gs_command" readonly />
+
+      <div class="gs-section" id="gs-harness-section" style="margin-top:10px">
+        <div class="gs-section-label">Saída do chicote</div>
+        <div class="gs-grid" id="gs-harness-grid"></div>
       </div>
+
+      <!-- campos ocultos para compatibilidade com buildPayload -->
+      <input type="hidden" id="gs_label" />
+      <input type="hidden" id="gs_harness" />
+      <input type="hidden" id="gs_command" />
     </div>
 
     <div style="margin-top:12px">
@@ -267,11 +334,6 @@
         📷 Tirar foto ou selecionar da galeria<br><span style="font-size:10px;opacity:.7">Funcionalidade em desenvolvimento</span>
       </div>
     </div>
-    <div class="row" style="margin-top:12px">
-      <button id="btnCreate">Criar instalação</button>
-      <button class="secondary" id="btnReset">Limpar</button>
-    </div>
-
     <details id="advancedForm" class="hidden">
       <summary>Avançado (debug)</summary>
       <pre id="payloadPreview">{}</pre>
@@ -360,8 +422,14 @@
   <button class="x" id="toastX">×</button>
 </div>
 
-<div class="bottomBar">
-  <div class="inner">
+<div class="bottomBar" id="bottomBar">
+  <!-- grupo do formulário: visível quando cardForm está aberto -->
+  <div class="inner" id="barForm">
+    <button id="btnCreate">Criar instalação</button>
+    <button class="secondary" id="btnReset">Limpar</button>
+  </div>
+  <!-- grupo da validação CAN: visível após criar job -->
+  <div class="inner hidden" id="barCan">
     <button id="btnApprove" disabled>Validar CAN</button>
     <button id="btnRefresh" class="secondary" disabled>Atualizar CAN</button>
   </div>
@@ -377,10 +445,76 @@
     pollTimer: null,
     pollMs: 5000,
     debug: false,
+    technician: null,   // { id, nick } — preenchido na Welcome
   };
+
+  // ====== welcome ======
+  const LS_TECH = "inst_technician_id";
+
+  async function loadTechnicians(){
+    try {
+      const r = await fetch("technicians.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      const list = data.technicians || [];
+      const sel = $("techSelect");
+      sel.innerHTML = '<option value="">— Selecione —</option>';
+      for (const t of list){
+        const o = document.createElement("option");
+        o.value = t.id;
+        o.textContent = t.nick;
+        o.dataset.nick = t.nick;
+        sel.appendChild(o);
+      }
+      // pré-seleciona último técnico salvo
+      const saved = localStorage.getItem(LS_TECH);
+      if (saved){
+        const found = [...sel.options].find(o => o.value === saved);
+        if (found){ sel.value = saved; $("btnEnter").disabled = false; }
+      }
+      sel.addEventListener("change", () => {
+        $("btnEnter").disabled = !sel.value;
+      });
+    } catch(e){
+      $("techSelect").innerHTML = '<option value="">Erro ao carregar lista</option>';
+      console.error("[technicians] falha:", e);
+    }
+  }
+
+  function enterApp(){
+    const sel = $("techSelect");
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    state.technician = { id: opt.value, nick: opt.dataset.nick || opt.textContent };
+    localStorage.setItem(LS_TECH, opt.value);
+    // exibe badge no header
+    const badge = $("techBadge");
+    badge.textContent = state.technician.nick;
+    badge.classList.add("show");
+    // esconde welcome, inicia app
+    $("cardWelcome").classList.add("hidden");
+    bootApp();
+  }
+
+  $("btnEnter") && ($("btnEnter").onclick = enterApp);
 
   // ====== ui helpers ======
   function setSubline(msg){ $("subline").textContent = msg || ""; }
+
+  // Alterna entre barra de formulário e barra de validação CAN
+  function showBarForm(){
+    $("bottomBar").classList.remove("hidden");
+    $("barForm").classList.remove("hidden");
+    $("barCan").classList.add("hidden");
+  }
+  function showBarCan(){
+    $("bottomBar").classList.remove("hidden");
+    $("barForm").classList.add("hidden");
+    $("barCan").classList.remove("hidden");
+  }
+  function hideBar(){
+    $("bottomBar").classList.add("hidden");
+  }
 
   function pill(text, kind){
     const s = document.createElement("span");
@@ -619,28 +753,96 @@
   $("cat_manufacturer").addEventListener("change", renderModels);
   $("cat_model").addEventListener("change", updateAssetType);
 
+  // ── G-SENSOR picker ───────────────────────────────────────────────────
+  // Tradução das posições para PT-BR
+  const GS_PT = {
+    "BACK":"Traseira","FRONT":"Frontal","LEFT":"Esquerda",
+    "RIGHT":"Direita","UP":"Cima","DOWN":"Baixo"
+  };
+  function gsLabel(v){ return GS_PT[v] || v; }
+
+  // Estado interno do picker
+  const _gs = { label: "", harness: "" };
+
+  function _gsUniqSorted(arr){
+    return [...new Set(arr)].sort((a,b) => String(a).localeCompare(String(b)));
+  }
+
+  function _gsValidHarnesses(label){
+    // quais chicotes existem para a etiqueta selecionada
+    return _gsUniqSorted(
+      GS_COMMANDS.filter(x => x.label === label && x.harness).map(x => x.harness)
+    );
+  }
+
+  function _gsMakeBtn(text, onClick){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "gs-btn";
+    b.textContent = text;
+    b.onclick = onClick;
+    return b;
+  }
+
   function renderGsSelectors(){
-    const labels = uniqSorted(GS_COMMANDS.map(x => x.label).filter(Boolean));
-    const harness = uniqSorted(GS_COMMANDS.map(x => x.harness).filter(Boolean));
+    const allLabels = _gsUniqSorted(GS_COMMANDS.filter(x => x.label).map(x => x.label));
+    const labelGrid = $("gs-label-grid");
+    labelGrid.innerHTML = "";
 
-    const selL = $("gs_label"); selL.innerHTML = "";
-    for (const l of labels){ const o=document.createElement("option"); o.value=l; o.textContent=l; selL.appendChild(o); }
+    for (const lbl of allLabels){
+      labelGrid.appendChild(_gsMakeBtn(gsLabel(lbl), () => {
+        _gs.label = lbl;
+        // reset chicote se não for válido para nova etiqueta
+        if (!_gsValidHarnesses(lbl).includes(_gs.harness)) _gs.harness = "";
+        _gsRender();
+      }));
+    }
 
-    const selH = $("gs_harness"); selH.innerHTML = "";
-    for (const h of harness){ const o=document.createElement("option"); o.value=h; o.textContent=h; selH.appendChild(o); }
+    // seleciona o primeiro por padrão
+    if (!_gs.label && allLabels.length) _gs.label = allLabels[0];
+    _gsRender();
+  }
 
-    updateGsCommand();
+  function _gsRender(){
+    // ── atualiza botões de etiqueta ──
+    const labelBtns = $("gs-label-grid").querySelectorAll(".gs-btn");
+    const allLabels = _gsUniqSorted(GS_COMMANDS.filter(x => x.label).map(x => x.label));
+    labelBtns.forEach((b, i) => {
+      b.classList.toggle("selected", allLabels[i] === _gs.label);
+    });
+
+    // ── reconstrói botões de chicote para a etiqueta atual ──
+    const validHarnesses = _gs.label ? _gsValidHarnesses(_gs.label) : [];
+    const hGrid = $("gs-harness-grid");
+    hGrid.innerHTML = "";
+
+    for (const h of validHarnesses){
+      hGrid.appendChild(_gsMakeBtn(gsLabel(h), () => {
+        _gs.harness = h;
+        _gsRender();
+      }));
+    }
+
+    // seleciona primeiro chicote se nenhum escolhido ainda
+    if (!_gs.harness && validHarnesses.length) _gs.harness = validHarnesses[0];
+
+    // marca botão de chicote selecionado
+    hGrid.querySelectorAll(".gs-btn").forEach((b, i) => {
+      b.classList.toggle("selected", validHarnesses[i] === _gs.harness);
+    });
+
+    // ── sincroniza campos hidden ──
+    $("gs_label").value   = _gs.label   || "";
+    $("gs_harness").value = _gs.harness || "";
+    const cmd = GS_COMMANDS.find(x => x.label === _gs.label && x.harness === _gs.harness);
+    $("gs_command").value = cmd ? String(cmd.command) : "";
+    refreshAdvancedPreview();
   }
 
   function updateGsCommand(){
-    const l = $("gs_label").value;
-    const h = $("gs_harness").value;
-    const it = GS_COMMANDS.find(x => x.label === l && x.harness === h);
-    $("gs_command").value = it ? String(it.command) : "";
-    refreshAdvancedPreview();
+    // mantido para compatibilidade — _gsRender já faz tudo
+    _gsRender();
   }
-  $("gs_label").addEventListener("change", updateGsCommand);
-  $("gs_harness").addEventListener("change", updateGsCommand);
 
   // ====== form logic ======
   function applyServiceUI(){
@@ -706,6 +908,7 @@
         command: gsCmd || null,
       },
       comment: norm($("comment")?.value || "") || null,
+      technician: state.technician || null,
     };
 
     if (svc === "INSTALL"){
@@ -1566,6 +1769,7 @@ if (st === "COMPLETED") {
   if (btnLabel) btnLabel.textContent = (isUninstall || isNoSwap) ? "+ Nova operação" : "+ Nova instalação";
   $("cardCompleted").classList.remove("hidden");
   $("cardCan").classList.add("hidden");
+  hideBar();
   stopPoll();
   return;
 } else {
@@ -1824,7 +2028,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   }
 
   function initAllCustomSelects(){
-    ["service","clientSelect","cat_manufacturer","cat_model","gs_label","gs_harness"].forEach(id => {
+    ["service","clientSelect","cat_manufacturer","cat_model"].forEach(id => {
       const el = document.getElementById(id);
       if (el) initCustomSelect(el);
     });
@@ -1908,8 +2112,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     state.inst = null;
     state.lastSnapshot = null;
     $("cardCompleted").classList.add("hidden");
-    $("cardCan").classList.remove("hidden");
+    $("cardCan").classList.add("hidden");
     $("cardForm").classList.remove("hidden");
+    showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1919,8 +2124,10 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     stopPoll();
     state.inst = null;
     state.lastSnapshot = null;
-    // não apagar o último installation_id/token ao clicar "Nova" (permite retomar caso o job esteja rodando)
+    // não apagar o último installation_id/token ao clicar "Nova"
     $("cardForm").classList.remove("hidden");
+    $("cardCan").classList.add("hidden");
+    showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2093,6 +2300,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
             if (st.includes("ERROR")) {
               showToast("Erro na desinstalação: " + (current?.last_error?.message || st), "bad");
               $("cardCan").classList.remove("hidden");
+              showBarCan();
               renderAll(current);
               return;
             }
@@ -2130,6 +2338,8 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         // Com validação CAN — exibe cardCan e inicia polling normalmente
         renderAll(inst);
         $("cardForm").classList.add("hidden");
+        $("cardCan").classList.remove("hidden");
+        showBarCan();
         showToast("Manutenção registrada. Iniciando validação CAN…", "good");
         document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
         startPoll();
@@ -2139,6 +2349,8 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       renderAll(inst);
 
       $("cardForm").classList.add("hidden");
+      $("cardCan").classList.remove("hidden");
+      showBarCan();
       showToast("Instalação criada. Vá para a validação CAN.", "good");
       document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -2262,7 +2474,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ====== boot ======
-  (function init(){
+  function bootApp(){
     // debug mode via URL ?debug=1
     try {
       const u = new URL(location.href);
@@ -2276,14 +2488,21 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast("Debug habilitado", "warn");
     }
 
-    loadCatalogs();
+    loadCatalogs();   // dispara prefetchClients() + JSONs locais em paralelo
 
     renderEmpty();
 
     // Sempre abre a tela de cadastro — nunca retoma instalação anterior automaticamente.
-    // Isso evita que o técnico abra o app e se depare com uma instalação inacabada.
     $("cardForm").classList.remove("hidden");
-    $("cardCan").classList.remove("hidden");
+    $("cardCan").classList.add("hidden");
+    showBarForm();
+  }
+
+  (function init(){
+    // Carrega lista de técnicos ANTES de mostrar qualquer coisa.
+    // É um JSON estático pequeno — termina em ms.
+    // O fetch de clientes (/api/clients) só é disparado ao clicar em Entrar (dentro de bootApp → loadCatalogs).
+    loadTechnicians();
   })();
 </script>
 </body>
