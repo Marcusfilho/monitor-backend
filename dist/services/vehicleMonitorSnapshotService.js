@@ -93,8 +93,9 @@ class TraffilogWsMux {
     }
 }
 async function collectVehicleMonitorSnapshot(opts) {
-    const windowMs = opts.windowMs ?? 8000;
-    const waitAfterCmdMs = opts.waitAfterCmdMs ?? 1000;
+    // PERF: janela padrão reduzida de 8s → 5s. Veículos respondem rápido; 8s era conservador demais.
+    const windowMs = opts.windowMs ?? 5000;
+    const waitAfterCmdMs = opts.waitAfterCmdMs ?? 800;
     const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
     // Header
     const vehicleInfo = await mux.sendAction("get_vehicle_info", {
@@ -150,6 +151,23 @@ async function collectVehicleMonitorSnapshot(opts) {
     let unitParametersEvents = 0;
     let unitMessagesEvents = 0;
     let unitConnEvents = 0;
+    // Module State buscado ANTES da janela — disponível desde o primeiro snapshot parcial
+    const ms = await mux.sendAction("get_monitor_module_state", {
+        tag: "loading_screen",
+        filter: "",
+        vehicle_id: String(opts.vehicleId),
+    });
+    const moduleState = (ms?.data ?? []).map((r) => ({
+        id: String(r?.id ?? ""),
+        module: String(r?.module_descr ?? ""),
+        sub: String(r?.sub_module_descr ?? ""),
+        last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+        active: asBool01(r?.active),
+        was_ok: asBool01(r?.was_ok),
+        ok: asBool01(r?.ok),
+        error: asBool01(r?.error),
+        error_descr: r?.error_descr != null ? String(r.error_descr) : null,
+    }));
     const off = mux.onRefresh((props) => {
         const ds = String(props?.data_source ?? "");
         if (ds === "UNIT_PARAMETERS") {
@@ -159,13 +177,13 @@ async function collectVehicleMonitorSnapshot(opts) {
                 const id = String(row?.id ?? row?.param_id ?? "");
                 if (!id)
                     continue;
-                const rawValue = row?.param_value != null ? String(row.param_value)
-                    : (row?.paramvalue != null ? String(row.paramvalue)
-                        : (row?.raw_value != null ? String(row.raw_value)
-                            : (row?.value != null ? String(row.value) : null)));
-                const lastUpdate = row?.orig_time != null ? String(row.orig_time)
-                    : (row?.last_update != null ? String(row.last_update)
-                        : (row?.last_update_date != null ? String(row.last_update_date) : null));
+                const rawValue = row?.param_value != null ? String(row.param_value) :
+                    (row?.paramvalue != null ? String(row.paramvalue) :
+                        (row?.raw_value != null ? String(row.raw_value) :
+                            (row?.value != null ? String(row.value) : null)));
+                const lastUpdate = row?.orig_time != null ? String(row.orig_time) :
+                    (row?.last_update != null ? String(row.last_update) :
+                        (row?.last_update_date != null ? String(row.last_update_date) : null));
                 const prev = latest.get(id);
                 latest.set(id, {
                     id,
@@ -178,10 +196,28 @@ async function collectVehicleMonitorSnapshot(opts) {
                     inner_id: row?.inner_id != null ? String(row.inner_id) : prev?.inner_id ?? null,
                 });
             }
+            // STREAMING PROGRESSIVO: passa header e moduleState já disponíveis desde o início
+            if (opts.onPartialParams) {
+                try {
+                    const allParams = Array.from(latest.values());
+                    const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
+                    opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents }, header, moduleState);
+                }
+                catch { /* best-effort */ }
+            }
             return;
         }
         if (ds === "UNIT_MESSAGES") {
             unitMessagesEvents++;
+            // Captura driver_code dos pacotes UNIT_MESSAGES — preenchido quando iButton/keypad está ativo
+            const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
+            for (const row of rows) {
+                const dc = row?.driver_code != null ? String(row.driver_code).trim() : "";
+                if (dc) {
+                    header.driver_code = dc;
+                    break;
+                }
+            }
             return;
         }
         if (ds === "unit_connection_status") {
@@ -199,23 +235,6 @@ async function collectVehicleMonitorSnapshot(opts) {
     await sleep(waitAfterCmdMs);
     await sleep(windowMs);
     off();
-    // Module State (regra robusta: NÃO confiar em id fixo, usar module/sub)
-    const ms = await mux.sendAction("get_monitor_module_state", {
-        tag: "loading_screen",
-        filter: "",
-        vehicle_id: String(opts.vehicleId),
-    });
-    const moduleState = (ms?.data ?? []).map((r) => ({
-        id: String(r?.id ?? ""),
-        module: String(r?.module_descr ?? ""),
-        sub: String(r?.sub_module_descr ?? ""),
-        last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-        active: asBool01(r?.active),
-        was_ok: asBool01(r?.was_ok),
-        ok: asBool01(r?.ok),
-        error: asBool01(r?.error),
-        error_descr: r?.error_descr != null ? String(r.error_descr) : null,
-    }));
     await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => { });
     return {
         capturedAt: new Date().toISOString(),

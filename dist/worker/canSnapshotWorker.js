@@ -608,7 +608,7 @@ function __cs_summarizeSnapshot(snap){
   if (!snap || typeof snap !== "object") return null;
   const params = Array.isArray(snap.parameters) ? snap.parameters : [];
   const ms = Array.isArray(snap.moduleState) ? snap.moduleState : [];
-  const idsKeep = new Set(["8","9","15","19","20"]);
+  const idsKeep = new Set(["8","9","15","18","19","20"]); // 18=KEYPAD_DALLAS
 
   const pickedMs = ms.filter(function(r){
     const id = String((r && (r.id || r.module_id || r.moduleId)) || "").trim();
@@ -636,7 +636,7 @@ function __cs_summarizeSnapshot(snap){
     serial: hdr.serial || hdr.inner_id || null,
     license_nmbr: hdr.license_nmbr || hdr.license_number || null,
     license_number: hdr.license_number || hdr.license_nmbr || null,
-    driver_code: hdr.driver_code || null,
+    driver_code: hdr.driver_code || (hdr.raw && hdr.raw.driver_code) || null,
     communication: hdr.communication || hdr.server_time || null,
     server_time: hdr.server_time || hdr.communication || null,
     gps: hdr.gps || null,
@@ -751,6 +751,8 @@ async function takeSnapshotOnce(sessionToken, vehicleId, opt){
       windowMs: Number(opt.windowMs || opt.window_ms || VM_WINDOW_MS),
       waitAfterCmdMs: Number(opt.waitAfterCmdMs || opt.wait_after_cmd_ms || VM_WAIT_AFTER_CMD_MS),
       urlEncode: URL_ENCODE,
+      // STREAMING PROGRESSIVO: publica snapshot parcial ao backend a cada pacote recebido
+      onPartialParams: opt.onPartialParams || null,
     });
     // adiciona contexto (sem quebrar UI)
     snap.vehicleId = vehicleId;
@@ -854,9 +856,11 @@ async function pollOnce(){
     if (__isPostSb && installationId) {
       try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "WAITING_REBOOT_CAN", worker_job_id: jobId } }); } catch(_e) {}
 
-      // snapshot rápido (baseline)
+      // snapshot rápido (baseline) — best-effort, não bloqueia o fluxo se falhar
       try {
-        const pre = await takeSnapshotOnce(sessionToken, vehicleId, { windowMs: 4000, waitAfterCmdMs: 500 });
+        const prePromise = takeSnapshotOnce(sessionToken, vehicleId, { windowMs: 4000, waitAfterCmdMs: 500 });
+        const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error("baseline snapshot timeout 15s")), 15000));
+        const pre = await Promise.race([prePromise, timeoutPromise]);
         const preSum = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(pre) || pre) : pre;
         const hdr = preSum && preSum.header ? preSum.header : (pre && pre.header) ? pre.header : null;
         const pkt = __pickPacketTsFromHeader(hdr);
@@ -864,11 +868,12 @@ async function pollOnce(){
         const prog = __pickProgressFromHeader(hdr);
         await postInstallationCanSnapshot(installationId, preSum, { status: "SB_RUNNING", phase: "SB_UPDATE", sb_progress: prog, packet_ts: pkt, job_id: jobId });
       } catch(e) {
+        console.log(`[WARN] baseline snapshot falhou (não crítico): ${e?.message || e}`);
         errors.push(String(e?.message || e));
       }
 
       // sleep 60s (reboot)
-      const __sleepMs = clampInt(p.reboot_sleep_ms, 0, 300000, 60000);
+      const __sleepMs = clampInt(p.reboot_sleep_ms, 0, 300000, 10000); // DEV: reduzido de 60s para 10s
       if (__sleepMs > 0) {
         try { await postInstallationPatch(installationId, { status: "WAITING_REBOOT_CAN", can: { phase: "SLEEP_REBOOT", sleep_ms: __sleepMs } }); } catch(_e) {}
         await sleep(__sleepMs);
@@ -930,7 +935,30 @@ for(let i=0;i<cycles;i++){
             break;
           }
         }
-        const snap = await takeSnapshotOnce(sessionToken, vehicleId);
+        const snap = await takeSnapshotOnce(sessionToken, vehicleId, {
+          // STREAMING PROGRESSIVO: publica no backend a cada pacote, sem esperar o fim da janela
+          onPartialParams: installationId ? async (params, counts, liveHeader, liveModuleState) => {
+            try {
+              const partialSnap = {
+                capturedAt: new Date().toISOString(),
+                vehicleId,
+                isConnected: null,
+                // header já inclui driver_code capturado do UNIT_MESSAGES
+                header: (liveHeader && typeof liveHeader === "object") ? liveHeader : {},
+                parameters: params,
+                // moduleState buscado antes da janela — disponível desde o primeiro pacote
+                moduleState: Array.isArray(liveModuleState) ? liveModuleState : [],
+                rawCounts: { unitParametersEvents: counts.events, unitMessagesEvents: 0, unitConnEvents: 0 },
+                _partial: true,
+              };
+              const partialSum = (typeof __cs_summarizeSnapshot === "function") ? (__cs_summarizeSnapshot(partialSnap) || partialSnap) : partialSnap;
+              await postInstallationCanSnapshot(installationId, partialSum, {
+                status: "CAN_RUNNING", phase: "CAN_PARTIAL", cycle: i+1, cycles,
+                partial: true, params_total: counts.total, params_with_value: counts.withValue,
+              });
+            } catch(_) { /* best-effort */ }
+          } : null,
+        });
       // __lastSnap removed (was causing ReferenceError) /*__FIX_LASTSNAP__*/
         snapshots.unshift(snap); // newest first
         try {
@@ -943,8 +971,10 @@ for(let i=0;i<cycles;i++){
         try { console.log("[INFO] cycle-summary", jobId, "c=", (i+1), (__sum && __sum.counts) || null, (__sum && __sum.rawCounts) ? __sum.rawCounts : null); } catch(_e) {}
 
     // __CAN_MULTI_REFRESH_V3__ guards
-    const __msg = Number((rawCounts && rawCounts.unit_messages_events) || (counts && counts.unit_messages_events) || 0);
-    const __conn = Number((rawCounts && rawCounts.unit_conn_events) || (counts && counts.unit_conn_events) || 0);
+    // __FIX_RAWCOUNTS_SCOPE__: rawCounts não existe neste escopo; usa snap.rawCounts
+    const __snapRawCounts = (snap && (snap.rawCounts || snap.raw_counts)) || null;
+    const __msg = Number((__snapRawCounts && __snapRawCounts.unit_messages_events) || (counts && counts.unit_messages_events) || 0);
+    const __conn = Number((__snapRawCounts && __snapRawCounts.unit_conn_events) || (counts && counts.unit_conn_events) || 0);
 
     // 1) já está bom: para cedo
     if (MR_ENABLED && pTot >= MR_STOP_AT_PARAMS) {

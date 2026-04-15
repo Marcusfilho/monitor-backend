@@ -71,6 +71,17 @@ function patchInstallation(id, patch) {
   rec.updated_at = nowIso();
   mem.installations[rec.installation_id] = rec;
   save();
+  // hook: cancelar jobs ativos ao encerrar instalação
+  const newStatus = (patch || {}).status;
+  if (newStatus === "COMPLETED" || newStatus === "CANCELLED") {
+    try {
+      const jStore = require("../jobs/jobStore");
+      const active = ["pending", "processing", "queued"];
+      jStore.listJobs()
+        .filter(function(j) { return j.installation_id === rec.installation_id && active.includes(j.status); })
+        .forEach(function(j) { jStore.updateJob(j.id, { status: "cancelled" }); });
+    } catch(e) {}
+  }
   return rec;
 }
 
@@ -97,9 +108,14 @@ function setResolved(id, resolvedPatch) {
   return rec;
 }
 
+function listInstallations() {
+  load();
+  return Object.values(mem.installations || {});
+}
 module.exports = {
   createInstallation,
   getInstallation,
+  listInstallations,
   patchInstallation,
   pushJob,
   setResolved,

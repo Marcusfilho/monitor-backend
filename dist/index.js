@@ -13,6 +13,8 @@ const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const jobRoutes_1 = __importDefault(require("./routes/jobRoutes"));
 const adminCatalogRoutes_1 = __importDefault(require("./routes/adminCatalogRoutes"));
 const installationsRoutes_1 = __importDefault(require("./routes/installationsRoutes"));
+const clientRoutes_1 = __importDefault(require("./routes/clientRoutes"));
+const html5CookieRoutes_1 = __importDefault(require("./routes/html5CookieRoutes"));
 const sessionTokenStore_1 = require("./services/sessionTokenStore");
 const migrate_1 = require("./db/migrate");
 const cors_1 = __importDefault(require("cors"));
@@ -105,10 +107,17 @@ app.get("/health", (_req, res) => {
     });
 });
 // Rotas
+// Rota pública: status da sessão (sem expor token ou admin key)
+app.get("/api/session-status", (_req, res) => {
+    const s = (0, sessionTokenStore_1.getSessionTokenStatus)();
+    res.json({ hasToken: s.hasToken, tokenLen: s.tokenLen });
+});
 app.use("/api/admin/catalogs", adminCatalogRoutes_1.default);
 app.use("/api/auth", authRoutes_1.default);
 app.use("/api/monitor", monitorRoutes_1.default);
 app.use("/api/installations", installationsRoutes_1.default);
+app.use("/api/clients", clientRoutes_1.default);
+app.use("/api/session", html5CookieRoutes_1.default);
 app.use("/api/jobs", jobRoutes_1.default);
 app.use("/api/scheme-builder", schemeBuilderRoutes_1.default);
 app.use("/api/admin", adminRoutes_1.default);

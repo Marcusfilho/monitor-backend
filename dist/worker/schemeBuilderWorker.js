@@ -54,11 +54,19 @@ try {
         workerId,
         workerKey,
         intervalMs,
-        getState: () => ({
-            status: "running",
-            checks: { backend_ok: true },
-            meta: { uptime_s: Math.round(process.uptime()) },
-        }),
+        getState: () => {
+            let session_ok = false;
+            try {
+                const tok = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
+                session_ok = tok.length >= 20;
+            }
+            catch { }
+            return {
+                status: "running",
+                checks: { backend_ok: true, session_ok },
+                meta: { uptime_s: Math.round(process.uptime()) },
+            };
+        },
     });
     console.log("[hb] enabled (src):", { workerId, intervalMs });
 }
@@ -106,16 +114,28 @@ const TRAFFILOG_API_BASE_URL = (process.env.TRAFFILOG_API_BASE_URL || process.en
 const TRAFFILOG_LOGIN_URL = (process.env.TRAFFILOG_LOGIN_URL || "").trim(); // opcional (se quiser apontar direto no /user_login/)
 const WS_LOGIN_NAME = (process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN_NAME || "").trim();
 const WS_PASSWORD = (process.env.WS_PASSWORD || process.env.MONITOR_PASSWORD || "").trim();
+// Formato do arquivo: <timestamp_ms>:<token>\n
+// Isso torna a validade independente do mtime (enganoso após boot/restore)
 function readTokenIfFresh() {
     try {
-        const st = fs.statSync(MONITOR_SESSION_TOKEN_PATH);
-        const age = Date.now() - st.mtimeMs;
-        if (age > MONITOR_SESSION_TOKEN_TTL_MS)
+        const raw = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
+        if (!raw)
             return null;
-        const tok = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
-        if (tok.length < 20)
-            return null;
-        return tok;
+        const colonIdx = raw.indexOf(":");
+        if (colonIdx > 0) {
+            const ts = Number(raw.slice(0, colonIdx));
+            const tok = raw.slice(colonIdx + 1).trim();
+            if (!isNaN(ts) && tok.length >= 20) {
+                const age = Date.now() - ts;
+                if (age > MONITOR_SESSION_TOKEN_TTL_MS) {
+                    console.log(`[worker] session_token expirado (age=${Math.round(age / 1000)}s) — renovando`);
+                    return null;
+                }
+                return tok;
+            }
+        }
+        console.log("[worker] session_token sem timestamp interno — forçando renovação");
+        return null;
     }
     catch {
         return null;
@@ -157,7 +177,9 @@ async function ensureLocalSessionTokenFile() {
     }
     const tok = await userLoginAndGetToken();
     try {
-        fs.writeFileSync(MONITOR_SESSION_TOKEN_PATH, tok + "\n", { mode: 0o600 });
+        // Grava timestamp:token para validação independente de mtime
+        const ts = Date.now();
+        fs.writeFileSync(MONITOR_SESSION_TOKEN_PATH, `${ts}:${tok}\n`, { mode: 0o600 });
     }
     catch {
         // mesmo se não conseguir gravar, mantém em memória
@@ -226,7 +248,7 @@ async function fetchNextJobOfType(type) {
             job.payload.sessionToken = tok;
         }
         // garante tag do job no comment
-        job.payload.comment = appendJobTag(job.payload.comment, job.id);
+        // job.payload.comment = appendJobTag(job.payload.comment, job.id); // removido: não poluir comment visível
         return job;
     }
     catch (e) {
@@ -296,11 +318,14 @@ async function processJob(job) {
                 GS_ENABLE: "0",
                 GS_ONLY: "0",
             }),
+            SB_JOB_ID: job.id,
+            SB_JOB_SERVER_URL: JOB_SERVER_BASE_URL,
+            SB_WORKER_KEY: WORKER_KEY,
         };
         const r = (0, child_process_1.spawnSync)(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
         if (r.status !== 0)
             throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
-        await completeJob(job.id, "ok", { status: "ok", stdout: r.stdout, stderr: r.stderr });
+        await completeJob(job.id, "ok", { status: "ok" });
     }
     catch (err) {
         console.error(`[worker] Erro no job ${job.id}:`, err?.message || err);
@@ -310,6 +335,14 @@ async function processJob(job) {
 async function mainLoop() {
     assertJobServerIsSafe(JOB_SERVER_BASE_URL);
     console.log(`[worker] Iniciando. JOB_SERVER_BASE_URL=${JOB_SERVER_BASE_URL}, WORKER_ID=${WORKER_ID}`);
+    // Renova token no boot — não espera chegar um job com token expirado
+    try {
+        const tok = await ensureLocalSessionTokenFile();
+        console.log(`[worker] session_token renovado no boot (len=${tok.length})`);
+    }
+    catch (e) {
+        console.error("[worker] AVISO: falha ao renovar token no boot:", e?.message || e);
+    }
     let pollMs = BASE_POLL_INTERVAL_MS;
     while (true) {
         const job = await fetchNextJob();

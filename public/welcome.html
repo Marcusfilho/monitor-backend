@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Monitor — Iniciando</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+    :root {
+      --bg:      #080c10;
+      --panel:   #0c1219;
+      --line:    #1a2535;
+      --text:    #d4dde8;
+      --muted:   #4a6080;
+      --accent:  #3b82f6;
+      --good:    #22c55e;
+      --bad:     #ef4444;
+      --mono:    'IBM Plex Mono', monospace;
+      --sans:    'IBM Plex Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-weight: 300;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* grid de fundo */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: .35;
+      pointer-events: none;
+    }
+
+    /* brilho central */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(59,130,246,.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 48px;
+      padding: 32px;
+      text-align: center;
+    }
+
+    /* Logo / marca */
+    .brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--panel);
+    }
+
+    .brand-icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: var(--accent);
+      fill: none;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .brand-name {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* Botão principal */
+    #btnEnter {
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid #253347;
+      border-radius: 12px;
+      padding: 14px 36px;
+      cursor: pointer;
+      transition: border-color .2s, box-shadow .2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #btnEnter::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(59,130,246,.08), transparent 60%);
+      opacity: 0;
+      transition: opacity .2s;
+    }
+
+    #btnEnter:hover:not(:disabled) { border-color: #3b5880; box-shadow: 0 0 24px rgba(59,130,246,.12); }
+    #btnEnter:hover:not(:disabled)::before { opacity: 1; }
+    #btnEnter:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Status */
+    .status-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      min-height: 56px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0;
+      transition: opacity .3s;
+    }
+
+    .status-row.visible { opacity: 1; }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .dot.spin {
+      background: var(--accent);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .dot.ok  { background: var(--good); }
+    .dot.err { background: var(--bad);  }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .4; transform: scale(.7); }
+    }
+
+    /* Barra de progresso */
+    .progress-bar {
+      width: 220px;
+      height: 2px;
+      background: var(--line);
+      border-radius: 2px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    .progress-bar.visible { opacity: 1; }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width .4s ease;
+    }
+
+    /* Mensagem de erro */
+    .err-box {
+      display: none;
+      background: rgba(239,68,68,.08);
+      border: 1px solid rgba(239,68,68,.25);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #fca5a5;
+      max-width: 320px;
+      line-height: 1.5;
+    }
+    .err-box.visible { display: block; }
+
+    /* Seleção de técnico */
+    .tech-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 280px;
+    }
+    .tech-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      align-self: flex-start;
+    }
+    #techSelect {
+      width: 100%;
+      padding: 12px 36px 12px 14px;
+      background: var(--panel);
+      border: 1px solid #253347;
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 300;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a6080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    #techSelect:focus { border-color: #3b5880; }
+    #techSelect option { background: #0c1219; }
+
+    /* Rodapé */
+    .footer {
+      position: fixed;
+      bottom: 24px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      opacity: .5;
+      letter-spacing: .08em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <span class="brand-name">App instalador</span>
+  </div>
+
+  <div class="tech-wrap">
+    <span class="tech-label">Técnico</span>
+    <select id="techSelect">
+      <option value="">Carregando...</option>
+    </select>
+  </div>
+
+  <button id="btnEnter" disabled>Entrar</button>
+
+  <div class="status-area">
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="status-row" id="statusRow">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusTxt"></span>
+    </div>
+    <div class="err-box" id="errBox"></div>
+  </div>
+
+</div>
+
+<div class="footer">questar · monitor-backend-dev</div>
+
+<script>
+  const btnEnter    = document.getElementById("btnEnter");
+  const techSelect  = document.getElementById("techSelect");
+  const statusRow   = document.getElementById("statusRow");
+  const statusDot   = document.getElementById("statusDot");
+  const statusTxt   = document.getElementById("statusTxt");
+  const progressBar = document.getElementById("progressBar");
+  const progressFill= document.getElementById("progressFill");
+  const errBox      = document.getElementById("errBox");
+
+  const API = "";
+  const LS_TECH = "inst_technician_id";
+  const LS_TECH_NICK = "inst_technician_nick";
+
+  function setStatus(msg, type = "spin") {
+    statusRow.classList.add("visible");
+    statusDot.className = "dot " + type;
+    statusTxt.textContent = msg;
+  }
+
+  function setProgress(pct) {
+    progressBar.classList.add("visible");
+    progressFill.style.width = Math.min(100, pct) + "%";
+  }
+
+  function showError(msg) {
+    errBox.textContent = msg;
+    errBox.classList.add("visible");
+  }
+
+  // Carrega lista de técnicos do JSON estático
+  async function loadTechnicians() {
+    try {
+      const r = await fetch("/app/technicians.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      const list = data.technicians || [];
+
+      techSelect.innerHTML = '<option value="">— Selecione seu nome —</option>';
+      for (const t of list) {
+        const o = document.createElement("option");
+        o.value = t.id;
+        o.textContent = t.nick;
+        o.dataset.nick = t.nick;
+        techSelect.appendChild(o);
+      }
+
+      // pré-seleciona último técnico salvo
+      const saved = localStorage.getItem(LS_TECH);
+      if (saved) {
+        const found = [...techSelect.options].find(o => o.value === saved);
+        if (found) { techSelect.value = saved; btnEnter.disabled = false; }
+      }
+    } catch(e) {
+      techSelect.innerHTML = '<option value="">Erro ao carregar lista</option>';
+      console.error("[technicians]", e);
+    }
+  }
+
+  techSelect.addEventListener("change", () => {
+    btnEnter.disabled = !techSelect.value;
+    errBox.classList.remove("visible");
+  });
+
+  async function api(path, opts = {}) {
+    const r = await fetch(API + path, {
+      headers: { "content-type": "application/json" },
+      ...opts,
+    });
+    const data = await r.json().catch(() => null);
+    return { ok: r.ok, status: r.status, data };
+  }
+
+  async function pollJobUntilDone(jobId, timeoutMs = 90000) {
+    const deadline = Date.now() + timeoutMs;
+    let lastPct = 10;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const r = await api(`/api/jobs/${jobId}`);
+        if (!r.ok || !r.data) continue;
+        const job = r.data.job || r.data;
+        const pct = Number(job.progress ?? job.percent ?? lastPct);
+        if (pct > lastPct) { lastPct = pct; setProgress(pct); }
+        if (job.status === "ok" || job.status === "completed") return { ok: true };
+        if (job.status === "error") return { ok: false, message: job.result?.message || "Erro no warmup" };
+      } catch { /* continua */ }
+    }
+    return { ok: false, message: "Timeout aguardando sessão (90s)" };
+  }
+
+  btnEnter.addEventListener("click", async () => {
+    const opt = techSelect.options[techSelect.selectedIndex];
+    if (!opt || !opt.value) return;
+
+    // Salva técnico no localStorage antes de qualquer coisa
+    localStorage.setItem(LS_TECH, opt.value);
+    localStorage.setItem(LS_TECH_NICK, opt.dataset.nick || opt.textContent);
+
+    btnEnter.disabled = true;
+    errBox.classList.remove("visible");
+    setProgress(5);
+    setStatus("preparando sessão...");
+
+    try {
+      const r = await api("/api/jobs", {
+        method: "POST",
+        body: JSON.stringify({ type: "html5_warmup", payload: {} }),
+      });
+
+      if (!r.ok || !r.data?.job?.id) {
+        throw new Error("Não foi possível criar job de warmup (status " + r.status + ")");
+      }
+
+      const jobId = r.data.job.id;
+      setProgress(15);
+      setStatus("autenticando sessão HTML5...");
+
+      const result = await pollJobUntilDone(jobId);
+
+      if (!result.ok) {
+        throw new Error(result.message || "Falha no warmup");
+      }
+
+      setProgress(100);
+      setStatus("sessão pronta — abrindo...", "ok");
+      await new Promise(r => setTimeout(r, 600));
+      window.location.href = "/app/app_installations_v1.html";
+
+    } catch (e) {
+      setStatus("falha na sessão", "err");
+      setProgress(0);
+      showError(e.message || "Erro desconhecido");
+      btnEnter.disabled = false;
+    }
+  });
+
+  // Inicia carregando a lista imediatamente
+  loadTechnicians();
+</script>
+</body>
+</html>

@@ -1,10 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const html5Client_1 = require("../services/html5Client");
 const requireWorkerKey_1 = require("../middleware/requireWorkerKey");
 const router = (0, express_1.Router)();
 // require(any) pra não travar por typings enquanto estabiliza V1
 const installationsStore = require("../services/installationsStore");
+const jobStore = (() => { try {
+    return require("../jobs/jobStore");
+}
+catch (_) {
+    return null;
+} })();
 const installationsEngine = require("../services/installationsEngine");
 function pickFn(obj, names) {
     for (const n of names)
@@ -71,7 +78,7 @@ router.post("/", async (req, res) => {
         const instTok = inst?.installation_token || inst?.token || null;
         // 2) enqueue job inicial (via loopback /api/jobs)
         const svc = payload.service || inst?.service || null;
-        const jobType = "html5_install"; // compat: worker busca html5_install; service decide o fluxo
+        const jobType = jobTypeFromService(svc); // usa tipo correto por service (ex: html5_maint_no_swap)
         // normalize/allowlist: manter job pequeno, mas completo para INSTALL
         const plateReal = payload.plate_real ||
             payload.plateReal ||
@@ -134,17 +141,39 @@ router.post("/", async (req, res) => {
             installation_token: instTok,
             service: svc,
             // compat: worker já entende plate/serial
-            plate: ((String(svc || "").trim().toUpperCase() === "INSTALL") ? (plateLookup || serial || plateReal) : plateReal),
+            // plate: quando vehicle_id_final existe (resolver rodou), usa plate_real
+            // caso contrário mantém comportamento original (lookup por serial ou placa)
+            plate: (payload.vehicle_id_final
+                ? plateReal
+                : ((String(svc || "").trim().toUpperCase() === "INSTALL") ? (plateLookup || serial || plateReal) : plateReal)),
+            // LICENSE_NMBR explícito para o v8 não tentar resolver via VHCLS pelo serial
+            LICENSE_NMBR: plateReal || null,
             serial,
             // campos explícitos pro INSTALL
             plate_real: plateReal,
             plate_lookup: plateLookup,
             target_client_id: targetClientId,
             assetType,
+            vehicleSettingId: payload.vehicleSettingId || payload.vehicle_setting_id || payload.vehicleSettingID || null,
             installedBy,
             comments,
             installationDate,
             gsensor,
+            // vehicle_id resolvido pelo vehicleResolverWorker (Fase 1)
+            // worker v8 lê: vehicle_id || VEHICLE_ID || vehicleId
+            vehicle_id: payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+            VEHICLE_ID: payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+            vehicleId: payload.vehicle_id_final || payload.vehicle_id || payload.VEHICLE_ID || payload.vehicleId || null,
+            vehicle_id_final: payload.vehicle_id_final || null,
+            // client_id_target: necessário para o v8 executar CHANGE_COMPANY durante INSTALL
+            // o v8 compara curClientId (ASSET_BASIC_LOAD) com client_id_target para decidir trocar empresa
+            client_id_target: targetClientId ? String(targetClientId) : null,
+            CLIENT_ID_TARGET: targetClientId ? String(targetClientId) : null,
+            clientIdTarget: targetClientId ? String(targetClientId) : null,
+            // flags de confirmação do app
+            confirmed_change_company: payload.confirmed_change_company || false,
+            confirmed_serial_swap: payload.confirmed_serial_swap || false,
+            needs_uninstall_cmdt: payload.needs_uninstall_cmdt || false,
         };
         const adminKey = pickAdminKey();
         const headers = {};
@@ -205,6 +234,58 @@ router.post("/", async (req, res) => {
     catch (e) {
         console.error("[installationsRoutes] POST / error:", e && (e.stack || e.message || String(e)));
         return res.status(500).json({ ok: false, error: "Internal Server Error" });
+    }
+});
+// ADMIN_LIST_V1
+router.get("/", (_req, res) => {
+    try {
+        const list = typeof installationsStore.listInstallations === "function"
+            ? installationsStore.listInstallations()
+            : [];
+        return res.json({ installations: list });
+    }
+    catch (e) {
+        return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+});
+// ADMIN_CANCEL_V1
+router.post("/:id/cancel", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const inst = installationsStore.getInstallation(id);
+        if (!inst)
+            return res.status(404).json({ ok: false, error: "not found" });
+        const TERMINAL = ["COMPLETED", "CANCELLED", "ERROR", "CAN_SNAPSHOT_ERROR"];
+        if (TERMINAL.includes(String(inst.status || "").toUpperCase()))
+            return res.json({ ok: true, skipped: true, reason: "already_terminal", status: inst.status });
+        const updated = installationsStore.patchInstallation(id, {
+            status: "CANCELLED",
+            last_error: { ts: new Date().toISOString(), message: "cancelled_by_admin" }
+        });
+        return res.json({ ok: true, installation: updated });
+    }
+    catch (e) {
+        return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+});
+// ---------------------------------------------------------------------------
+// GET /api/installations/vhcls-lookup?plate=XXX
+// Proxy para buscar o serial instalado na placa via VHCLS (evita CORS no browser)
+// ---------------------------------------------------------------------------
+router.get("/vhcls-lookup", async (req, res) => {
+    try {
+        const plate = String(req.query.plate || "").trim();
+        if (!plate)
+            return res.status(400).json({ ok: false, error: "plate obrigatório" });
+        const records = await (0, html5Client_1.vhclsQueryByPlate)(plate);
+        const match = records.find(r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase());
+        if (!match || (0, html5Client_1.isEmptyInnerId)(match.inner_id)) {
+            return res.json({ ok: true, serial: null });
+        }
+        return res.json({ ok: true, serial: (0, html5Client_1.normalizeSerial)(match.inner_id) });
+    }
+    catch (e) {
+        return res.status(500).json({ ok: false, error: e.message || "erro interno" });
     }
 });
 router.get("/:id", async (req, res) => {
@@ -482,4 +563,52 @@ router.post("/:id/actions/approve-can", async (req, res) => {
         return res.status(500).json({ ok: false, error: "Internal Server Error" });
     }
 });
+// =============================================================================
+// VEHICLE_RESOLVER_V1
+// POST /api/installations/resolve
+//
+// Fase 1 (resolução sem execução): identifica o vehicle_id correto no HTML5
+// para INSTALL e MAINT_WITH_SWAP, e detecta conflito de cliente.
+//
+// O app chama esse endpoint ANTES de criar a instalação.
+// Nenhuma ação destrutiva é executada aqui.
+// =============================================================================
+// =============================================================================
+// COMPLETE_MAINT_V1
+// POST /api/installations/:id/actions/complete-maint
+// Finaliza MAINT_NO_SWAP sem validação CAN — seta status COMPLETED diretamente.
+// =============================================================================
+router.post("/:id/actions/complete-maint", async (req, res) => {
+    try {
+        const id = String(req.params.id || "");
+        if (!id)
+            return res.status(400).json({ ok: false, error: "missing id" });
+        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(id) : null;
+        if (!inst)
+            return res.status(404).json({ ok: false, error: "installation not found" });
+        const svc = String(inst?.service || inst?.payload?.service || "").toUpperCase();
+        if (svc !== "MAINT_NO_SWAP")
+            return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
+        // Cancelar job CAN pendente para não continuar enviando refreshes ao Monitor
+        try {
+            const allJobs = jobStore?.listJobs ? jobStore.listJobs() : [];
+            const canJob = allJobs.find((j) => j?.type === "monitor_can_snapshot" &&
+                String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(id) &&
+                !["completed", "cancelled", "error"].includes(String(j?.status || "")));
+            if (canJob) {
+                jobStore.updateJob(canJob.id, { status: "cancelled" });
+                console.log(`[installationsRoutes] complete-maint: CAN job=${canJob.id} cancelado`);
+            }
+        }
+        catch (_) { }
+        installationsStore.patchInstallation(id, { status: "COMPLETED" });
+        console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
+        return res.json({ ok: true, status: "COMPLETED" });
+    }
+    catch (e) {
+        console.error("[installationsRoutes] complete-maint error:", e && (e.stack || e.message || String(e)));
+        return res.status(500).json({ ok: false, error: "Internal Server Error" });
+    }
+});
+// ATENÇÃO: esse bloco deve ser adicionado ANTES do "export default router;
 exports.default = router;

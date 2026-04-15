@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/jobRoutes.ts
 const express_1 = require("express");
 const jobStore_1 = require("../jobs/jobStore");
+const requireWorkerKey_1 = require("../middleware/requireWorkerKey");
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
 function pickCanSnapshotFromCompleteBody(root) {
     const first = (v) => Array.isArray(v) && v.length ? v[0] : null;
@@ -142,11 +143,19 @@ function _resultOk(result) {
     if (result.ok === true)
         return true;
     const st = String(result.status || "").toLowerCase();
-    return st === "ok" || st === "success" || st === "done" || st === "completed";
+    if (st === "ok" || st === "success" || st === "done" || st === "completed")
+        return true;
+    // MAINT_WITH_SWAP: worker retorna result sem ok/status mas com flow+vehicle_id
+    const flow = String(result.flow || "").toUpperCase();
+    if (flow === "MAINT_WITH_SWAP" && result.vehicle_id)
+        return true;
+    return false;
 }
 function _pickVehicleId(job, result) {
     const meta = (result && typeof result === "object") ? result.meta : null;
-    return _num(meta?.vehicle_id ?? meta?.VEHICLE_ID ?? result?.vehicle_id ?? result?.VEHICLE_ID);
+    return _num(meta?.vehicle_id ?? meta?.VEHICLE_ID ??
+        result?.vehicle_id ?? result?.VEHICLE_ID ??
+        job?.payload?.vehicle_id_final ?? job?.payload?.vehicle_id ?? job?.payload?.VEHICLE_ID ?? job?.payload?.vehicleId);
 }
 function _pickClientId(inst, job, result) {
     return _num(inst?.payload?.target_client_id ??
@@ -321,6 +330,10 @@ function _handleHtml5CompleteToInstallation(job, result, finalStatus, jobId) {
                 installationsStore.patchInstallation(installationId, { last_error: null });
             }
             catch { }
+            try {
+                installationsStore.patchInstallation(installationId, { status: "HTML5_DONE" });
+            }
+            catch { }
             return;
         }
         const err = Object.assign({ ts: now, job_id: String(jobId || job?.id || ""), job_type: type }, _pickErrSummary(result));
@@ -336,7 +349,108 @@ function _handleHtml5CompleteToInstallation(job, result, finalStatus, jobId) {
         console.log("[jobs] handle HTML5 complete failed:", e && (e.message || String(e)));
     }
 }
-function _enqueueSchemeBuilderAfterHtml5(job, result) {
+// =============================================================================
+// SB_SKIP_V2: consulta GET_VHCL_ACTIVATION_DATA_NEW para ler o estado atual
+// do veículo no Monitor (ASSIGNED_VEHICLE_SETTING_ID + ASSET_TYPE).
+// Não precisa de cookie/sessão — endpoint público do HTML5.
+// =============================================================================
+const _HTML5_ACTION_URL_JR = (process.env.HTML5_ACTION_URL || "https://html5.traffilog.com/AppEngine_2_1/default.aspx").trim();
+const _SB_SKIP_TIMEOUT_MS = Number(process.env.SB_SKIP_TIMEOUT_MS || "8000");
+function _readHtml5CookieHeader() {
+    try {
+        const fs = require("fs");
+        const path = (process.env.HTML5_COOKIEJAR_PATH || "/tmp/html5_cookiejar.json").trim();
+        if (!fs.existsSync(path))
+            return "";
+        const raw = fs.readFileSync(path, "utf8");
+        if (!raw)
+            return "";
+        let j = null;
+        try {
+            j = JSON.parse(raw);
+        }
+        catch {
+            j = raw;
+        }
+        if (!j)
+            return "";
+        if (typeof j === "string")
+            return j.trim();
+        if (typeof j.cookieHeader === "string")
+            return j.cookieHeader.trim();
+        if (typeof j.cookie === "string")
+            return j.cookie.trim();
+        return "";
+    }
+    catch (_) {
+        return "";
+    }
+}
+function _getVhclActivationData(vehicleId, clientId) {
+    return new Promise((resolve) => {
+        try {
+            const https = require("https");
+            const { URL } = require("url");
+            const u = new URL(_HTML5_ACTION_URL_JR);
+            const body = Buffer.from(`VEHICLE_ID=${encodeURIComponent(String(vehicleId))}&CLIENT_ID=${encodeURIComponent(String(clientId))}&action=GET_VHCL_ACTIVATION_DATA_NEW&VERSION_ID=2`, "utf8");
+            const cookieHeader = _readHtml5CookieHeader();
+            const headers = {
+                "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "content-length": String(body.length),
+                "accept": "*/*",
+                "origin": "https://html5.traffilog.com",
+                "referer": "https://html5.traffilog.com/appv2/index.htm",
+            };
+            if (cookieHeader)
+                headers["cookie"] = cookieHeader;
+            const req = https.request({
+                protocol: u.protocol,
+                hostname: u.hostname,
+                port: u.port ? Number(u.port) : 443,
+                path: (u.pathname || "/") + (u.search || ""),
+                method: "POST",
+                headers,
+            }, (res) => {
+                const chunks = [];
+                res.on("data", (c) => chunks.push(Buffer.from(c)));
+                res.on("end", () => {
+                    try {
+                        const txt = Buffer.concat(chunks).toString("utf8");
+                        console.log(`[jobs] SB_SKIP_V2 GET_VHCL_ACTIVATION_DATA_NEW vehicleId=${vehicleId} len=${txt.length} head=${txt.slice(0, 120)}`);
+                        const mSetting = txt.match(/ASSIGNED_VEHICLE_SETTING_ID\s*=\s*"(\d+)"/i);
+                        const mAsset = txt.match(/ASSET_TYPE\s*=\s*"(\d+)"/i);
+                        resolve({
+                            settingId: mSetting ? Number(mSetting[1]) : null,
+                            assetType: mAsset ? Number(mAsset[1]) : null,
+                        });
+                    }
+                    catch (_) {
+                        resolve({ settingId: null, assetType: null });
+                    }
+                });
+            });
+            req.setTimeout(_SB_SKIP_TIMEOUT_MS, () => { req.destroy(); resolve({ settingId: null, assetType: null }); });
+            req.on("error", () => resolve({ settingId: null, assetType: null }));
+            req.write(body);
+            req.end();
+        }
+        catch (_) {
+            resolve({ settingId: null, assetType: null });
+        }
+    });
+}
+// =============================================================================
+function _alreadyHasChangeCompany(installationId) {
+    try {
+        return (0, jobStore_1.listJobs)().some((j) => j?.type === "resolver_change_company" &&
+            String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(installationId) &&
+            j?.status !== "error");
+    }
+    catch {
+        return false;
+    }
+}
+function _enqueueChangeCompanyAfterHtml5(job, result) {
     try {
         if (!job || String(job.type || "") !== "html5_install")
             return;
@@ -345,18 +459,116 @@ function _enqueueSchemeBuilderAfterHtml5(job, result) {
         const installationId = _getInstallationId(job);
         if (!installationId)
             return;
+        const confirmed = job.payload?.confirmed_change_company === true ||
+            job.payload?.confirmed_change_company === "true" ||
+            job.payload?.confirmed_change_company === "True";
+        if (!confirmed)
+            return;
+        if (_alreadyHasChangeCompany(installationId))
+            return;
+        const vehicle_id = job.payload?.vehicle_id_final ??
+            job.payload?.vehicle_id ??
+            job.payload?.VEHICLE_ID ??
+            job.payload?.vehicleId ?? null;
+        const plate_real = job.payload?.plate_real ??
+            job.payload?.plate ??
+            job.payload?.LICENSE_NMBR ?? null;
+        // client_id é a fonte mais confiável — resolve o GROUP_NAME via endpoint CLIENTS
+        const client_id = _num(job.payload?.target_client_id ??
+            job.payload?.client_id_target ??
+            job.payload?.client_id);
+        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
+        const client_id_final = client_id ?? _num(inst?.payload?.target_client_id ?? inst?.resolved?.target_client_id);
+        // client_descr como fallback para log
+        const client_descr = job.payload?.client_descr ??
+            job.payload?.clientName ??
+            inst?.payload?.clientName ?? null;
+        if (!vehicle_id || !plate_real || !client_id_final) {
+            console.log(`[jobs] [PIPELINE] skip CHANGE_COMPANY: campos faltando vehicle_id=${vehicle_id} plate_real=${plate_real} client_id=${client_id_final}`);
+            return;
+        }
+        const service = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service);
+        const ccJob = (0, jobStore_1.createJob)("resolver_change_company", {
+            flow: "CHANGE_COMPANY",
+            vehicle_id,
+            plate_real,
+            client_id: client_id_final,
+            client_descr,
+            installation_id: installationId,
+            service,
+        });
+        try {
+            installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "resolver_change_company", job_id: ccJob.id, status: "queued" });
+        }
+        catch { }
+        try {
+            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CHANGE_COMPANY_QUEUED" });
+        }
+        catch { }
+        console.log(`[jobs] [PIPELINE] enqueued resolver_change_company job=${ccJob.id} installation=${installationId} vehicle_id=${vehicle_id} client_id=${client_id_final}`);
+    }
+    catch (e) {
+        console.log("[jobs] [PIPELINE] enqueue CHANGE_COMPANY failed:", e && (e.message || String(e)));
+    }
+}
+async function _enqueueSchemeBuilderAfterHtml5(job, result) {
+    try {
+        const jobType = String(job?.type || "");
+        if (jobType !== "html5_install" && jobType !== "html5_maint_no_swap" && jobType !== "html5_maint_with_swap" && jobType !== "resolver_change_company")
+            return;
+        if (jobType === "html5_install" && (job.payload?.confirmed_change_company === true ||
+            job.payload?.confirmed_change_company === "true" ||
+            job.payload?.confirmed_change_company === "True"))
+            return;
+        const installationId = _getInstallationId(job);
+        if (!installationId)
+            return;
         const service = _upper(job?.payload?.service ?? job?.payload?.servico);
         if (!service)
             return;
-        const mskip = result?.meta ? result.meta.monitor_skip : null;
-        if (mskip === 1 || mskip === "1" || mskip === true)
+        // UNINSTALL: marca COMPLETED direto — result.status é null mesmo com sucesso
+        if (service === "UNINSTALL") {
+            const html5Ok = !!(result && (result.ok === true || (Array.isArray(result.steps) && result.steps.some((s) => s.ok === true))));
+            const finalSt = html5Ok ? "COMPLETED" : "HTML5_ERROR";
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: finalSt });
+            }
+            catch { }
+            console.log(`[jobs] [PIPELINE] UNINSTALL → ${finalSt} installation=${installationId}`);
             return;
+        }
+        if (!_resultOk(result))
+            return;
+        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
+        const vehicleId = _pickVehicleId(job, result);
+        const mskip = result?.meta ? result.meta.monitor_skip : null;
+        if (mskip === 1 || mskip === "1" || mskip === true) {
+            // MAINT_NO_SWAP com monitor_skip: não muta HTML5, mas ainda enfileira CAN
+            if (service === "MAINT_NO_SWAP" && vehicleId) {
+                const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
+                    installation_id: installationId,
+                    service,
+                    vehicleId: String(vehicleId),
+                    cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
+                    interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+                });
+                try {
+                    installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
+                }
+                catch { }
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" });
+                }
+                catch { }
+                console.log(`[jobs] MAINT_NO_SWAP monitor_skip → CAN enfileirado job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+                return;
+            }
+            return;
+        }
         if (!["INSTALL", "MAINT_NO_SWAP", "MAINT_WITH_SWAP"].includes(service))
             return;
         if (_alreadyHasSb(installationId))
             return;
-        const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
-        const vehicleId = _pickVehicleId(job, result);
         const clientId = _pickClientId(inst, job, result);
         const vehicleSettingId = _pickVehicleSettingId(inst, job, result);
         if (vehicleId) {
@@ -373,6 +585,76 @@ function _enqueueSchemeBuilderAfterHtml5(job, result) {
             console.log(`[jobs] [PIPELINE] skip SB: missing fields installation=${installationId} service=${service} vehicleId=${vehicleId} clientId=${clientId} vehicleSettingId=${vehicleSettingId}`);
             return;
         }
+        // =========================================================================
+        // SB_SKIP_V3: decisão vem do worker HTML5 via result.meta.sb_skip
+        // O worker já tem cookie fresco e consultou GET_VHCL_ACTIVATION_DATA_NEW.
+        // =========================================================================
+        const _sbSkip = result?.meta?.sb_skip === true;
+        if (_sbSkip) {
+            const _detail = result?.meta?.sb_skip_detail || {};
+            console.log(`[jobs] SB_SKIP_V3: PULANDO SB vehicleId=${vehicleId} detail=${JSON.stringify(_detail)}`);
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, {
+                    status: "SB_DONE",
+                    sb: { skipped: true, reason: "already_configured", ..._detail }
+                });
+            }
+            catch { }
+            if (service === "MAINT_NO_SWAP") {
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
+                }
+                catch { }
+                console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
+                return;
+            }
+            const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
+                installation_id: installationId,
+                service,
+                vehicleId: String(vehicleId),
+                cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
+                interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+            });
+            try {
+                installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
+            }
+            catch { }
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" });
+            }
+            catch { }
+            console.log(`[jobs] SB_SKIP_V3: CAN enfileirado job=${canJob.id} installation=${installationId}`);
+            return;
+        }
+        // =========================================================================
+        // MAINT_NO_SWAP: nunca envia SB — vai direto para CAN
+        if (service === "MAINT_NO_SWAP") {
+            if (!vehicleId) {
+                try {
+                    installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
+                }
+                catch { }
+                console.log(`[jobs] MAINT_NO_SWAP → COMPLETED (sem vehicleId para CAN).`);
+                return;
+            }
+            const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
+                installation_id: installationId,
+                service,
+                vehicleId: String(vehicleId),
+                cycles: Number(process.env.CAN_SNAPSHOT_CYCLES || "12"),
+                interval_ms: Number(process.env.CAN_SNAPSHOT_INTERVAL_MS || "12000"),
+            });
+            try {
+                installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "monitor_can_snapshot", job_id: canJob.id, status: "queued" });
+            }
+            catch { }
+            try {
+                installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "CAN_RUNNING" });
+            }
+            catch { }
+            console.log(`[jobs] MAINT_NO_SWAP → CAN enfileirado job=${canJob.id} installation=${installationId} vehicleId=${vehicleId}`);
+            return;
+        }
         const c = catalogs?.getClient ? catalogs.getClient(clientId) : null;
         const clientName = String((c && c.clientName) ? c.clientName : clientId);
         const sb = (0, jobStore_1.createJob)("scheme_builder", {
@@ -382,7 +664,14 @@ function _enqueueSchemeBuilderAfterHtml5(job, result) {
             clientName,
             vehicleId: String(vehicleId),
             vehicleSettingId: Number(vehicleSettingId),
-            comment: `APP ${service} inst=${installationId}`
+            comment: (() => { const _b = String((inst && inst.payload && inst.payload.comment) || "").trim(); if (_b)
+                return _b; try {
+                const d = new Date();
+                return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+            }
+            catch (_) {
+                return "";
+            } })()
         });
         try {
             installationsStore?.pushJob && installationsStore.pushJob(installationId, { type: "scheme_builder", job_id: sb.id, status: "queued" });
@@ -586,10 +875,21 @@ router.post("/:id/complete", (req, res) => {
     catch { }
     // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
     if (finalStatus === "completed") {
+        _enqueueChangeCompanyAfterHtml5(job, result);
         _enqueueSchemeBuilderAfterHtml5(job, result);
         _enqueueCanAfterSchemeBuilder(job, result);
     }
     return res.json({ job });
+});
+router.post("/:id/cancel", requireWorkerKey_1.requireWorkerKey, (req, res) => {
+    const job = (0, jobStore_1.getJob)(req.params.id);
+    if (!job)
+        return res.status(404).json({ error: "job_not_found" });
+    const terminal = ["completed", "cancelled", "error"];
+    if (terminal.includes(job.status))
+        return res.json({ skipped: true, status: job.status });
+    (0, jobStore_1.updateJob)(req.params.id, { status: "cancelled" });
+    return res.json({ ok: true, id: req.params.id });
 });
 router.get("/:id", (req, res) => {
     const { id } = req.params;
