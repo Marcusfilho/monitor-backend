@@ -200,10 +200,10 @@ run_smoke_test() {
   for check in "${checks[@]}"; do
     if ask_yn "${check}"; then
       ok "${check}"
-      ((passed++))
+      passed=$((passed + 1))
     else
       fail "${check}"
-      ((failed++))
+      failed=$((failed + 1))
     fi
   done
 
@@ -279,7 +279,7 @@ update_workers() {
     if [[ -f "$src" ]]; then
       cp "$src" "$dst"
       ok "Copiado: ${f}"
-      ((copied++))
+      copied=$((copied + 1))
     else
       warn "Não encontrado (ignorado): ${f}"
     fi
@@ -336,7 +336,7 @@ smoke_prod() {
       ok "${check}"
     else
       fail "${check}"
-      ((failed++))
+      failed=$((failed + 1))
     fi
   done
 
