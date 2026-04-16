@@ -5258,9 +5258,9 @@ if (!need) { return cur; }
       }catch(e){}
     });
 
-    async function runDeactivate(vid){
+    async function runDeactivate(vid, jobId){ // FIX_GLOBALCTX_V1
       try{
-        const jobId = globalThis.__CUR_JOB_ID || "unknown";
+        // FIX_GLOBALCTX_V1: jobId via parâmetro
         const key = String(jobId);
         if (globalThis.__UNINSTALL_DEACT_DONE[key]) return;
         globalThis.__UNINSTALL_DEACT_DONE[key] = true;
@@ -5279,7 +5279,7 @@ if (!need) { return cur; }
         params.set("DELIVER_CODE", String(p.DELIVER_CODE || 5511));
 
 
-  const __jobId = (globalThis && globalThis.__CUR_JOB_ID) ? globalThis.__CUR_JOB_ID : "";
+  const __jobId = jobId || ""; // FIX_GLOBALCTX_V1
   console.log(`[UNINSTALL_DEACTIVATE] start job=${__jobId} vid=${vid} plateLen=${String(plate||"").length}`);
   const __r = (typeof __va_deactivateVehicleHistCan === "function")
     ? await __va_deactivateVehicleHistCan(vid, plate)
@@ -5293,26 +5293,30 @@ if (!need) { return cur; }
       }
     }
 
-    // 2) console hook: detectar GOT job e rescued VID
+    // 2) console hook: detectar GOT job e rescued VID — FIX_GLOBALCTX_V1
+    globalThis.__UNINSTALL_QUEUE = globalThis.__UNINSTALL_QUEUE || [];
     const prevLog = console.log;
     console.log = function(...args){
       try{
         const msg = args.map(a => (typeof a === "string" ? a : (a && a.message) ? a.message : String(a))).join(" ");
 
-        // captura job atual (UNINSTALL)
+        // captura job atual — empilha na fila se for UNINSTALL
         let m = msg.match(/\[html5_v8\]\s+GOT job id=([0-9a-f]+)\s+service=([A-Z_]+)/i);
         if (m) {
           globalThis.__CUR_JOB_ID = m[1];
           globalThis.__CUR_SERVICE = m[2];
+          if (m[2] === "UNINSTALL") {
+            globalThis.__UNINSTALL_QUEUE.push({ jobId: m[1] });
+          }
         }
 
-        // quando resgatar VEHICLE_ID em UNINSTALL -> dispara DEACTIVATE já
+        // quando resgatar VEHICLE_ID -> associa ao primeiro UNINSTALL pendente da fila
         m = msg.match(/resolve_by_plate:\s*rescued\s+VEHICLE_ID=(\d+)/i);
-        if (m && String(globalThis.__CUR_SERVICE||"") === "UNINSTALL") {
+        if (m && globalThis.__UNINSTALL_QUEUE.length > 0) {
           const vid = m[1];
+          const entry = globalThis.__UNINSTALL_QUEUE.shift();
           globalThis.__LAST_VEHICLE_ID = vid;
-          // fire-and-forget (não bloquear o log)
-          setTimeout(() => runDeactivate(vid), 0);
+          setTimeout(() => runDeactivate(vid, entry.jobId), 0); // FIX_GLOBALCTX_V1
         }
       }catch(e){}
       return prevLog.apply(console, args);
