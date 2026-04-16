@@ -104,33 +104,6 @@
     .csel-item.selected{color:var(--accent)}
     .csel-cancel{padding:14px 16px;font-size:14px;color:var(--muted);text-align:center;cursor:pointer;margin-top:4px}
 
-    /* === TELA WELCOME === */
-    #cardWelcome{
-      position:fixed;inset:0;z-index:50;background:var(--bg);
-      display:flex;flex-direction:column;align-items:center;justify-content:center;
-      padding:24px 20px;gap:0
-    }
-    #cardWelcome.hidden{display:none!important}
-    .welcome-logo{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
-    .welcome-version{font-size:10px;color:#3a4a5c;font-weight:600;margin-left:4px}
-    .welcome-title{font-size:22px;font-weight:700;color:#cfe6ff;margin:24px 0 6px;text-align:center}
-    .welcome-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:28px}
-    .welcome-select-wrap{width:100%;max-width:380px}
-    .welcome-select-wrap label{font-size:11px;color:var(--muted);margin-bottom:6px;display:block}
-    .welcome-select-wrap select{
-      width:100%;padding:12px 14px;border-radius:14px;border:1px solid #273245;
-      background:#0b1118;color:var(--text);font-size:15px;outline:none;
-      appearance:none;-webkit-appearance:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2393a4b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-      background-repeat:no-repeat;background-position:right 14px center;
-      padding-right:36px
-    }
-    #btnEnter{
-      width:100%;max-width:380px;margin-top:14px;padding:14px;
-      background:var(--accent);color:#000;border:none;border-radius:14px;
-      font-size:15px;font-weight:700;cursor:pointer
-    }
-    #btnEnter:disabled{opacity:.4;cursor:not-allowed}
     /* badge técnico no header */
     #techBadge{
       display:none;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
@@ -231,23 +204,6 @@
     </div>
   </div>
 </header>
-
-<!-- TELA WELCOME -->
-<div id="cardWelcome">
-  <div>
-    <span class="welcome-logo">App Instalador</span>
-    <span class="welcome-version">v1.5</span>
-  </div>
-  <div class="welcome-title">Bem-vindo</div>
-  <div class="welcome-sub">Selecione seu nome para continuar</div>
-  <div class="welcome-select-wrap">
-    <label>Técnico</label>
-    <select id="techSelect">
-      <option value="">Carregando...</option>
-    </select>
-  </div>
-  <button id="btnEnter" disabled>Entrar</button>
-</div>
 
 <div class="wrap">
   <!-- 1) FORM -->
@@ -445,58 +401,22 @@
     pollTimer: null,
     pollMs: 5000,
     debug: false,
-    technician: null,   // { id, nick } — preenchido na Welcome
+    technician: null,   // { id, nick } — lido do localStorage (gravado pela welcome.html)
   };
 
-  // ====== welcome ======
-  const LS_TECH = "inst_technician_id";
+  // ====== técnico (vem da welcome via localStorage) ======
+  const LS_TECH      = "inst_technician_id";
+  const LS_TECH_NICK = "inst_technician_nick";
 
-  async function loadTechnicians(){
-    try {
-      const r = await fetch("technicians.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const data = await r.json();
-      const list = data.technicians || [];
-      const sel = $("techSelect");
-      sel.innerHTML = '<option value="">— Selecione —</option>';
-      for (const t of list){
-        const o = document.createElement("option");
-        o.value = t.id;
-        o.textContent = t.nick;
-        o.dataset.nick = t.nick;
-        sel.appendChild(o);
-      }
-      // pré-seleciona último técnico salvo
-      const saved = localStorage.getItem(LS_TECH);
-      if (saved){
-        const found = [...sel.options].find(o => o.value === saved);
-        if (found){ sel.value = saved; $("btnEnter").disabled = false; }
-      }
-      sel.addEventListener("change", () => {
-        $("btnEnter").disabled = !sel.value;
-      });
-    } catch(e){
-      $("techSelect").innerHTML = '<option value="">Erro ao carregar lista</option>';
-      console.error("[technicians] falha:", e);
+  function loadTechnicianFromStorage(){
+    const id   = localStorage.getItem(LS_TECH)      || null;
+    const nick = localStorage.getItem(LS_TECH_NICK) || null;
+    if (id && nick){
+      state.technician = { id, nick };
+      const badge = $("techBadge");
+      if (badge){ badge.textContent = nick; badge.classList.add("show"); }
     }
   }
-
-  function enterApp(){
-    const sel = $("techSelect");
-    const opt = sel.options[sel.selectedIndex];
-    if (!opt || !opt.value) return;
-    state.technician = { id: opt.value, nick: opt.dataset.nick || opt.textContent };
-    localStorage.setItem(LS_TECH, opt.value);
-    // exibe badge no header
-    const badge = $("techBadge");
-    badge.textContent = state.technician.nick;
-    badge.classList.add("show");
-    // esconde welcome, inicia app
-    $("cardWelcome").classList.add("hidden");
-    bootApp();
-  }
-
-  $("btnEnter") && ($("btnEnter").onclick = enterApp);
 
   // ====== ui helpers ======
   function setSubline(msg){ $("subline").textContent = msg || ""; }
@@ -2474,7 +2394,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ====== boot ======
-  function bootApp(){
+  (function init(){
     // debug mode via URL ?debug=1
     try {
       const u = new URL(location.href);
@@ -2488,21 +2408,16 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast("Debug habilitado", "warn");
     }
 
-    loadCatalogs();   // dispara prefetchClients() + JSONs locais em paralelo
+    // Lê o técnico que foi selecionado na welcome.html e gravado no localStorage
+    loadTechnicianFromStorage();
+
+    loadCatalogs();
 
     renderEmpty();
 
-    // Sempre abre a tela de cadastro — nunca retoma instalação anterior automaticamente.
     $("cardForm").classList.remove("hidden");
     $("cardCan").classList.add("hidden");
     showBarForm();
-  }
-
-  (function init(){
-    // Carrega lista de técnicos ANTES de mostrar qualquer coisa.
-    // É um JSON estático pequeno — termina em ms.
-    // O fetch de clientes (/api/clients) só é disparado ao clicar em Entrar (dentro de bootApp → loadCatalogs).
-    loadTechnicians();
   })();
 </script>
 </body>

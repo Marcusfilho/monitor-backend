@@ -58,6 +58,63 @@ ensure_running() {
   fi
 }
 
+ensure_network() {
+  local iface="enp0s3"
+  log "verificando rede ($iface)"
+
+  local has_ip
+  has_ip=$(ip addr show "$iface" 2>/dev/null | grep -c "inet " || true)
+  if [ "$has_ip" -eq 0 ]; then
+    log "AVISO: sem IP em $iface — tentando DHCP"
+    sudo dhclient "$iface" 2>/dev/null || log "AVISO: dhclient falhou"
+    sleep 5
+  fi
+
+  if ! getent hosts google.com >/dev/null 2>&1; then
+    log "AVISO: DNS falhou — injetando 8.8.8.8"
+    echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+    sleep 2
+  fi
+
+  if ping -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
+    log "OK: rede acessível"
+  else
+    log "ERRO: sem conectividade após tentativas de recuperação"
+    return 1
+  fi
+}
+
+sync_cookie_to_render() {
+  local jar="/tmp/html5_cookiejar.json"
+  local secret
+  secret=$(grep "COOKIE_SYNC_SECRET" ~/monitor-backend-dev/worker_secrets.env 2>/dev/null | cut -d= -f2)
+  local base
+  base=$(grep "^BASE_URL\|^RENDER_URL\|onrender" ~/monitor-backend-dev/worker_secrets.env 2>/dev/null | head -1 | cut -d= -f2)
+  base="${base:-https://monitor-backend-dev.onrender.com}"
+
+  if [ ! -f "$jar" ]; then
+    log "AVISO: cookiejar não encontrado em $jar — aguardando worker criar sessão (60s)"
+    sleep 60
+  fi
+
+  if [ ! -f "$jar" ]; then
+    log "ERRO: cookiejar ainda ausente após espera — sync ignorado"
+    return 1
+  fi
+
+  if [ -z "$secret" ]; then
+    log "AVISO: COOKIE_SYNC_SECRET não encontrado — sync ignorado"
+    return 1
+  fi
+
+  log "sincronizando cookie com Render ($base)"
+  local cookie_payload
+  cookie_payload=$(python3 -c "import json,sys; print(json.dumps(open('$jar').read()))")
+  local result
+  result=$(curl -s -X POST "$base/api/clients/sync-cookie"     -H "Content-Type: application/json"     -H "x-sync-secret: $secret"     -d "{"cookie": $cookie_payload}")
+  log "sync-cookie result: $result"
+}
+
 check_dns() {
   log "checando DNS de websocket.traffilog.com"
   getent hosts websocket.traffilog.com || log "AVISO: DNS não respondeu"
@@ -112,6 +169,9 @@ main() {
   sudo systemctl daemon-reload
 
   echo
+  ensure_network
+
+  echo
   log "serviços candidatos de túnel detectados"
   systemctl list-unit-files --type=service --no-pager | \
     grep -Ei 'tunel|tunnel|openvpn|wg-quick|wireguard|autossh|ssh' || true
@@ -132,6 +192,7 @@ main() {
   fi
 
   echo
+  /usr/local/sbin/fix_ws_dns.sh
   check_dns
   echo
 
@@ -142,6 +203,8 @@ main() {
     ensure_running "$SB_SERVICE"
     echo
     ensure_running "$CAN_SERVICE"
+    echo
+    sync_cookie_to_render
   else
     echo
     log "8182 indisponível; reiniciando apenas o HTML5"
