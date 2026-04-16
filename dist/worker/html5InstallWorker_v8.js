@@ -3295,8 +3295,16 @@ function buildStepsForService(service, payload){
   return [];
 }
 
+// === FIX_CONCORRENCIA_V1 ===
+// Controle de concorrência: permite múltiplos jobs simultâneos no mesmo processo.
+// Configurar via env: MAX_CONCURRENT_JOBS=3 (default: 3)
+// ALLOW_LOGIN_DURING_JOB=0 (default: proibir login durante job paralelo — warmup detém sessão)
+const __MAX_CONCURRENT_JOBS = Number(process.env.MAX_CONCURRENT_JOBS || 3);
+let __activeJobs = 0;
+// === /FIX_CONCORRENCIA_V1 ===
+
 async function main(){
-  console.log(`[html5_v8] started base=${BASE} worker=${WORKER_ID} poll=${POLL_MS}ms httpTimeout=${HTTP_TIMEOUT_MS} jobMax=${JOB_MAX_MS} dryRun=${DRY_RUN} exec=${EXECUTE_HTML5} cookiejar=${COOKIEJAR_PATH}`);
+  console.log(`[html5_v8] started base=${BASE} worker=${WORKER_ID} poll=${POLL_MS}ms httpTimeout=${HTTP_TIMEOUT_MS} jobMax=${JOB_MAX_MS} dryRun=${DRY_RUN} exec=${EXECUTE_HTML5} cookiejar=${COOKIEJAR_PATH} maxConcurrent=${__MAX_CONCURRENT_JOBS}`);
 
   // PATCH_HTML5_POLL_MULTI_TYPES_V1: aceitar múltiplos tipos de job (APP V1 / installations)
   // - Config: env HTML5_JOB_TYPES (CSV). Default inclui os tipos do APP V1.
@@ -3315,6 +3323,13 @@ async function main(){
 
   while(true){
     try{
+      // === FIX_CONCORRENCIA_V1: guard de concorrência ===
+      if (__activeJobs >= __MAX_CONCURRENT_JOBS) {
+        console.log(`[html5_v8] concurrency_limit activeJobs=${__activeJobs}/${__MAX_CONCURRENT_JOBS} — aguardando`);
+        await sleep(POLL_MS);
+        continue;
+      }
+
       let r = null;
       let pickedType = "";
       for (const jt of HTML5_JOB_TYPES) {
@@ -3324,6 +3339,13 @@ async function main(){
         r = rr; pickedType = jt; break;
       }
       if (!r) { await sleep(POLL_MS); continue; }
+
+      // === FIX_CONCORRENCIA_V1: fire-and-forget ===
+      // O job é processado em paralelo — o loop continua imediatamente
+      // buscando o próximo job sem esperar este terminar.
+      ;(async function processJobAsync(){
+        __activeJobs++;
+        try {
 
       const job = r.data.job || r.data;
       job.__job_type = pickedType;
@@ -4751,6 +4773,19 @@ await finish("ok", {
         console.log(`[html5_v8] JOB_FAIL id=${id} err=${msg}`);
         await finish("error", { ok:false, service, error:"job_exception_or_timeout", message: msg });
       }
+
+        } catch(e) {
+          // erro não capturado dentro do processJobAsync
+          console.log(`[html5_v8] processJobAsync unhandled id=${id} err=${e && (e.message || e.toString())}`);
+        } finally {
+          __activeJobs--;
+          console.log(`[html5_v8] job_done id=${id} activeJobs=${__activeJobs}`);
+        }
+      })(); // fim processJobAsync — fire-and-forget
+      // === /FIX_CONCORRENCIA_V1 ===
+
+      // pequeno delay antes de buscar o próximo (evita hammering imediato)
+      await sleep(200);
 
     } catch (e) {
       // __ABORT_SOFTEN_A10__
