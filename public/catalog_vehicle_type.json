@@ -1068,5 +1068,10 @@
     "manufacturer": "Scania",
     "model": "R450JA-DC13.164-R-EG-6X4",
     "asset_type": 21153
+  },
+  {
+    "manufacturer": "Questar",
+    "model": "Demo-J1939",
+    "asset_type": 24353
   }
 ]
