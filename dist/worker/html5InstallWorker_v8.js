@@ -3343,12 +3343,15 @@ async function main(){
       // === FIX_CONCORRENCIA_V1: fire-and-forget ===
       // O job é processado em paralelo — o loop continua imediatamente
       // buscando o próximo job sem esperar este terminar.
+      // === FIX_CLOSURE_V1: snapshot de r e pickedType antes do fire-and-forget ===
+      const _r_snapshot = r;
+      const _pickedType_snapshot = pickedType;
       ;(async function processJobAsync(){
         __activeJobs++;
         try {
 
-      const job = r.data.job || r.data;
-      job.__job_type = pickedType;
+      const job = _r_snapshot.data.job || _r_snapshot.data;
+      job.__job_type = _pickedType_snapshot;
       const id = job.id || job.jobId || job._id;
       
       const jobId = id; // alias (patch guardrail)
