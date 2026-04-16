@@ -3474,7 +3474,7 @@ try {
         error: "mws_vehicle_id_not_found",
         vhcls: vh ? { http: vh.status, loginNeg: vh.loginNeg ? 1 : 0, head: safeSnippet(vh.text, 220) } : null
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return (dentro de IIFE)
     }
 
     payload.vehicle_id = vid; payload.VEHICLE_ID = vid; payload.vehicleId = vid;
@@ -3496,7 +3496,7 @@ try {
           error: "serial_in_use",
           detail: `serial already linked to vehicle_id=${__cmdtCheck.vid_blocked} plate="${__cmdtCheck.plate_blocked}" (not a CMDT placeholder)`,
         });
-        continue;
+        return; // FIX_CLOSURE_V1: continue->return
       } else if (__cmdtCheck.error) {
         // Falha ao verificar — loga mas não aborta (melhor tentar do que parar)
         console.log(
@@ -3513,7 +3513,7 @@ try {
 
     if (!EXECUTE_HTML5) {
       await completeJobLogged(id, "success", { dryRun: true, flow: "MAINT_WITH_SWAP", plate, vehicle_id: vid, serial_new: newSerial });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     // 2) DEACTIVATE (desinstala serial antigo daquele vehicle_id)
@@ -3545,7 +3545,7 @@ try {
         http: de.status,
         head: safeSnippet(de.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
     if (de.loginNeg) throw new Error("mws_deactivate_loginneg");
 
@@ -3596,7 +3596,7 @@ if (typ === "checkbox" || typ === "radio") {
           if (!checked) continue; // browser só envia se marcado
           const v = getAttr(tag, "value") || "on";
           out[nm] = decode(v);
-          continue;
+          return; // FIX_CLOSURE_V1: continue->return
         }
 
         const v = getAttr(tag, "value") || "";
@@ -3687,7 +3687,7 @@ return out;
           // sempre sobrescreve estes (são críticos pro SAVE)
           if (k === "ASSET_TYPE" || k === "FIELD_IDS" || k === "FIELD_VALUE" || k === "GROUP_ID") {
             base[k] = v;
-            continue;
+            return; // FIX_CLOSURE_V1: continue->return
           }
           // só preenche se estiver vazio
           if (base[k] === undefined || base[k] === null || String(base[k]).trim() === "") base[k] = v;
@@ -3784,7 +3784,7 @@ try { delete base.action; delete base.ACTION; } catch(e) {}
         http: sv.status,
         head: safeSnippet(__svTxt, 240)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     // PATCH_MWS_SAVE_ERROR_DETECT_V1: se o SAVE voltou "Action ... error", parar aqui (não virar "dial vazio")
@@ -3849,7 +3849,7 @@ if (String(dial || "").trim() !== String(newSerial || "").trim()) {
         http: sv.status,
         head: safeSnippet(sv.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     // PATCH: pós-check (confirmar que o serial mudou de fato)
@@ -3876,7 +3876,7 @@ if (String(dial || "").trim() !== String(newSerial || "").trim()) {
         save_head: safeSnippet(sv.text, 220),
         post_head: safeSnippet(lo2.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 const low = String(sv.text || "").toLowerCase();
     if (/(already|exists|in use|used|vinculad|associad|ocupad)/i.test(low)) {
@@ -3887,7 +3887,7 @@ const low = String(sv.text || "").toLowerCase();
         http: sv.status,
         head: safeSnippet(sv.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     await completeJobLogged(id, "success", {
@@ -3896,7 +3896,7 @@ const low = String(sv.text || "").toLowerCase();
       deactivate: { http: de.status, loginNeg: de.loginNeg ? 1 : 0 },
       save: { http: sv.status, loginNeg: sv.loginNeg ? 1 : 0 }
     });
-    continue;
+    return; // FIX_CLOSURE_V1: continue->return
   }
 } catch (e) {
   try {
@@ -3907,7 +3907,7 @@ const low = String(sv.text || "").toLowerCase();
         plate: String(payload.plate || payload.LICENSE_NMBR || ""),
         serial_new: String(payload.serial_new || payload.serial || "")
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
   } catch (_) {}
 }
@@ -4796,7 +4796,7 @@ await finish("ok", {
         const lu = globalThis.__LAST_FETCH_URL ? String(globalThis.__LAST_FETCH_URL) : "";
         console.log("[html5_v8] warn: AbortError (timeout) url=" + lu);
         try { await sleep(1000); } catch (_) {}
-        continue;
+        return; // FIX_CLOSURE_V1: continue->return
       }
       // PATCH_A11: soften AbortError
       if (e && (e.name === 'AbortError' || /aborted/i.test(String(e.message || e)))) {
