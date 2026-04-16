@@ -50,6 +50,16 @@ WORKERS=(
 WORKER_FILES=(
   "dist/worker/html5InstallWorker_v8.js"
   "dist/worker/vehicleResolverWorker.js"
+  "dist/worker/canSnapshotWorker.js"
+  "dist/worker/schemeBuilderWorker.js"
+  "dist/worker/vehicleMonitorSnapshotService.js"
+)
+
+# Arquivos compilados do src/ que precisam ser copiados para o repo prod
+# (o Render usa o dist/ commitado — não faz build no deploy)
+DIST_FILES=(
+  "dist/routes/jobRoutes.js"
+  "dist/services/installationsStore.js"
 )
 
 # --- helpers ------------------------------------------------------------------
@@ -256,6 +266,50 @@ do_merge_and_push() {
   ok "De volta ao ${DEV_BRANCH} — repo dev intacto"
 }
 
+# --- build TS e copiar dist compilados para repo prod ------------------------
+build_and_copy_dist() {
+  header "BUILD — Compilando TypeScript"
+
+  cd "$DEV_REPO_DIR" || abort "Diretório dev não encontrado: $DEV_REPO_DIR"
+
+  step "1/2" "Verificando tipos (tsc --noEmit)..."
+  if npx tsc --noEmit 2>&1 | tee /tmp/tsc_out.txt | grep -q "error TS"; then
+    echo ""
+    cat /tmp/tsc_out.txt
+    abort "Erros de TypeScript encontrados. Corrija antes de promover."
+  fi
+  ok "Sem erros de tipo"
+
+  step "2/2" "Buildando (npm run build)..."
+  if ! npm run build; then
+    abort "Build falhou. Verifique os erros acima."
+  fi
+  ok "Build concluído"
+
+  # Copiar dist/ compilados para o repo prod
+  if [[ ! -d "$PROD_REPO_DIR" ]]; then
+    warn "Diretório prod não encontrado: $PROD_REPO_DIR — pulando cópia de dist/"
+    return 0
+  fi
+
+  echo ""
+  echo -e "  Copiando dist/ compilados:"
+  local copied=0
+  for f in "${DIST_FILES[@]}"; do
+    local src="${DEV_REPO_DIR}/${f}"
+    local dst="${PROD_REPO_DIR}/${f}"
+    if [[ -f "$src" ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp "$src" "$dst"
+      ok "Copiado: ${f}"
+      ((copied++))
+    else
+      warn "Não encontrado (ignorado): ${f}"
+    fi
+  done
+  [[ $copied -gt 0 ]] && ok "${copied} arquivo(s) dist/ copiado(s) para prod" || warn "Nenhum dist/ copiado"
+}
+
 # --- copiar workers e reiniciar services --------------------------------------
 update_workers() {
   header "WORKERS — VM de produção"
@@ -400,6 +454,7 @@ check_git_state
 show_diff_summary
 run_smoke_test
 do_merge_and_push
+build_and_copy_dist
 update_workers
 smoke_prod
 final_summary

@@ -213,6 +213,45 @@
     }
     .err-box.visible { display: block; }
 
+    /* Seleção de técnico */
+    .tech-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 280px;
+    }
+    .tech-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      align-self: flex-start;
+    }
+    #techSelect {
+      width: 100%;
+      padding: 12px 36px 12px 14px;
+      background: var(--panel);
+      border: 1px solid #253347;
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 300;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a6080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    #techSelect:focus { border-color: #3b5880; }
+    #techSelect option { background: #0c1219; }
+
     /* Rodapé */
     .footer {
       position: fixed;
@@ -237,10 +276,17 @@
         <path d="M2 12l10 5 10-5"/>
       </svg>
     </div>
-    <span class="brand-name">Monitor · Instalações</span>
+    <span class="brand-name">App instalador</span>
   </div>
 
-  <button id="btnEnter">Entrar</button>
+  <div class="tech-wrap">
+    <span class="tech-label">Técnico</span>
+    <select id="techSelect">
+      <option value="">Carregando...</option>
+    </select>
+  </div>
+
+  <button id="btnEnter" disabled>Entrar</button>
 
   <div class="status-area">
     <div class="progress-bar" id="progressBar">
@@ -259,6 +305,7 @@
 
 <script>
   const btnEnter    = document.getElementById("btnEnter");
+  const techSelect  = document.getElementById("techSelect");
   const statusRow   = document.getElementById("statusRow");
   const statusDot   = document.getElementById("statusDot");
   const statusTxt   = document.getElementById("statusTxt");
@@ -266,8 +313,9 @@
   const progressFill= document.getElementById("progressFill");
   const errBox      = document.getElementById("errBox");
 
-  // Detecta base URL automaticamente (mesmo origin)
   const API = "";
+  const LS_TECH = "inst_technician_id";
+  const LS_TECH_NICK = "inst_technician_nick";
 
   function setStatus(msg, type = "spin") {
     statusRow.classList.add("visible");
@@ -284,6 +332,40 @@
     errBox.textContent = msg;
     errBox.classList.add("visible");
   }
+
+  // Carrega lista de técnicos do JSON estático
+  async function loadTechnicians() {
+    try {
+      const r = await fetch("/app/technicians.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      const list = data.technicians || [];
+
+      techSelect.innerHTML = '<option value="">— Selecione seu nome —</option>';
+      for (const t of list) {
+        const o = document.createElement("option");
+        o.value = t.id;
+        o.textContent = t.nick;
+        o.dataset.nick = t.nick;
+        techSelect.appendChild(o);
+      }
+
+      // pré-seleciona último técnico salvo
+      const saved = localStorage.getItem(LS_TECH);
+      if (saved) {
+        const found = [...techSelect.options].find(o => o.value === saved);
+        if (found) { techSelect.value = saved; btnEnter.disabled = false; }
+      }
+    } catch(e) {
+      techSelect.innerHTML = '<option value="">Erro ao carregar lista</option>';
+      console.error("[technicians]", e);
+    }
+  }
+
+  techSelect.addEventListener("change", () => {
+    btnEnter.disabled = !techSelect.value;
+    errBox.classList.remove("visible");
+  });
 
   async function api(path, opts = {}) {
     const r = await fetch(API + path, {
@@ -313,13 +395,19 @@
   }
 
   btnEnter.addEventListener("click", async () => {
+    const opt = techSelect.options[techSelect.selectedIndex];
+    if (!opt || !opt.value) return;
+
+    // Salva técnico no localStorage antes de qualquer coisa
+    localStorage.setItem(LS_TECH, opt.value);
+    localStorage.setItem(LS_TECH_NICK, opt.dataset.nick || opt.textContent);
+
     btnEnter.disabled = true;
     errBox.classList.remove("visible");
     setProgress(5);
     setStatus("preparando sessão...");
 
     try {
-      // 1) Criar job de warmup
       const r = await api("/api/jobs", {
         method: "POST",
         body: JSON.stringify({ type: "html5_warmup", payload: {} }),
@@ -333,14 +421,12 @@
       setProgress(15);
       setStatus("autenticando sessão HTML5...");
 
-      // 2) Aguardar conclusão
       const result = await pollJobUntilDone(jobId);
 
       if (!result.ok) {
         throw new Error(result.message || "Falha no warmup");
       }
 
-      // 3) Sucesso — redireciona
       setProgress(100);
       setStatus("sessão pronta — abrindo...", "ok");
       await new Promise(r => setTimeout(r, 600));
@@ -353,6 +439,9 @@
       btnEnter.disabled = false;
     }
   });
+
+  // Inicia carregando a lista imediatamente
+  loadTechnicians();
 </script>
 </body>
 </html>
