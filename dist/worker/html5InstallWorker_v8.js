@@ -3348,11 +3348,12 @@ async function main(){
       const _pickedType_snapshot = pickedType;
       ;(async function processJobAsync(){
         __activeJobs++;
+        let id = null; // FIX_SCOPE_V1: declarado antes do try para ficar acessível no finally
         try {
 
       const job = _r_snapshot.data.job || _r_snapshot.data;
       job.__job_type = _pickedType_snapshot;
-      const id = job.id || job.jobId || job._id;
+      id = job.id || job.jobId || job._id;
       
       const jobId = id; // alias (patch guardrail)
 const payload = job.payload || {};
