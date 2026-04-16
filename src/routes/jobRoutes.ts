@@ -636,12 +636,23 @@ function _enqueueCanAfterSchemeBuilder(job: any, result: any) {
 
     const inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
     const service = _upper(job?.payload?.service ?? inst?.service);
-    if (!service) return;
-    if (!["INSTALL", "MAINT_WITH_SWAP"].includes(service)) return;
 
-    const vehicleId = _num(job?.payload?.vehicleId ?? job?.payload?.vehicle_id ?? job?.payload?.VEHICLE_ID);
+    // FIX_SB_STUCK_V1: qualquer early return deve tirar a instalação de SB_RUNNING
+    function _sbDoneFallback(reason: string) {
+      console.log(`[jobs] [PIPELINE] SB concluído mas CAN não enfileirado (${reason}) — marcando SB_DONE installation=${installationId}`);
+      try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "SB_DONE" }); } catch {}
+    }
+
+    if (!service) { _sbDoneFallback("service ausente"); return; }
+    if (!["INSTALL", "MAINT_WITH_SWAP"].includes(service)) { _sbDoneFallback(`service=${service} não requer CAN`); return; }
+
+    // FIX_SB_STUCK_V1: fallback busca vehicleId na instalação se não vier no payload do job
+    const vehicleId = _num(
+      job?.payload?.vehicleId ?? job?.payload?.vehicle_id ?? job?.payload?.VEHICLE_ID ??
+      inst?.resolved?.vehicle_id ?? inst?.payload?.vehicleId ?? inst?.payload?.vehicle_id
+    );
     if (!vehicleId) {
-      console.log(`[jobs] [PIPELINE] skip CAN: missing vehicleId installation=${installationId}`);
+      _sbDoneFallback("vehicleId ausente no job e na instalação");
       return;
     }
 
