@@ -315,7 +315,9 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
     if (ok) {
       // limpa erro anterior
       try { installationsStore.patchInstallation(installationId, { last_error: null }); } catch {}
-      try { installationsStore.patchInstallation(installationId, { status: "HTML5_DONE" }); } catch {}
+      const __svc = _upper(job?.payload?.service ?? job?.payload?.servico);
+      const __finalSt = (__svc === "UNINSTALL") ? "COMPLETED" : "HTML5_DONE";
+      try { installationsStore.patchInstallation(installationId, { status: __finalSt }); } catch {} // FIX_UNINSTALL_STATUS_V1
       return;
     }
 
