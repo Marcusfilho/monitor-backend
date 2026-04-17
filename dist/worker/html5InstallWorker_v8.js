@@ -545,7 +545,7 @@ function _vhclsLog(ctx, msg) {
 }
 
 function _normLicenseKey(v) {
-  return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return String(v || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
 }
 
 function _readCookieHeaderFromJarFile(ctx) {
@@ -1831,7 +1831,7 @@ async function __va_vhclsRefresh(plate){
     const __vhclsFields = {
     VERSION_ID: "2",
     REFRESH_FLG: "1",
-    LICENSE_NMBR: plLower,
+    LICENSE_NMBR: pl, // FIX_VHCLS_PL_CASE_V1
     CLIENT_DESCR: "",
     OWNER_DESCR: "",
     DIAL_NMBR: "",
@@ -1904,7 +1904,7 @@ async function resolveVehicleIdByPlate_VHCLS(opts){
   if (typeof __va_vhclsRefresh === "function") {
     r = await __va_vhclsRefresh(plate);
   } else if (typeof __va_appenginePost === "function") {
-    const rr = await __va_appenginePost("VHCLS", { VERSION_ID:"2", REFRESH_FLG:"1", LICENSE_NMBR: String(plate||"").trim().toLowerCase(), CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID:"" }, `${tag}_FALLBACK`);
+    const rr = await __va_appenginePost("VHCLS", { VERSION_ID:"2", REFRESH_FLG:"1", LICENSE_NMBR: String(plate||"").trim().toUpperCase(), CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID:"" }, `${tag}_FALLBACK`); // FIX_VHCLS_PL_CASE_V1
     r = { plate, status: rr.status, len: (rr.text||"").length, loginNeg: rr.loginNeg, vehicleId: rr.vehicleId, jarFlags: rr.jarFlags, head: String(rr.text||"").slice(0, 900) };
   } else {
     r = { plate, status: 0, len: 0, loginNeg: false, vehicleId: null, jarFlags: "", head: "<vhcls_helpers_missing>" };
@@ -3295,8 +3295,16 @@ function buildStepsForService(service, payload){
   return [];
 }
 
+// === FIX_CONCORRENCIA_V1 ===
+// Controle de concorrência: permite múltiplos jobs simultâneos no mesmo processo.
+// Configurar via env: MAX_CONCURRENT_JOBS=3 (default: 3)
+// ALLOW_LOGIN_DURING_JOB=0 (default: proibir login durante job paralelo — warmup detém sessão)
+const __MAX_CONCURRENT_JOBS = Number(process.env.MAX_CONCURRENT_JOBS || 3);
+let __activeJobs = 0;
+// === /FIX_CONCORRENCIA_V1 ===
+
 async function main(){
-  console.log(`[html5_v8] started base=${BASE} worker=${WORKER_ID} poll=${POLL_MS}ms httpTimeout=${HTTP_TIMEOUT_MS} jobMax=${JOB_MAX_MS} dryRun=${DRY_RUN} exec=${EXECUTE_HTML5} cookiejar=${COOKIEJAR_PATH}`);
+  console.log(`[html5_v8] started base=${BASE} worker=${WORKER_ID} poll=${POLL_MS}ms httpTimeout=${HTTP_TIMEOUT_MS} jobMax=${JOB_MAX_MS} dryRun=${DRY_RUN} exec=${EXECUTE_HTML5} cookiejar=${COOKIEJAR_PATH} maxConcurrent=${__MAX_CONCURRENT_JOBS}`);
 
   // PATCH_HTML5_POLL_MULTI_TYPES_V1: aceitar múltiplos tipos de job (APP V1 / installations)
   // - Config: env HTML5_JOB_TYPES (CSV). Default inclui os tipos do APP V1.
@@ -3315,6 +3323,13 @@ async function main(){
 
   while(true){
     try{
+      // === FIX_CONCORRENCIA_V1: guard de concorrência ===
+      if (__activeJobs >= __MAX_CONCURRENT_JOBS) {
+        console.log(`[html5_v8] concurrency_limit activeJobs=${__activeJobs}/${__MAX_CONCURRENT_JOBS} — aguardando`);
+        await sleep(POLL_MS);
+        continue;
+      }
+
       let r = null;
       let pickedType = "";
       for (const jt of HTML5_JOB_TYPES) {
@@ -3325,9 +3340,20 @@ async function main(){
       }
       if (!r) { await sleep(POLL_MS); continue; }
 
-      const job = r.data.job || r.data;
-      job.__job_type = pickedType;
-      const id = job.id || job.jobId || job._id;
+      // === FIX_CONCORRENCIA_V1: fire-and-forget ===
+      // O job é processado em paralelo — o loop continua imediatamente
+      // buscando o próximo job sem esperar este terminar.
+      // === FIX_CLOSURE_V1: snapshot de r e pickedType antes do fire-and-forget ===
+      const _r_snapshot = r;
+      const _pickedType_snapshot = pickedType;
+      ;(async function processJobAsync(){
+        __activeJobs++;
+        let id = null; // FIX_SCOPE_V1: declarado antes do try para ficar acessível no finally
+        try {
+
+      const job = _r_snapshot.data.job || _r_snapshot.data;
+      job.__job_type = _pickedType_snapshot;
+      id = job.id || job.jobId || job._id;
       
       const jobId = id; // alias (patch guardrail)
 const payload = job.payload || {};
@@ -3343,8 +3369,8 @@ const payload = job.payload || {};
     if (!_p.license && _p.plate) _p.license = _p.plate;
 
     // normalize plate string (upper, strip spaces/hyphen/etc)
-    if (_p.plate) _p.plate = String(_p.plate).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (_p.license) _p.license = String(_p.license).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (_p.plate) _p.plate = String(_p.plate).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
+    if (_p.license) _p.license = String(_p.license).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
 
     // serial aliases -> payload.serial
     const _rawSerial =
@@ -3449,7 +3475,7 @@ try {
         error: "mws_vehicle_id_not_found",
         vhcls: vh ? { http: vh.status, loginNeg: vh.loginNeg ? 1 : 0, head: safeSnippet(vh.text, 220) } : null
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return (dentro de IIFE)
     }
 
     payload.vehicle_id = vid; payload.VEHICLE_ID = vid; payload.vehicleId = vid;
@@ -3471,7 +3497,7 @@ try {
           error: "serial_in_use",
           detail: `serial already linked to vehicle_id=${__cmdtCheck.vid_blocked} plate="${__cmdtCheck.plate_blocked}" (not a CMDT placeholder)`,
         });
-        continue;
+        return; // FIX_CLOSURE_V1: continue->return
       } else if (__cmdtCheck.error) {
         // Falha ao verificar — loga mas não aborta (melhor tentar do que parar)
         console.log(
@@ -3488,7 +3514,7 @@ try {
 
     if (!EXECUTE_HTML5) {
       await completeJobLogged(id, "success", { dryRun: true, flow: "MAINT_WITH_SWAP", plate, vehicle_id: vid, serial_new: newSerial });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     // 2) DEACTIVATE (desinstala serial antigo daquele vehicle_id)
@@ -3520,7 +3546,7 @@ try {
         http: de.status,
         head: safeSnippet(de.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
     if (de.loginNeg) throw new Error("mws_deactivate_loginneg");
 
@@ -3571,7 +3597,7 @@ if (typ === "checkbox" || typ === "radio") {
           if (!checked) continue; // browser só envia se marcado
           const v = getAttr(tag, "value") || "on";
           out[nm] = decode(v);
-          continue;
+          return; // FIX_CLOSURE_V1: continue->return
         }
 
         const v = getAttr(tag, "value") || "";
@@ -3662,7 +3688,7 @@ return out;
           // sempre sobrescreve estes (são críticos pro SAVE)
           if (k === "ASSET_TYPE" || k === "FIELD_IDS" || k === "FIELD_VALUE" || k === "GROUP_ID") {
             base[k] = v;
-            continue;
+            return; // FIX_CLOSURE_V1: continue->return
           }
           // só preenche se estiver vazio
           if (base[k] === undefined || base[k] === null || String(base[k]).trim() === "") base[k] = v;
@@ -3759,7 +3785,7 @@ try { delete base.action; delete base.ACTION; } catch(e) {}
         http: sv.status,
         head: safeSnippet(__svTxt, 240)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     // PATCH_MWS_SAVE_ERROR_DETECT_V1: se o SAVE voltou "Action ... error", parar aqui (não virar "dial vazio")
@@ -3824,7 +3850,7 @@ if (String(dial || "").trim() !== String(newSerial || "").trim()) {
         http: sv.status,
         head: safeSnippet(sv.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     // PATCH: pós-check (confirmar que o serial mudou de fato)
@@ -3851,7 +3877,7 @@ if (String(dial || "").trim() !== String(newSerial || "").trim()) {
         save_head: safeSnippet(sv.text, 220),
         post_head: safeSnippet(lo2.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 const low = String(sv.text || "").toLowerCase();
     if (/(already|exists|in use|used|vinculad|associad|ocupad)/i.test(low)) {
@@ -3862,7 +3888,7 @@ const low = String(sv.text || "").toLowerCase();
         http: sv.status,
         head: safeSnippet(sv.text, 220)
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
 
     await completeJobLogged(id, "success", {
@@ -3871,7 +3897,7 @@ const low = String(sv.text || "").toLowerCase();
       deactivate: { http: de.status, loginNeg: de.loginNeg ? 1 : 0 },
       save: { http: sv.status, loginNeg: sv.loginNeg ? 1 : 0 }
     });
-    continue;
+    return; // FIX_CLOSURE_V1: continue->return
   }
 } catch (e) {
   try {
@@ -3882,7 +3908,7 @@ const low = String(sv.text || "").toLowerCase();
         plate: String(payload.plate || payload.LICENSE_NMBR || ""),
         serial_new: String(payload.serial_new || payload.serial || "")
       });
-      continue;
+      return; // FIX_CLOSURE_V1: continue->return
     }
   } catch (_) {}
 }
@@ -4038,7 +4064,7 @@ try {
         const f = (outR && outR.final) ? outR.final : outR;
         return String((f && (f.text || f.body || f.raw || f.xml || f.responseText)) || "");
       })();
-      const plateNorm = String(plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const plateNorm = String(plate || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
       const sample = raw.replace(/\s+/g," ").slice(0,220);
       // [PATCH_U3_AUTH_GUARD] fallback pro texto do TAP + falha explícita se VHCLS não autenticou
       try {
@@ -4752,13 +4778,26 @@ await finish("ok", {
         await finish("error", { ok:false, service, error:"job_exception_or_timeout", message: msg });
       }
 
+        } catch(e) {
+          // erro não capturado dentro do processJobAsync
+          console.log(`[html5_v8] processJobAsync unhandled id=${id} err=${e && (e.message || e.toString())}`);
+        } finally {
+          __activeJobs--;
+          console.log(`[html5_v8] job_done id=${id} activeJobs=${__activeJobs}`);
+        }
+      })(); // fim processJobAsync — fire-and-forget
+      // === /FIX_CONCORRENCIA_V1 ===
+
+      // pequeno delay antes de buscar o próximo (evita hammering imediato)
+      await sleep(200);
+
     } catch (e) {
       // __ABORT_SOFTEN_A10__
       if (e && (e.name === "AbortError" || String((e && (e.message || e)) || "").toLowerCase().includes("aborted"))) {
         const lu = globalThis.__LAST_FETCH_URL ? String(globalThis.__LAST_FETCH_URL) : "";
         console.log("[html5_v8] warn: AbortError (timeout) url=" + lu);
         try { await sleep(1000); } catch (_) {}
-        continue;
+        return; // FIX_CLOSURE_V1: continue->return
       }
       // PATCH_A11: soften AbortError
       if (e && (e.name === 'AbortError' || /aborted/i.test(String(e.message || e)))) {
@@ -5219,9 +5258,9 @@ if (!need) { return cur; }
       }catch(e){}
     });
 
-    async function runDeactivate(vid){
+    async function runDeactivate(vid, jobId){ // FIX_GLOBALCTX_V1
       try{
-        const jobId = globalThis.__CUR_JOB_ID || "unknown";
+        // FIX_GLOBALCTX_V1: jobId via parâmetro
         const key = String(jobId);
         if (globalThis.__UNINSTALL_DEACT_DONE[key]) return;
         globalThis.__UNINSTALL_DEACT_DONE[key] = true;
@@ -5240,7 +5279,7 @@ if (!need) { return cur; }
         params.set("DELIVER_CODE", String(p.DELIVER_CODE || 5511));
 
 
-  const __jobId = (globalThis && globalThis.__CUR_JOB_ID) ? globalThis.__CUR_JOB_ID : "";
+  const __jobId = jobId || ""; // FIX_GLOBALCTX_V1
   console.log(`[UNINSTALL_DEACTIVATE] start job=${__jobId} vid=${vid} plateLen=${String(plate||"").length}`);
   const __r = (typeof __va_deactivateVehicleHistCan === "function")
     ? await __va_deactivateVehicleHistCan(vid, plate)
@@ -5254,26 +5293,30 @@ if (!need) { return cur; }
       }
     }
 
-    // 2) console hook: detectar GOT job e rescued VID
+    // 2) console hook: detectar GOT job e rescued VID — FIX_GLOBALCTX_V1
+    globalThis.__UNINSTALL_QUEUE = globalThis.__UNINSTALL_QUEUE || [];
     const prevLog = console.log;
     console.log = function(...args){
       try{
         const msg = args.map(a => (typeof a === "string" ? a : (a && a.message) ? a.message : String(a))).join(" ");
 
-        // captura job atual (UNINSTALL)
+        // captura job atual — empilha na fila se for UNINSTALL
         let m = msg.match(/\[html5_v8\]\s+GOT job id=([0-9a-f]+)\s+service=([A-Z_]+)/i);
         if (m) {
           globalThis.__CUR_JOB_ID = m[1];
           globalThis.__CUR_SERVICE = m[2];
+          if (m[2] === "UNINSTALL") {
+            globalThis.__UNINSTALL_QUEUE.push({ jobId: m[1] });
+          }
         }
 
-        // quando resgatar VEHICLE_ID em UNINSTALL -> dispara DEACTIVATE já
+        // quando resgatar VEHICLE_ID -> associa ao primeiro UNINSTALL pendente da fila
         m = msg.match(/resolve_by_plate:\s*rescued\s+VEHICLE_ID=(\d+)/i);
-        if (m && String(globalThis.__CUR_SERVICE||"") === "UNINSTALL") {
+        if (m && globalThis.__UNINSTALL_QUEUE.length > 0) {
           const vid = m[1];
+          const entry = globalThis.__UNINSTALL_QUEUE.shift();
           globalThis.__LAST_VEHICLE_ID = vid;
-          // fire-and-forget (não bloquear o log)
-          setTimeout(() => runDeactivate(vid), 0);
+          setTimeout(() => runDeactivate(vid, entry.jobId), 0); // FIX_GLOBALCTX_V1
         }
       }catch(e){}
       return prevLog.apply(console, args);

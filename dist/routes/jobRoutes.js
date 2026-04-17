@@ -330,10 +330,12 @@ function _handleHtml5CompleteToInstallation(job, result, finalStatus, jobId) {
                 installationsStore.patchInstallation(installationId, { last_error: null });
             }
             catch { }
+            const __svc = _upper(job?.payload?.service ?? job?.payload?.servico);
+            const __finalSt = (__svc === "UNINSTALL") ? "COMPLETED" : "HTML5_DONE";
             try {
-                installationsStore.patchInstallation(installationId, { status: "HTML5_DONE" });
+                installationsStore.patchInstallation(installationId, { status: __finalSt });
             }
-            catch { }
+            catch { } // FIX_UNINSTALL_STATUS_V1
             return;
         }
         const err = Object.assign({ ts: now, job_id: String(jobId || job?.id || ""), job_type: type }, _pickErrSummary(result));
