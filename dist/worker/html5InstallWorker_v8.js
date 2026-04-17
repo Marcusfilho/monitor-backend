@@ -545,7 +545,7 @@ function _vhclsLog(ctx, msg) {
 }
 
 function _normLicenseKey(v) {
-  return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return String(v || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
 }
 
 function _readCookieHeaderFromJarFile(ctx) {
@@ -1831,7 +1831,7 @@ async function __va_vhclsRefresh(plate){
     const __vhclsFields = {
     VERSION_ID: "2",
     REFRESH_FLG: "1",
-    LICENSE_NMBR: plLower,
+    LICENSE_NMBR: pl, // FIX_VHCLS_PL_CASE_V1
     CLIENT_DESCR: "",
     OWNER_DESCR: "",
     DIAL_NMBR: "",
@@ -1904,7 +1904,7 @@ async function resolveVehicleIdByPlate_VHCLS(opts){
   if (typeof __va_vhclsRefresh === "function") {
     r = await __va_vhclsRefresh(plate);
   } else if (typeof __va_appenginePost === "function") {
-    const rr = await __va_appenginePost("VHCLS", { VERSION_ID:"2", REFRESH_FLG:"1", LICENSE_NMBR: String(plate||"").trim().toLowerCase(), CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID:"" }, `${tag}_FALLBACK`);
+    const rr = await __va_appenginePost("VHCLS", { VERSION_ID:"2", REFRESH_FLG:"1", LICENSE_NMBR: String(plate||"").trim().toUpperCase(), CLIENT_DESCR:"", OWNER_DESCR:"", DIAL_NMBR:"", INNER_ID:"" }, `${tag}_FALLBACK`); // FIX_VHCLS_PL_CASE_V1
     r = { plate, status: rr.status, len: (rr.text||"").length, loginNeg: rr.loginNeg, vehicleId: rr.vehicleId, jarFlags: rr.jarFlags, head: String(rr.text||"").slice(0, 900) };
   } else {
     r = { plate, status: 0, len: 0, loginNeg: false, vehicleId: null, jarFlags: "", head: "<vhcls_helpers_missing>" };
@@ -3369,8 +3369,8 @@ const payload = job.payload || {};
     if (!_p.license && _p.plate) _p.license = _p.plate;
 
     // normalize plate string (upper, strip spaces/hyphen/etc)
-    if (_p.plate) _p.plate = String(_p.plate).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (_p.license) _p.license = String(_p.license).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (_p.plate) _p.plate = String(_p.plate).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
+    if (_p.license) _p.license = String(_p.license).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
 
     // serial aliases -> payload.serial
     const _rawSerial =
@@ -4064,7 +4064,7 @@ try {
         const f = (outR && outR.final) ? outR.final : outR;
         return String((f && (f.text || f.body || f.raw || f.xml || f.responseText)) || "");
       })();
-      const plateNorm = String(plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const plateNorm = String(plate || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
       const sample = raw.replace(/\s+/g," ").slice(0,220);
       // [PATCH_U3_AUTH_GUARD] fallback pro texto do TAP + falha explícita se VHCLS não autenticou
       try {
