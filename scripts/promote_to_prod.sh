@@ -50,16 +50,6 @@ WORKERS=(
 WORKER_FILES=(
   "dist/worker/html5InstallWorker_v8.js"
   "dist/worker/vehicleResolverWorker.js"
-  "dist/worker/canSnapshotWorker.js"
-  "dist/worker/schemeBuilderWorker.js"
-  "dist/worker/vehicleMonitorSnapshotService.js"
-)
-
-# Arquivos compilados do src/ que precisam ser copiados para o repo prod
-# (o Render usa o dist/ commitado — não faz build no deploy)
-DIST_FILES=(
-  "dist/routes/jobRoutes.js"
-  "dist/services/installationsStore.js"
 )
 
 # --- helpers ------------------------------------------------------------------
@@ -190,30 +180,60 @@ show_diff_summary() {
 
 # --- smoke test no Render dev -------------------------------------------------
 run_smoke_test() {
-  header "SMOKE TEST — Render Dev"
-  echo -e "  URL: ${DIM}${RENDER_DEV_URL}${NC}"
-  echo ""
-  echo -e "  Verifique no browser e responda cada item."
+  header "SMOKE TEST — Render Dev (${RENDER_DEV_URL})"
+  echo -e "  Valide cada item no app/browser antes de responder."
   echo ""
 
-  local checks=(
-    "Welcome.html abre sem erros no console"
-    "Select de técnico está populado (34 nomes)"
-    "Selecionar técnico e clicar Entrar: app carrega normalmente"
-    "Badge do técnico aparece no header do app"
-    "Formulário de instalação abre direto (sem tela dupla)"
-    "Payload inclui campo 'technician' com id e nick (?debug=1)"
-    "Reabrir a welcome pré-seleciona o último técnico"
+  echo -e "  ${BOLD}— INSTALL (fluxo principal) —${NC}"
+  local checks_install=(
+    "Instalação simples completa sem html5_error"
+    "Duas instalações simultâneas completam sem interferência"
+    "Tela de confirmação aparece após instalação"
+  )
+
+  echo -e "  ${BOLD}— UNINSTALL (fixes desta sessão) —${NC}"
+  local checks_uninstall=(
+    "UNINSTALL simples executa DEACTIVATE_VEHICLE_HIST no HTML5 com sucesso"
+    "Status da instalação fica COMPLETED após UNINSTALL (não HTML5_DONE)"
+    "Tela de confirmação/finalização aparece no app após UNINSTALL"
+    "Dois UNINSTALLs simultâneos completam sem interferência entre si"
+  )
+
+  echo -e "  ${BOLD}— PLACA / RESOLUÇÃO —${NC}"
+  local checks_plate=(
+    "Placa com underscore (ex: QUESTAR_TEST3) resolve vehicle_id corretamente"
+    "Placa em maiúsculo/minúsculo resolve corretamente (case-insensitive)"
   )
 
   local passed=0 failed=0
-  for check in "${checks[@]}"; do
+
+  echo ""
+  echo -e "  ${CYAN}INSTALL${NC}"
+  for check in "${checks_install[@]}"; do
     if ask_yn "${check}"; then
-      ok "${check}"
-      passed=$((passed + 1))
+      ok "${check}"; ((passed++))
     else
-      fail "${check}"
-      failed=$((failed + 1))
+      fail "${check}"; ((failed++))
+    fi
+  done
+
+  echo ""
+  echo -e "  ${CYAN}UNINSTALL${NC}"
+  for check in "${checks_uninstall[@]}"; do
+    if ask_yn "${check}"; then
+      ok "${check}"; ((passed++))
+    else
+      fail "${check}"; ((failed++))
+    fi
+  done
+
+  echo ""
+  echo -e "  ${CYAN}PLACA / RESOLUÇÃO${NC}"
+  for check in "${checks_plate[@]}"; do
+    if ask_yn "${check}"; then
+      ok "${check}"; ((passed++))
+    else
+      fail "${check}"; ((failed++))
     fi
   done
 
@@ -266,50 +286,6 @@ do_merge_and_push() {
   ok "De volta ao ${DEV_BRANCH} — repo dev intacto"
 }
 
-# --- build TS e copiar dist compilados para repo prod ------------------------
-build_and_copy_dist() {
-  header "BUILD — Compilando TypeScript"
-
-  cd "$DEV_REPO_DIR" || abort "Diretório dev não encontrado: $DEV_REPO_DIR"
-
-  step "1/2" "Verificando tipos (tsc --noEmit)..."
-  if npx tsc --noEmit 2>&1 | tee /tmp/tsc_out.txt | grep -q "error TS"; then
-    echo ""
-    cat /tmp/tsc_out.txt
-    abort "Erros de TypeScript encontrados. Corrija antes de promover."
-  fi
-  ok "Sem erros de tipo"
-
-  step "2/2" "Buildando (npm run build)..."
-  if ! npm run build; then
-    abort "Build falhou. Verifique os erros acima."
-  fi
-  ok "Build concluído"
-
-  # Copiar dist/ compilados para o repo prod
-  if [[ ! -d "$PROD_REPO_DIR" ]]; then
-    warn "Diretório prod não encontrado: $PROD_REPO_DIR — pulando cópia de dist/"
-    return 0
-  fi
-
-  echo ""
-  echo -e "  Copiando dist/ compilados:"
-  local copied=0
-  for f in "${DIST_FILES[@]}"; do
-    local src="${DEV_REPO_DIR}/${f}"
-    local dst="${PROD_REPO_DIR}/${f}"
-    if [[ -f "$src" ]]; then
-      mkdir -p "$(dirname "$dst")"
-      cp "$src" "$dst"
-      ok "Copiado: ${f}"
-      ((copied++))
-    else
-      warn "Não encontrado (ignorado): ${f}"
-    fi
-  done
-  [[ $copied -gt 0 ]] && ok "${copied} arquivo(s) dist/ copiado(s) para prod" || warn "Nenhum dist/ copiado"
-}
-
 # --- copiar workers e reiniciar services --------------------------------------
 update_workers() {
   header "WORKERS — VM de produção"
@@ -333,7 +309,7 @@ update_workers() {
     if [[ -f "$src" ]]; then
       cp "$src" "$dst"
       ok "Copiado: ${f}"
-      copied=$((copied + 1))
+      ((copied++))
     else
       warn "Não encontrado (ignorado): ${f}"
     fi
@@ -380,8 +356,9 @@ smoke_prod() {
 
   local checks_prod=(
     "Render prod responde sem erro 502/503"
-    "Welcome.html com select de técnico funcionando"
-    "Fluxo completo de instalação sem regressão"
+    "INSTALL simples completa com tela de confirmação"
+    "UNINSTALL simples completa e tela de finalização aparece no app"
+    "Status da instalação fica COMPLETED após UNINSTALL"
   )
 
   local failed=0
@@ -390,7 +367,7 @@ smoke_prod() {
       ok "${check}"
     else
       fail "${check}"
-      failed=$((failed + 1))
+      ((failed++))
     fi
   done
 
@@ -454,7 +431,6 @@ check_git_state
 show_diff_summary
 run_smoke_test
 do_merge_and_push
-build_and_copy_dist
 update_workers
 smoke_prod
 final_summary
