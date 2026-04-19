@@ -311,24 +311,54 @@ router.post("/html5-login", async (req, res) => {
     });
   }
 
+  // Credenciais admin lidas do ambiente (mesmo padrão do warmup worker)
+  const adminName = (process.env.HTML5_LOGIN_NAME || "").trim();
+  const adminPass = (process.env.HTML5_PASSWORD   || "").trim();
+
+  if (!adminName || !adminPass) {
+    console.error("[auth] HTML5_LOGIN_NAME / HTML5_PASSWORD não definidos");
+    return res.status(500).json({ ok: false, error: "Configuração do servidor incompleta" });
+  }
+
   try {
-    // 1. Login do usuário no HTML5
+    // 1. Login do usuário — valida credenciais e obtém cookie para LOGIN_USER_GROUPS
     const userCookie = await loginUserToHtml5(String(username), String(password));
     if (!userCookie) {
       return res.status(401).json({ ok: false, error: "Credenciais inválidas" });
     }
 
-    // 2. CLIENTS com o cookie do próprio usuário — retorna só o que ele tem acesso
-    const filtered = await clientsQueryWithCookie(userCookie);
+    // 2. Em paralelo: grupos do usuário + login admin para buscar lista completa
+    const [allowedDescrs, adminCookie] = await Promise.all([
+      getUserGroups(userCookie),
+      loginUserToHtml5(adminName, adminPass),
+    ]);
 
-    if (filtered.length === 0) {
+    if (allowedDescrs.length === 0) {
       return res.status(403).json({
         ok: false,
         error: "Usuário sem clientes habilitados no sistema",
       });
     }
 
-    // 4. Gera token de sessão
+    if (!adminCookie) {
+      console.error("[auth] login admin falhou — verifique HTML5_LOGIN_NAME/HTML5_PASSWORD");
+      return res.status(502).json({ ok: false, error: "Falha no login administrativo" });
+    }
+
+    // 3. CLIENTS com cookie admin — lista completa
+    const allClients = await clientsQueryWithCookie(adminCookie);
+
+    if (allClients.length === 0) {
+      return res.status(502).json({ ok: false, error: "Lista de clientes vazia no servidor HTML5" });
+    }
+
+    // 4. Cruzamento por CLIENT_DESCR (case-insensitive)
+    const allowedSet = new Set(allowedDescrs.map(d => d.toUpperCase().trim()));
+    const filtered = allClients.filter(c =>
+      allowedSet.has((c.client_descr || "").toUpperCase().trim())
+    );
+
+    // 5. Gera token de sessão
     const token = randomUUID();
     sessionMap.set(token, {
       clients:   filtered,
@@ -338,7 +368,8 @@ router.post("/html5-login", async (req, res) => {
 
     console.log(
       `[auth] ✅ login ok user="${username}" ` +
-      `clients=${filtered.length} token=${token.slice(0, 8)}...`
+      `groups=${allowedDescrs.length} allClients=${allClients.length} ` +
+      `filtered=${filtered.length} token=${token.slice(0, 8)}...`
     );
 
     return res.json({
