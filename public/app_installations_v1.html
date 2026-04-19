@@ -404,17 +404,13 @@
     technician: null,   // { id, nick } — lido do localStorage (gravado pela welcome.html)
   };
 
-  // ====== técnico (vem da welcome via localStorage) ======
-  const LS_TECH      = "inst_technician_id";
-  const LS_TECH_NICK = "inst_technician_nick";
-
+  // ====== técnico (vem da welcome via sessionStorage — login HTML5) ======
   function loadTechnicianFromStorage(){
-    const id   = localStorage.getItem(LS_TECH)      || null;
-    const nick = localStorage.getItem(LS_TECH_NICK) || null;
-    if (id && nick){
-      state.technician = { id, nick };
+    const username = sessionStorage.getItem("html5_username") || null;
+    if (username){
+      state.technician = { id: username, nick: username };
       const badge = $("techBadge");
-      if (badge){ badge.textContent = nick; badge.classList.add("show"); }
+      if (badge){ badge.textContent = username; badge.classList.add("show"); }
     }
   }
 
@@ -518,7 +514,11 @@
 
   async function _doFetchClients(){
     try {
-      const rc = await api("/api/clients");
+      const token = sessionStorage.getItem("html5_session_token");
+
+      const rc = await api("/api/clients", {
+        headers: token ? { "X-Session-Token": token } : {}
+      });
       if (rc.ok && Array.isArray(rc.data?.clients)){
         _clientsData = rc.data.clients;
         _clientsFetched = true;
