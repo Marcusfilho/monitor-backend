@@ -516,17 +516,6 @@
     try {
       const token = sessionStorage.getItem("html5_session_token");
 
-      // Otimização: usar lista cacheada no sessionStorage pela welcome (evita round-trip)
-      const cached = sessionStorage.getItem("html5_clients_cache");
-      if (cached && token) {
-        try {
-          _clientsData = JSON.parse(cached);
-          _clientsFetched = true;
-          console.log(`[clients] ${_clientsData.length} carregados do sessionStorage`);
-          return;
-        } catch { /* JSON inválido — segue para fetch normal */ }
-      }
-
       const rc = await api("/api/clients", {
         headers: token ? { "X-Session-Token": token } : {}
       });
