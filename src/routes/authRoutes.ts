@@ -6,7 +6,6 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import * as https from "https";
 import * as http from "http";
-import { clientsQuery, ClientRecord } from "../services/html5Client";
 
 const router = Router();
 
@@ -217,6 +216,58 @@ async function loginUserToHtml5(
 }
 
 // ---------------------------------------------------------------------------
+// Tipo local (espelha ClientRecord de html5Client.ts)
+// ---------------------------------------------------------------------------
+
+interface ClientRecord {
+  client_id: number;
+  client_descr: string;
+  default_group_name: string;
+}
+
+// ---------------------------------------------------------------------------
+// clientsQueryWithCookie — chama CLIENTS com o cookie do próprio usuário
+// Retorna apenas os clientes que o usuário tem acesso (sem depender do cookiejar admin)
+// ---------------------------------------------------------------------------
+
+async function clientsQueryWithCookie(userCookie: string): Promise<ClientRecord[]> {
+  const bodyParams = new URLSearchParams({
+    REFRESH_FLG: "1",
+    action:      "CLIENTS",
+    VERSION_ID:  "2",
+  });
+
+  const resp = await httpPost(HTML5_ACTION_URL, bodyParams.toString(), {
+    cookie: userCookie,
+  });
+
+  const xml = resp.body;
+  console.log(`[auth] CLIENTS raw (${xml.length} chars): ${xml.slice(0, 200)}`);
+
+  const records: ClientRecord[] = [];
+  const re = /<CLIENT\s([^>]*?)\/>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const attr = (name: string) => {
+      const hit = attrs.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i"));
+      return hit ? hit[1].trim() : "";
+    };
+    const clientId = Number(attr("CLIENT_ID"));
+    if (!clientId) continue;
+    records.push({
+      client_id:          clientId,
+      client_descr:       attr("CLIENT_DESCR"),
+      default_group_name: attr("DEFAULT_GROUP_NAME"),
+    });
+  }
+
+  console.log(`[auth] CLIENTS encontrados: ${records.length}`);
+  return records;
+}
+
+// ---------------------------------------------------------------------------
 // getUserGroups — chama LOGIN_USER_GROUPS com o cookie do usuário
 // ---------------------------------------------------------------------------
 
@@ -267,24 +318,15 @@ router.post("/html5-login", async (req, res) => {
       return res.status(401).json({ ok: false, error: "Credenciais inválidas" });
     }
 
-    // 2. Em paralelo: grupos do usuário + lista completa de clientes (cookie admin)
-    const [allowedDescrs, allClients] = await Promise.all([
-      getUserGroups(userCookie),
-      clientsQuery(),
-    ]);
+    // 2. CLIENTS com o cookie do próprio usuário — retorna só o que ele tem acesso
+    const filtered = await clientsQueryWithCookie(userCookie);
 
-    if (allowedDescrs.length === 0) {
+    if (filtered.length === 0) {
       return res.status(403).json({
         ok: false,
         error: "Usuário sem clientes habilitados no sistema",
       });
     }
-
-    // 3. Cruzamento por CLIENT_DESCR (case-insensitive)
-    const allowedSet = new Set(allowedDescrs.map((d) => d.toUpperCase().trim()));
-    const filtered = allClients.filter((c) =>
-      allowedSet.has((c.client_descr || "").toUpperCase().trim())
-    );
 
     // 4. Gera token de sessão
     const token = randomUUID();
@@ -296,8 +338,7 @@ router.post("/html5-login", async (req, res) => {
 
     console.log(
       `[auth] ✅ login ok user="${username}" ` +
-      `groups=${allowedDescrs.length} clients=${filtered.length} ` +
-      `token=${token.slice(0, 8)}...`
+      `clients=${filtered.length} token=${token.slice(0, 8)}...`
     );
 
     return res.json({
