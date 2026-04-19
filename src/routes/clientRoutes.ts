@@ -2,6 +2,10 @@
 // GET /api/clients — retorna lista de clientes disponíveis na sessão HTML5,
 // enriquecida com vehicle_setting_id e profiles.
 //
+// MODOS:
+//   Com header X-Session-Token válido → lista filtrada do usuário (não cacheada globalmente)
+//   Sem header → comportamento admin atual (lista completa, cache de 5 min)
+//
 // FONTES DE DADOS:
 //   config/scheme_ids.txt                  → fonte de verdade para o vehicle_setting_id DEFAULT
 //   config/catalog_vehicle_settings.json   → define profiles alternativos (multi-profile)
@@ -17,6 +21,7 @@ import { Router } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import { clientsQuery } from "../services/html5Client";
+import { sessionMap } from "./authRoutes";
 
 const router = Router();
 
@@ -170,7 +175,7 @@ function buildProfiles(clientId: number): ClientProfile[] {
 }
 
 // ---------------------------------------------------------------------------
-// Cache em memória
+// Cache em memória (apenas para modo admin/sem token)
 // ---------------------------------------------------------------------------
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -210,7 +215,36 @@ function enrichClients(rawClients: Awaited<ReturnType<typeof clientsQuery>>): En
 // GET /api/clients
 // ---------------------------------------------------------------------------
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
+
+  // ── MODO TOKEN: header X-Session-Token presente ──────────────────────────
+  const rawToken = (req.headers["x-session-token"] || "").toString().trim();
+
+  if (rawToken) {
+    const session = sessionMap.get(rawToken);
+
+    // Token inválido ou expirado → lista vazia (proteção passiva)
+    if (!session || session.expiresAt < Date.now()) {
+      sessionMap.delete(rawToken);
+      console.warn(`[GET /api/clients] token inválido/expirado: ${rawToken.slice(0, 8)}...`);
+      return res.json({
+        status: "ok",
+        cached: false,
+        clients: [],
+        warning: "invalid_session",
+      });
+    }
+
+    // Token válido → enriquece a lista filtrada do usuário
+    const enriched = enrichClients(session.clients);
+    console.log(
+      `[GET /api/clients] token mode — user="${session.username}" ` +
+      `${enriched.length} clientes filtrados`
+    );
+    return res.json({ status: "ok", cached: false, clients: enriched });
+  }
+
+  // ── MODO ADMIN: sem token → comportamento atual (retrocompat) ────────────
   if (isCacheValid()) {
     return res.json({ status: "ok", cached: true, clients: clientsCache!.data });
   }
