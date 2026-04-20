@@ -173,9 +173,10 @@ async function loginAdminToHtml5(): Promise<string | null> {
 // Retorna: Map<assetTypeId, true>
 // ---------------------------------------------------------------------------
 
-async function fetchUsedAssetTypeIds(adminCookie: string): Promise<Set<number>> {
+async function fetchUsedAssetTypeIds(adminCookie: string): Promise<Set<string>> {
   const bodyParams = new URLSearchParams({
     action:     "VHCLS",
+    REFRESH_FLG: "1",
     VERSION_ID: "2",
   });
 
@@ -184,15 +185,21 @@ async function fetchUsedAssetTypeIds(adminCookie: string): Promise<Set<number>> 
   const xml = resp.body;
   console.log(`[admin] VHCLS resposta: ${xml.length} chars`);
 
-  const used = new Set<number>();
-  const re = /ASSET_TYPE\s*=\s*"(\d+)"/gi;
+  const used = new Set<string>();
+  const reData = /<DATA\s([^>]*?)\/?>/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(xml)) !== null) {
-    const id = Number(m[1]);
-    if (id > 0) used.add(id);
+  while ((m = reData.exec(xml)) !== null) {
+    const attrs = m[1];
+    const attr = (name: string) => {
+      const hit = attrs.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i"));
+      return hit ? hit[1].trim() : "";
+    };
+    const mfg   = attr("MANUFACTURER_DESCR").toUpperCase();
+    const model = attr("MODEL").toUpperCase();
+    if (mfg && model) used.add(`${mfg}|${model}`);
   }
 
-  console.log(`[admin] VHCLS — asset_type IDs únicos encontrados: ${used.size}`);
+  console.log(`[admin] VHCLS — pares fabricante+modelo únicos: ${used.size}`);
   return used;
 }
 
@@ -265,8 +272,10 @@ router.post("/asset-types/sync", async (_req, res) => {
       fetchAssetTypesCatalog(adminCookie),
     ]);
 
-    // 3. Match: filtra apenas os modelos que têm veículos na base
-    const matched = catalog.filter(entry => usedIds.has(entry.id));
+    // 3. Match: filtra por MANUFACTURER_DESCR+MODEL (VHCLS não expõe ASSET_TYPE_ID)
+    const matched = catalog.filter(entry =>
+      usedIds.has(`${entry.manufacturer.toUpperCase()}|${entry.model.toUpperCase()}`)
+    );
 
     // Ordena por fabricante + modelo para facilitar inspeção
     matched.sort((a, b) => {
@@ -274,12 +283,12 @@ router.post("/asset-types/sync", async (_req, res) => {
       return mfg !== 0 ? mfg : a.model.localeCompare(b.model);
     });
 
-    console.log(`[admin] match: ${matched.length} modelos de ${catalog.length} no catálogo (${usedIds.size} IDs únicos nos veículos)`);
+    console.log(`[admin] match: ${matched.length} modelos de ${catalog.length} no catálogo (${usedIds.size} pares fabricante+modelo nos veículos)`);
 
     // 4. Salva JSON
     const output = {
       generated_at:    new Date().toISOString(),
-      total_vhcls_ids: usedIds.size,
+      total_vhcls_pairs: usedIds.size,
       total_catalog:   catalog.length,
       total_matched:   matched.length,
       asset_types:     matched,
@@ -294,7 +303,7 @@ router.post("/asset-types/sync", async (_req, res) => {
 
     return res.json({
       ok:              true,
-      total_vhcls_ids: usedIds.size,
+      total_vhcls_pairs: usedIds.size,
       total_catalog:   catalog.length,
       total_matched:   matched.length,
       generated_at:    output.generated_at,
