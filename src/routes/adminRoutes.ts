@@ -175,9 +175,14 @@ async function loginAdminToHtml5(): Promise<string | null> {
 
 async function fetchUsedAssetTypeIds(adminCookie: string): Promise<Set<string>> {
   const bodyParams = new URLSearchParams({
-    action:     "VHCLS",
+    action:      "VHCLS",
     REFRESH_FLG: "1",
-    VERSION_ID: "2",
+    LICENSE_NMBR: "",
+    CLIENT_DESCR: "",
+    OWNER_DESCR:  "",
+    DIAL_NMBR:    "",
+    INNER_ID:     "",
+    VERSION_ID:  "2",
   });
 
   console.log("[admin] chamando VHCLS...");
