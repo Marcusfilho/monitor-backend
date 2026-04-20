@@ -8,97 +8,203 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 20px; font-size: 13px; }
   h1 { color: #aaa; font-size: 15px; margin-bottom: 16px; letter-spacing: 1px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid #1e1e1e; }
+  .tab-btn { background: transparent; color: #555; border: none; border-bottom: 2px solid transparent;
+    padding: 6px 18px; cursor: pointer; font-family: monospace; font-size: 12px; letter-spacing: 0.5px;
+    text-transform: uppercase; transition: color 0.15s; margin-bottom: -1px; }
+  .tab-btn:hover { color: #999; }
+  .tab-btn.active { color: #ccc; border-bottom-color: #555; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
   .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
-  button { background: #1e1e1e; color: #ccc; border: 1px solid #333; padding: 6px 14px; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 12px; }
+  button { background: #1e1e1e; color: #ccc; border: 1px solid #333; padding: 6px 14px; cursor: pointer;
+    border-radius: 3px; font-family: monospace; font-size: 12px; }
   button:hover { background: #2a2a2a; border-color: #555; }
   button.danger { border-color: #7a2020; color: #f08080; }
   button.danger:hover { background: #2a1010; border-color: #c03030; }
+  button.primary { border-color: #2a4a6a; color: #6da8d4; }
+  button.primary:hover { background: #0f2030; border-color: #4a7aaa; }
+  button.primary:disabled { opacity: 0.35; cursor: not-allowed; }
   button:disabled { opacity: 0.35; cursor: not-allowed; }
   .status-bar { font-size: 11px; color: #666; margin-left: auto; }
   .section { margin-bottom: 24px; }
-  .section-title { color: #555; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-  .count-badge { background: #1a1a1a; border: 1px solid #2a2a2a; color: #666; padding: 1px 7px; border-radius: 3px; font-size: 11px; }
+  .section-title { color: #555; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .count-badge { background: #1a1a1a; border: 1px solid #2a2a2a; color: #666;
+    padding: 1px 7px; border-radius: 3px; font-size: 11px; }
   .count-badge.active { border-color: #2a4a2a; color: #6dbf6d; }
+  .count-badge.info   { border-color: #2a3a4a; color: #6da8d4; }
   table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; color: #555; font-weight: normal; padding: 4px 8px; border-bottom: 1px solid #1e1e1e; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  th { text-align: left; color: #555; font-weight: normal; padding: 4px 8px;
+    border-bottom: 1px solid #1e1e1e; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
   td { padding: 6px 8px; border-bottom: 1px solid #151515; vertical-align: middle; }
   tr:hover td { background: #161616; }
   .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
   .badge.queued     { background: #1a2a1a; color: #6dbf6d; border: 1px solid #2a4a2a; }
   .badge.processing { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
-  .badge.completed  { background: #1a1a1a; color: #444; border: 1px solid #222; }
-  .badge.cancelled  { background: #1a1a1a; color: #444; border: 1px solid #222; }
+  .badge.completed  { background: #1a1a1a; color: #444;    border: 1px solid #222; }
+  .badge.cancelled  { background: #1a1a1a; color: #444;    border: 1px solid #222; }
   .badge.error      { background: #2a1010; color: #f08080; border: 1px solid #4a2020; }
   .badge.pending    { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
   .badge.sb_running { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
   .badge.can_running{ background: #1a2a2a; color: #6dbfbf; border: 1px solid #2a4a4a; }
   .badge.waiting_reboot_can { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
-  .id-cell { color: #444; font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .id-cell    { color: #444; font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .plate-cell { color: #c8a96e; font-weight: bold; }
-  .type-cell { color: #777; }
+  .type-cell  { color: #777; }
   .empty { color: #333; padding: 16px 8px; text-align: center; font-size: 12px; }
-  .progress-bar { width: 70px; height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 5px; }
+  .progress-bar { width: 70px; height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden;
+    display: inline-block; vertical-align: middle; margin-right: 5px; }
   .progress-bar span { display: block; height: 100%; background: #3a6a3a; border-radius: 3px; }
-  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a2a1a; border: 1px solid #2a4a2a; color: #6dbf6d; padding: 8px 16px; border-radius: 3px; font-size: 12px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 99; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a2a1a; border: 1px solid #2a4a2a;
+    color: #6dbf6d; padding: 8px 16px; border-radius: 3px; font-size: 12px;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 99; }
   .toast.error { background: #2a1010; border-color: #4a2020; color: #f08080; }
-  .toast.show { opacity: 1; }
+  .toast.show  { opacity: 1; }
   .filter-btns { display: flex; gap: 4px; }
-  .filter-btn { font-size: 11px; padding: 3px 10px; }
+  .filter-btn  { font-size: 11px; padding: 3px 10px; }
   .filter-btn.active { border-color: #555; color: #ddd; }
   .divider { border: none; border-top: 1px solid #1a1a1a; margin: 20px 0; }
+
+  /* Sync result card */
+  .sync-card { background: #111; border: 1px solid #1e1e1e; border-radius: 4px; padding: 14px 16px;
+    margin-bottom: 14px; display: none; }
+  .sync-card.visible { display: block; }
+  .sync-card .sync-stats { display: flex; gap: 24px; margin-bottom: 12px; flex-wrap: wrap; }
+  .sync-stat { }
+  .sync-stat .val { font-size: 20px; color: #6da8d4; font-weight: bold; }
+  .sync-stat .lbl { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sync-time { font-size: 10px; color: #444; margin-top: 4px; }
+
+  /* Modelos search */
+  .model-search { background: #111; border: 1px solid #222; color: #ccc; font-family: monospace;
+    font-size: 12px; padding: 5px 10px; border-radius: 3px; width: 260px; }
+  .model-search:focus { outline: none; border-color: #444; }
+  .mfg-cell   { color: #9abfdf; }
+  .model-cell { color: #ccc; }
+  .id-num     { color: #444; font-size: 11px; }
+
+  /* Spinner */
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid #333;
+    border-top-color: #6da8d4; border-radius: 50%; animation: spin 0.7s linear infinite;
+    vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 
 <h1>⚙ ADMIN — MONITOR BACKEND</h1>
 
-<div class="toolbar">
-  <button onclick="loadAll()">↻ Atualizar</button>
-  <button class="danger" onclick="killAll()" id="btn-kill-all">✕ Kill All</button>
-  <span class="status-bar" id="status-bar">—</span>
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('jobs')">Jobs &amp; Instalações</button>
+  <button class="tab-btn" onclick="switchTab('models')">Modelos de Veículos</button>
 </div>
 
-<!-- JOBS -->
-<div class="section">
-  <div class="section-title">
-    Jobs
-    <span class="count-badge active" id="jobs-count">—</span>
-    <div class="filter-btns">
-      <button class="filter-btn active" id="fj-active" onclick="setJobFilter('active')">Ativos</button>
-      <button class="filter-btn" id="fj-all" onclick="setJobFilter('all')">Todos</button>
-    </div>
+<!-- ═══════════════════════════════════════════════════════ TAB: JOBS -->
+<div class="tab-panel active" id="tab-jobs">
+
+  <div class="toolbar">
+    <button onclick="loadAll()">↻ Atualizar</button>
+    <button class="danger" onclick="killAll()" id="btn-kill-all">✕ Kill All</button>
+    <span class="status-bar" id="status-bar">—</span>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th><th>Tipo</th><th>Placa</th><th>Serial</th><th>Status</th><th>Progresso</th><th>Criado</th><th></th>
-      </tr>
-    </thead>
-    <tbody id="jobs-body"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
-  </table>
-</div>
 
-<hr class="divider">
-
-<!-- INSTALAÇÕES -->
-<div class="section">
-  <div class="section-title">
-    Instalações
-    <span class="count-badge active" id="inst-count">—</span>
-    <div class="filter-btns">
-      <button class="filter-btn active" id="fi-active" onclick="setInstFilter('active')">Ativas</button>
-      <button class="filter-btn" id="fi-all" onclick="setInstFilter('all')">Todas</button>
+  <!-- JOBS -->
+  <div class="section">
+    <div class="section-title">
+      Jobs
+      <span class="count-badge active" id="jobs-count">—</span>
+      <div class="filter-btns">
+        <button class="filter-btn active" id="fj-active" onclick="setJobFilter('active')">Ativos</button>
+        <button class="filter-btn" id="fj-all" onclick="setJobFilter('all')">Todos</button>
+      </div>
     </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Tipo</th><th>Placa</th><th>Serial</th><th>Status</th><th>Progresso</th><th>Criado</th><th></th></tr>
+      </thead>
+      <tbody id="jobs-body"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody>
+    </table>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th><th>Placa</th><th>Serial</th><th>Status</th><th>Atualizado</th><th></th>
-      </tr>
-    </thead>
-    <tbody id="inst-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
-  </table>
-</div>
+
+  <hr class="divider">
+
+  <!-- INSTALAÇÕES -->
+  <div class="section">
+    <div class="section-title">
+      Instalações
+      <span class="count-badge active" id="inst-count">—</span>
+      <div class="filter-btns">
+        <button class="filter-btn active" id="fi-active" onclick="setInstFilter('active')">Ativas</button>
+        <button class="filter-btn" id="fi-all" onclick="setInstFilter('all')">Todas</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Placa</th><th>Serial</th><th>Status</th><th>Atualizado</th><th></th></tr>
+      </thead>
+      <tbody id="inst-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+
+</div><!-- /tab-jobs -->
+
+<!-- ═══════════════════════════════════════════════════════ TAB: MODELOS -->
+<div class="tab-panel" id="tab-models">
+
+  <div class="toolbar" style="margin-bottom:16px">
+    <button class="primary" id="btn-sync" onclick="syncModels()">⟳ Sincronizar Modelos</button>
+    <button onclick="loadCurrentModels()">↻ Ver Lista Atual</button>
+    <span class="status-bar" id="status-models">—</span>
+  </div>
+
+  <p style="color:#444;font-size:11px;margin-bottom:14px;line-height:1.6">
+    Faz match entre <strong style="color:#666">VHCLS</strong> (veículos da sua base) e
+    <strong style="color:#666">ASSET_TYPES</strong> (catálogo do servidor) e salva
+    <code style="color:#6da8d4">config/asset_types_active.json</code>.
+    Execute após adicionar novos modelos de veículos. Pode levar ~15–30s.
+  </p>
+
+  <!-- Card de resultado da última sync -->
+  <div class="sync-card" id="sync-card">
+    <div class="sync-stats">
+      <div class="sync-stat">
+        <div class="val" id="stat-matched">—</div>
+        <div class="lbl">Modelos salvos</div>
+      </div>
+      <div class="sync-stat">
+        <div class="val" id="stat-vhcls">—</div>
+        <div class="lbl">IDs únicos nos veículos</div>
+      </div>
+      <div class="sync-stat">
+        <div class="val" id="stat-catalog">—</div>
+        <div class="lbl">Total no catálogo</div>
+      </div>
+    </div>
+    <div class="sync-time" id="sync-time"></div>
+  </div>
+
+  <!-- Busca + tabela de modelos -->
+  <div class="section">
+    <div class="section-title">
+      Lista de Modelos
+      <span class="count-badge info" id="models-count">—</span>
+      <input class="model-search" id="model-search" type="text"
+        placeholder="Buscar fabricante ou modelo..." oninput="filterModels()" />
+    </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Fabricante</th><th>Modelo</th><th>Sub-modelo</th></tr>
+      </thead>
+      <tbody id="models-body"><tr><td colspan="4" class="empty">Execute a sincronização ou clique em "Ver Lista Atual".</td></tr></tbody>
+    </table>
+  </div>
+
+</div><!-- /tab-models -->
 
 <div class="toast" id="toast"></div>
 
@@ -106,12 +212,23 @@
   const BASE = window.location.origin;
   let allJobs = [], allInst = [];
   let jobFilter = 'active', instFilter = 'active';
+  let allModels = [], filteredModels = [];
 
   const ACTIVE_JOB  = ['queued','processing','pending'];
   const ACTIVE_INST = ['HTML5_QUEUED','HTML5_RUNNING','SB_QUEUED','SB_RUNNING',
                        'CAN_QUEUED','CAN_RUNNING','WAITING_REBOOT_CAN',
                        'GS_QUEUED','GS_RUNNING','HTML5_DONE','SB_DONE'];
 
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach((b,i) => {
+      b.classList.toggle('active', ['jobs','models'][i] === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // ── Jobs & Instalações ────────────────────────────────────────────────────
   function setJobFilter(f) {
     jobFilter = f;
     document.getElementById('fj-active').classList.toggle('active', f==='active');
@@ -145,13 +262,11 @@
 
   function renderJobs() {
     const jobs = jobFilter === 'active'
-      ? allJobs.filter(j => ACTIVE_JOB.includes(j.status))
-      : allJobs;
+      ? allJobs.filter(j => ACTIVE_JOB.includes(j.status)) : allJobs;
     const active = allJobs.filter(j => ACTIVE_JOB.includes(j.status));
     const badge = document.getElementById('jobs-count');
     badge.textContent = active.length + ' ativo' + (active.length !== 1 ? 's' : '');
     badge.className = 'count-badge' + (active.length ? ' active' : '');
-
     const tbody = document.getElementById('jobs-body');
     if (!jobs.length) {
       tbody.innerHTML = `<tr><td colspan="8" class="empty">${jobFilter==='active'?'Nenhum job ativo.':'Nenhum job.'}</td></tr>`;
@@ -159,7 +274,7 @@
     }
     tbody.innerHTML = jobs.map(j => {
       const pct = j.progressPercent ?? null;
-      const plate = j.plate || j.payload?.plate_real || j.payload?.plate || '—';
+      const plate  = j.plate  || j.payload?.plate_real  || j.payload?.plate  || '—';
       const serial = j.serial || j.payload?.serial || '—';
       const progressHtml = pct !== null
         ? `<div class="progress-bar"><span style="width:${Math.min(100,pct)}%"></span></div>${pct}%`
@@ -182,13 +297,11 @@
 
   function renderInst() {
     const list = instFilter === 'active'
-      ? allInst.filter(i => ACTIVE_INST.includes(String(i.status||'').toUpperCase()))
-      : allInst;
+      ? allInst.filter(i => ACTIVE_INST.includes(String(i.status||'').toUpperCase())) : allInst;
     const active = allInst.filter(i => ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
     const badge = document.getElementById('inst-count');
     badge.textContent = active.length + ' ativa' + (active.length !== 1 ? 's' : '');
     badge.className = 'count-badge' + (active.length ? ' active' : '');
-
     const tbody = document.getElementById('inst-body');
     if (!list.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">${instFilter==='active'?'Nenhuma instalação ativa.':'Nenhuma instalação.'}</td></tr>`;
@@ -196,7 +309,7 @@
     }
     tbody.innerHTML = list.map(i => {
       const id = i.installation_id || i.id || '';
-      const plate = i.payload?.plate_real || i.payload?.plateReal || i.payload?.plate || '—';
+      const plate  = i.payload?.plate_real || i.payload?.plateReal || i.payload?.plate || '—';
       const serial = i.payload?.serial || i.serial || '—';
       const st = String(i.status||'').toLowerCase().replace(/_/g,'-');
       const isActive = ACTIVE_INST.includes(String(i.status||'').toUpperCase());
@@ -213,20 +326,21 @@
     }).join('');
   }
 
+  // ── Cancel — agora usa /api/admin/ (sem requireWorkerKey) ─────────────────
   async function cancelJob(id) {
     try {
-      const r = await fetch(`${BASE}/api/jobs/${id}/cancel`, {method:'POST'});
+      const r = await fetch(`${BASE}/api/admin/jobs/${id}/cancel`, {method:'POST'});
       const d = await r.json();
-      d.ok ? toast(`Job cancelado`) : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+      d.ok ? toast('Job cancelado') : toast('Erro: '+(d.error||JSON.stringify(d)), true);
       await loadAll();
     } catch(e) { toast('Erro: '+e.message, true); }
   }
 
   async function cancelInst(id) {
     try {
-      const r = await fetch(`${BASE}/api/installations/${id}/cancel`, {method:'POST'});
+      const r = await fetch(`${BASE}/api/admin/installations/${id}/cancel`, {method:'POST'});
       const d = await r.json();
-      d.ok ? toast(`Instalação cancelada`) : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+      d.ok ? toast('Instalação cancelada') : toast('Erro: '+(d.error||JSON.stringify(d)), true);
       await loadAll();
     } catch(e) { toast('Erro: '+e.message, true); }
   }
@@ -241,7 +355,7 @@
     let ok = 0, fail = 0;
     for (const j of activeJobs) {
       try {
-        const r = await fetch(`${BASE}/api/jobs/${j.id}/cancel`, {method:'POST'});
+        const r = await fetch(`${BASE}/api/admin/jobs/${j.id}/cancel`, {method:'POST'});
         const d = await r.json();
         d.ok ? ok++ : fail++;
       } catch { fail++; }
@@ -249,7 +363,7 @@
     for (const i of activeInst) {
       const id = i.installation_id || i.id;
       try {
-        const r = await fetch(`${BASE}/api/installations/${id}/cancel`, {method:'POST'});
+        const r = await fetch(`${BASE}/api/admin/installations/${id}/cancel`, {method:'POST'});
         const d = await r.json();
         d.ok ? ok++ : fail++;
       } catch { fail++; }
@@ -258,7 +372,104 @@
     await loadAll();
   }
 
-  function setStatus(msg) { document.getElementById('status-bar').textContent = msg; }
+  // ── Modelos ───────────────────────────────────────────────────────────────
+  async function syncModels() {
+    const btn = document.getElementById('btn-sync');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Sincronizando...';
+    setStatusModels('buscando VHCLS e ASSET_TYPES — aguarde...');
+
+    try {
+      const r = await fetch(`${BASE}/api/admin/asset-types/sync`, {method:'POST'});
+      const d = await r.json();
+
+      if (!d.ok) {
+        toast('Erro na sync: ' + (d.error || JSON.stringify(d)), true);
+        setStatusModels('erro na sincronização');
+        return;
+      }
+
+      showSyncCard(d);
+      allModels = d.asset_types || [];
+      filteredModels = allModels;
+      document.getElementById('model-search').value = '';
+      renderModels(allModels);
+      setStatusModels(`sincronizado em ${fmtDate(d.generated_at)}`);
+      toast(`${d.total_matched} modelos salvos com sucesso`);
+    } catch(e) {
+      toast('Erro: ' + e.message, true);
+      setStatusModels('erro: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '⟳ Sincronizar Modelos';
+    }
+  }
+
+  async function loadCurrentModels() {
+    setStatusModels('carregando...');
+    try {
+      const r = await fetch(`${BASE}/api/admin/asset-types`);
+      if (r.status === 404) {
+        setStatusModels('nenhum JSON salvo — execute a sincronização primeiro');
+        toast('Nenhuma lista salva ainda', true);
+        return;
+      }
+      const d = await r.json();
+      showSyncCard(d);
+      allModels = d.asset_types || [];
+      filteredModels = allModels;
+      document.getElementById('model-search').value = '';
+      renderModels(allModels);
+      setStatusModels(`lista de ${fmtDate(d.generated_at)}`);
+    } catch(e) {
+      toast('Erro: ' + e.message, true);
+      setStatusModels('erro ao carregar');
+    }
+  }
+
+  function showSyncCard(d) {
+    document.getElementById('stat-matched').textContent = d.total_matched ?? '—';
+    document.getElementById('stat-vhcls').textContent   = d.total_vhcls_ids ?? '—';
+    document.getElementById('stat-catalog').textContent = d.total_catalog ?? '—';
+    document.getElementById('sync-time').textContent    = d.generated_at
+      ? 'Gerado em: ' + new Date(d.generated_at).toLocaleString('pt-BR')
+      : '';
+    document.getElementById('sync-card').classList.add('visible');
+  }
+
+  function filterModels() {
+    const q = document.getElementById('model-search').value.toLowerCase();
+    filteredModels = q
+      ? allModels.filter(m =>
+          m.manufacturer.toLowerCase().includes(q) ||
+          m.model.toLowerCase().includes(q) ||
+          m.sub_model.toLowerCase().includes(q) ||
+          String(m.id).includes(q)
+        )
+      : allModels;
+    renderModels(filteredModels);
+  }
+
+  function renderModels(list) {
+    const badge = document.getElementById('models-count');
+    badge.textContent = list.length + ' modelo' + (list.length !== 1 ? 's' : '');
+
+    const tbody = document.getElementById('models-body');
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty">Nenhum modelo encontrado.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(m => `<tr>
+      <td class="id-num">${m.id}</td>
+      <td class="mfg-cell">${esc(m.manufacturer)}</td>
+      <td class="model-cell">${esc(m.model)}</td>
+      <td style="color:#555">${esc(m.sub_model)}</td>
+    </tr>`).join('');
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+  function setStatus(msg)       { document.getElementById('status-bar').textContent    = msg; }
+  function setStatusModels(msg) { document.getElementById('status-models').textContent = msg; }
 
   let toastTimer;
   function toast(msg, isError=false) {
@@ -266,7 +477,7 @@
     el.textContent = msg;
     el.className = 'toast' + (isError?' error':'') + ' show';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
   }
 
   function fmtDate(iso) {
@@ -276,11 +487,15 @@
       + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   }
 
-  // Auto-refresh a cada 8s enquanto houver ativos
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Auto-refresh a cada 8s enquanto houver ativos (só na tab jobs)
   setInterval(() => {
     const hasActive = allJobs.some(j=>ACTIVE_JOB.includes(j.status))
                    || allInst.some(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
-    if (hasActive) loadAll();
+    if (hasActive && document.getElementById('tab-jobs').classList.contains('active')) loadAll();
   }, 8000);
 
   loadAll();
