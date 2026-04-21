@@ -29,7 +29,7 @@ const router = Router();
 // Caminhos dos arquivos de configuração
 // ---------------------------------------------------------------------------
 
-const SCHEME_IDS_PATH = path.resolve(
+export const SCHEME_IDS_PATH = path.resolve(
   process.env.SCHEME_IDS_PATH ||
   path.join(__dirname, "../../config/scheme_ids.txt")
 );

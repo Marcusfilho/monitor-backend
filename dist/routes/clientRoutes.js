@@ -51,6 +51,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.SCHEME_IDS_PATH = void 0;
 exports.reloadSchemeSources = reloadSchemeSources;
 const express_1 = require("express");
 const fs = __importStar(require("fs"));
@@ -61,7 +62,7 @@ const router = (0, express_1.Router)();
 // ---------------------------------------------------------------------------
 // Caminhos dos arquivos de configuração
 // ---------------------------------------------------------------------------
-const SCHEME_IDS_PATH = path.resolve(process.env.SCHEME_IDS_PATH ||
+exports.SCHEME_IDS_PATH = path.resolve(process.env.SCHEME_IDS_PATH ||
     path.join(__dirname, "../../config/scheme_ids.txt"));
 const CATALOG_PATH = path.resolve(process.env.CATALOG_PATH ||
     path.join(__dirname, "../../config/catalog_vehicle_settings.json"));
@@ -71,7 +72,7 @@ const CATALOG_PATH = path.resolve(process.env.CATALOG_PATH ||
 function loadSchemeIds() {
     const map = new Map();
     try {
-        const lines = fs.readFileSync(SCHEME_IDS_PATH, "utf8")
+        const lines = fs.readFileSync(exports.SCHEME_IDS_PATH, "utf8")
             .split("\n")
             .map(l => l.trim())
             .filter(l => l && !l.startsWith("CLIENT_ID"));

@@ -259,8 +259,7 @@
   </p>
 
   <div class="schemes-progress" id="schemes-progress" style="display:none">
-    Processando clientes <span id="prog-current">0</span>–<span id="prog-batch-end">5</span> de <span id="prog-total">0</span>
-    <span style="color:#444"> (5 em paralelo)</span>...
+    Processando cliente <span id="prog-current">0</span> de <span id="prog-total">0</span>...
   </div>
 
   <!-- Barra de salvar -->
@@ -574,38 +573,28 @@
       document.getElementById('prog-total').textContent = clients.length;
       setStatusSchemes(`${clients.length} clientes — buscando schemes sequencialmente...`);
 
-      // 2. Para cada cliente, buscar schemes em lotes de 5 (paralelo por batch)
-      const BATCH_SIZE = 5;
+      // 2. Para cada cliente, buscar schemes (sequencial)
       const result = [];
-      for (let i = 0; i < clients.length; i += BATCH_SIZE) {
-        const batch = clients.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < clients.length; i++) {
+        const c = clients[i];
         document.getElementById('prog-current').textContent = i + 1;
-        document.getElementById('prog-batch-end').textContent = Math.min(i + BATCH_SIZE, clients.length);
+        let schemes = [];
+        try {
+          const rs = await fetch(`${BASE}/api/admin/schemes/client/${c.client_id}`);
+          const ds = await rs.json();
+          if (ds.ok) schemes = ds.schemes || [];
+        } catch(_) { /* cliente sem schemes ou erro — continua */ }
 
-        const batchResults = await Promise.all(batch.map(async c => {
-          let schemes = [];
-          try {
-            const rs = await fetch(`${BASE}/api/admin/schemes/client/${c.client_id}`);
-            const ds = await rs.json();
-            if (ds.ok) schemes = ds.schemes || [];
-          } catch(_) { /* cliente sem schemes ou erro — continua */ }
+        const selected = savedSelection[c.client_id] ||
+          (schemes.length === 1 ? schemes[0].vehicle_setting_id : null);
 
-          const selected = savedSelection[c.client_id] ||
-            (schemes.length === 1 ? schemes[0].vehicle_setting_id : null);
-
-          return { client_id: c.client_id, client_descr: c.client_descr, schemes, selected_scheme_id: selected };
-        }));
-
-        result.push(...batchResults);
-
-        // Renderização progressiva: mostrar o que já chegou enquanto o resto carrega
-        allClients = result;
-        filteredClients = allClients;
-        renderSchemesList(filteredClients);
-        document.getElementById('save-schemes-bar').style.display = result.length ? 'flex' : 'none';
+        result.push({ client_id: c.client_id, client_descr: c.client_descr, schemes, selected_scheme_id: selected });
       }
 
-      // 3. Salvar resultado final no servidor
+      allClients = result;
+      filteredClients = allClients;
+
+      // 3. Salvar resultado no servidor
       const rSave = await fetch(`${BASE}/api/admin/schemes`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
@@ -731,29 +720,6 @@
       badge.textContent = `✓ #${schemeId}`;
       header.appendChild(badge);
     }
-    // ⚠ Auto-salvar imediatamente após seleção para garantir que o worker use o scheme correto
-    autoSaveSchemes();
-  }
-
-  let autoSaveTimer;
-  async function autoSaveSchemes() {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(async () => {
-      try {
-        const r = await fetch(`${BASE}/api/admin/schemes`, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ clients: allClients })
-        });
-        const d = await r.json();
-        if (d.ok) {
-          const saveOk = document.getElementById('save-ok');
-          saveOk.textContent = '✓ Auto-salvo';
-          saveOk.classList.add('show');
-          setTimeout(() => { saveOk.classList.remove('show'); saveOk.textContent = '✓ Salvo com sucesso'; }, 2000);
-        }
-      } catch(_) { /* silencioso — usuário pode salvar manualmente */ }
-    }, 600);
   }
 
   async function saveSchemes() {

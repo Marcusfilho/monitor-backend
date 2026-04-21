@@ -10,6 +10,7 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionTokenStatus, setSessionToken } from "../services/sessionTokenStore";
+import { reloadSchemeSources, SCHEME_IDS_PATH } from "./clientRoutes";
 
 const router = Router();
 
@@ -503,10 +504,38 @@ router.post("/schemes", (req, res) => {
       total_schemes: clients.reduce((acc: number, c: any) => acc + (c.schemes?.length || 0), 0),
       clients,
     };
+
+    // 1. Salvar schemes_active.json (comportamento anterior)
     const dir = path.dirname(SCHEMES_JSON_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(SCHEMES_JSON_PATH, JSON.stringify(payload, null, 2), "utf8");
     console.log(`[admin] schemes_active.json salvo — ${payload.total_clients} clientes, ${payload.total_schemes} schemes`);
+
+    // ── PATCH_ADMIN_SYNC_SCHEME_IDS_V1 ──────────────────────────────────────
+    // 2. Regenerar scheme_ids.txt a partir da seleção do Admin.
+    //    Só inclui clientes que têm selected_scheme_id definido.
+    //    Formato: CLIENT_ID;CLIENT_DESCR;VEHICLE_SETTING_ID
+    try {
+      const lines: string[] = ["CLIENT_ID;CLIENT_DESCR;VEHICLE_SETTING_ID"];
+      for (const c of clients as any[]) {
+        if (c.selected_scheme_id && c.client_id && c.client_descr) {
+          lines.push(`${c.client_id};${c.client_descr};${c.selected_scheme_id}`);
+        }
+      }
+      const schemeIdDir = path.dirname(SCHEME_IDS_PATH);
+      if (!fs.existsSync(schemeIdDir)) fs.mkdirSync(schemeIdDir, { recursive: true });
+      fs.writeFileSync(SCHEME_IDS_PATH, lines.join("\n") + "\n", "utf8");
+      console.log(`[admin] scheme_ids.txt regenerado — ${lines.length - 1} clientes com scheme selecionado`);
+
+      // 3. Recarregar fontes em memória — próximo job já usa o scheme correto
+      reloadSchemeSources();
+      console.log("[admin] clientRoutes recarregado após atualização de schemes");
+    } catch (syncErr: any) {
+      // Não bloqueia a resposta — schemes_active.json já foi salvo
+      console.error("[admin] WARN: falha ao regenerar scheme_ids.txt:", syncErr?.message);
+    }
+    // ── fim PATCH_ADMIN_SYNC_SCHEME_IDS_V1 ──────────────────────────────────
+
     return res.json({ ok: true, total_clients: payload.total_clients, total_schemes: payload.total_schemes });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err?.message });
