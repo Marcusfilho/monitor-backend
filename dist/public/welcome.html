@@ -213,7 +213,7 @@
     }
     .err-box.visible { display: block; }
 
-    /* Seleção de técnico */
+    /* Campos de login */
     .tech-wrap {
       display: flex;
       flex-direction: column;
@@ -230,9 +230,10 @@
       color: var(--muted);
       align-self: flex-start;
     }
-    #techSelect {
+
+    .login-input {
       width: 100%;
-      padding: 12px 36px 12px 14px;
+      padding: 12px 14px;
       background: var(--panel);
       border: 1px solid #253347;
       border-radius: 12px;
@@ -241,16 +242,10 @@
       font-size: 14px;
       font-weight: 300;
       outline: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a6080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-      cursor: pointer;
       transition: border-color .2s;
     }
-    #techSelect:focus { border-color: #3b5880; }
-    #techSelect option { background: #0c1219; }
+    .login-input:focus { border-color: #3b5880; }
+    .login-input::placeholder { color: var(--muted); }
 
     /* Rodapé */
     .footer {
@@ -279,11 +274,23 @@
     <span class="brand-name">App instalador</span>
   </div>
 
-  <div class="tech-wrap">
-    <span class="tech-label">Técnico</span>
-    <select id="techSelect">
-      <option value="">Carregando...</option>
-    </select>
+  <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:280px">
+    <div class="tech-wrap">
+      <span class="tech-label">Usuário</span>
+      <input id="inputUser" type="text" class="login-input"
+        placeholder="usuário HTML5"
+        autocomplete="username"
+        spellcheck="false"
+        autocorrect="off"
+        autocapitalize="off" />
+    </div>
+
+    <div class="tech-wrap">
+      <span class="tech-label">Senha</span>
+      <input id="inputPass" type="password" class="login-input"
+        placeholder="••••••••"
+        autocomplete="current-password" />
+    </div>
   </div>
 
   <button id="btnEnter" disabled>Entrar</button>
@@ -305,17 +312,14 @@
 
 <script>
   const btnEnter    = document.getElementById("btnEnter");
-  const techSelect  = document.getElementById("techSelect");
+  const inputUser   = document.getElementById("inputUser");
+  const inputPass   = document.getElementById("inputPass");
   const statusRow   = document.getElementById("statusRow");
   const statusDot   = document.getElementById("statusDot");
   const statusTxt   = document.getElementById("statusTxt");
   const progressBar = document.getElementById("progressBar");
   const progressFill= document.getElementById("progressFill");
   const errBox      = document.getElementById("errBox");
-
-  const API = "";
-  const LS_TECH = "inst_technician_id";
-  const LS_TECH_NICK = "inst_technician_nick";
 
   function setStatus(msg, type = "spin") {
     statusRow.classList.add("visible");
@@ -333,115 +337,90 @@
     errBox.classList.add("visible");
   }
 
-  // Carrega lista de técnicos do JSON estático
-  async function loadTechnicians() {
-    try {
-      const r = await fetch("/app/technicians.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const data = await r.json();
-      const list = data.technicians || [];
-
-      techSelect.innerHTML = '<option value="">— Selecione seu nome —</option>';
-      for (const t of list) {
-        const o = document.createElement("option");
-        o.value = t.id;
-        o.textContent = t.nick;
-        o.dataset.nick = t.nick;
-        techSelect.appendChild(o);
-      }
-
-      // pré-seleciona último técnico salvo
-      const saved = localStorage.getItem(LS_TECH);
-      if (saved) {
-        const found = [...techSelect.options].find(o => o.value === saved);
-        if (found) { techSelect.value = saved; btnEnter.disabled = false; }
-      }
-    } catch(e) {
-      techSelect.innerHTML = '<option value="">Erro ao carregar lista</option>';
-      console.error("[technicians]", e);
-    }
-  }
-
-  techSelect.addEventListener("change", () => {
-    btnEnter.disabled = !techSelect.value;
+  // Habilita botão quando ambos os campos têm conteúdo
+  function updateBtn() {
+    btnEnter.disabled = !(inputUser.value.trim() && inputPass.value);
     errBox.classList.remove("visible");
+  }
+  inputUser.addEventListener("input", updateBtn);
+  inputPass.addEventListener("input", updateBtn);
+
+  // Enter no campo de senha dispara o login
+  inputPass.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !btnEnter.disabled) btnEnter.click();
+  });
+  inputUser.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") inputPass.focus();
   });
 
-  async function api(path, opts = {}) {
-    const r = await fetch(API + path, {
-      headers: { "content-type": "application/json" },
-      ...opts,
-    });
-    const data = await r.json().catch(() => null);
-    return { ok: r.ok, status: r.status, data };
-  }
+  // ── Auto-login: se já tem sessão ativa no sessionStorage, pula tela de login ──
+  (async function checkExistingSession() {
+    const token = sessionStorage.getItem("html5_session_token");
+    if (!token) return; // sem sessão → exibe tela de login normalmente
 
-  async function pollJobUntilDone(jobId, timeoutMs = 90000) {
-    const deadline = Date.now() + timeoutMs;
-    let lastPct = 10;
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 2000));
-      try {
-        const r = await api(`/api/jobs/${jobId}`);
-        if (!r.ok || !r.data) continue;
-        const job = r.data.job || r.data;
-        const pct = Number(job.progress ?? job.percent ?? lastPct);
-        if (pct > lastPct) { lastPct = pct; setProgress(pct); }
-        if (job.status === "ok" || job.status === "completed") return { ok: true };
-        if (job.status === "error") return { ok: false, message: job.result?.message || "Erro no warmup" };
-      } catch { /* continua */ }
+    setStatus("verificando sessão...");
+    try {
+      const r = await fetch("/api/auth/session?token=" + encodeURIComponent(token));
+      const d = await r.json();
+      if (d.ok) {
+        // Token ainda válido → pula login
+        setStatus("sessão ativa — abrindo...", "ok");
+        setProgress(100);
+        await new Promise(resolve => setTimeout(resolve, 400));
+        window.location.href = "/app/app_installations_v1.html";
+      } else {
+        // Expirado → limpa e exibe login
+        sessionStorage.clear();
+        statusRow.classList.remove("visible");
+      }
+    } catch {
+      sessionStorage.clear();
+      statusRow.classList.remove("visible");
     }
-    return { ok: false, message: "Timeout aguardando sessão (90s)" };
-  }
+  })();
 
+  // ── Handler do botão Entrar ──────────────────────────────────────────────
   btnEnter.addEventListener("click", async () => {
-    const opt = techSelect.options[techSelect.selectedIndex];
-    if (!opt || !opt.value) return;
-
-    // Salva técnico no localStorage antes de qualquer coisa
-    localStorage.setItem(LS_TECH, opt.value);
-    localStorage.setItem(LS_TECH_NICK, opt.dataset.nick || opt.textContent);
+    const username = inputUser.value.trim();
+    const password = inputPass.value;
+    if (!username || !password) return;
 
     btnEnter.disabled = true;
     errBox.classList.remove("visible");
-    setProgress(5);
-    setStatus("preparando sessão...");
+    setProgress(10);
+    setStatus("autenticando...");
 
     try {
-      const r = await api("/api/jobs", {
+      const r = await fetch("/api/auth/html5-login", {
         method: "POST",
-        body: JSON.stringify({ type: "html5_warmup", payload: {} }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, password }),
       });
+      const data = await r.json();
 
-      if (!r.ok || !r.data?.job?.id) {
-        throw new Error("Não foi possível criar job de warmup (status " + r.status + ")");
+      if (!r.ok || !data.ok) {
+        throw new Error(data.error || "Falha no login");
       }
 
-      const jobId = r.data.job.id;
-      setProgress(15);
-      setStatus("autenticando sessão HTML5...");
+      setProgress(80);
+      setStatus("sessão pronta...");
 
-      const result = await pollJobUntilDone(jobId);
-
-      if (!result.ok) {
-        throw new Error(result.message || "Falha no warmup");
-      }
+      // Persiste token, lista de clientes e username no sessionStorage
+      sessionStorage.setItem("html5_session_token", data.session_token);
+      sessionStorage.setItem("html5_clients_cache", JSON.stringify(data.clients));
+      sessionStorage.setItem("html5_username", data.username || username);
 
       setProgress(100);
-      setStatus("sessão pronta — abrindo...", "ok");
-      await new Promise(r => setTimeout(r, 600));
+      setStatus("abrindo...", "ok");
+      await new Promise(resolve => setTimeout(resolve, 500));
       window.location.href = "/app/app_installations_v1.html";
 
     } catch (e) {
-      setStatus("falha na sessão", "err");
-      setProgress(0);
+      setStatus("falha no login", "err");
       showError(e.message || "Erro desconhecido");
       btnEnter.disabled = false;
     }
   });
-
-  // Inicia carregando a lista imediatamente
-  loadTechnicians();
 </script>
 </body>
 </html>
