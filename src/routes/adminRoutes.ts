@@ -9,6 +9,8 @@ import * as https from "https";
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { getSessionTokenStatus, setSessionToken } from "../services/sessionTokenStore";
+import { reloadSchemeSources, SCHEME_IDS_PATH } from "./clientRoutes";
 
 const router = Router();
 
@@ -400,6 +402,235 @@ router.post("/installations/:id/cancel", (req, res) => {
     return res.json({ ok: true, id: req.params.id });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err?.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Constante do arquivo de schemes
+// ---------------------------------------------------------------------------
+
+const SCHEMES_JSON_PATH = path.resolve(
+  process.env.SCHEMES_PATH ||
+  path.join(__dirname, "../../config/schemes_active.json")
+);
+
+// ---------------------------------------------------------------------------
+// parseClientsXml — extrai <CLIENT> da resposta CLIENTS
+// ---------------------------------------------------------------------------
+
+function parseClientsXml(xml: string): Array<{ client_id: string; client_descr: string }> {
+  const results: Array<{ client_id: string; client_descr: string }> = [];
+  const regex = /<CLIENT\s([^>]+)\/>/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(xml)) !== null) {
+    const attrs = m[1];
+    const attr = (name: string) => {
+      const hit = attrs.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i"));
+      return hit ? hit[1].trim() : "";
+    };
+    const client_id = attr("CLIENT_ID");
+    const client_descr = attr("CLIENT_DESCR");
+    if (client_id) results.push({ client_id, client_descr });
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// parseSchemesXml — extrai <DATA> do datasource GET_VEHICLE_SETTINGS_GRID
+// ---------------------------------------------------------------------------
+
+interface SchemeEntry {
+  vehicle_setting_id: number;
+  vehicle_setting_name: string;
+  created_by_user_name: string;
+  updated_at: string;
+}
+
+function parseSchemesXml(xml: string): SchemeEntry[] {
+  const results: SchemeEntry[] = [];
+  const dsMatch = xml.match(/DATASOURCE="GET_VEHICLE_SETTINGS_GRID"[^>]*>([\s\S]*?)<\/DATASOURCE>/);
+  if (!dsMatch) return results;
+  const inner = dsMatch[1];
+  const regex = /<DATA\s([^>]+)\/>/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(inner)) !== null) {
+    const attrs = m[1];
+    const attr = (name: string) => {
+      const hit = attrs.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i"));
+      return hit ? hit[1].trim() : "";
+    };
+    const vehicle_setting_id = parseInt(attr("VEHICLE_SETTING_ID") || "0", 10);
+    if (!vehicle_setting_id) continue;
+    results.push({
+      vehicle_setting_id,
+      vehicle_setting_name: attr("VEHICLE_SETTING_NAME"),
+      created_by_user_name: attr("CREATED_BY_USER_NAME"),
+      updated_at:           attr("UPDATED_AT"),
+    });
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/schemes — serve o JSON salvo
+// ---------------------------------------------------------------------------
+
+router.get("/schemes", (_req, res) => {
+  try {
+    if (!fs.existsSync(SCHEMES_JSON_PATH)) {
+      return res.status(404).json({ ok: false, error: "schemes_active.json não encontrado — execute sync primeiro" });
+    }
+    const raw = fs.readFileSync(SCHEMES_JSON_PATH, "utf8");
+    return res.json(JSON.parse(raw));
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/schemes — salva a seleção de schemes
+// ---------------------------------------------------------------------------
+
+router.post("/schemes", (req, res) => {
+  try {
+    const { clients } = req.body;
+    if (!Array.isArray(clients)) {
+      return res.status(400).json({ ok: false, error: "campo clients ausente ou inválido" });
+    }
+    const payload = {
+      ok:            true,
+      generated_at:  new Date().toISOString(),
+      total_clients: clients.length,
+      total_schemes: clients.reduce((acc: number, c: any) => acc + (c.schemes?.length || 0), 0),
+      clients,
+    };
+
+    // 1. Salvar schemes_active.json (comportamento anterior)
+    const dir = path.dirname(SCHEMES_JSON_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SCHEMES_JSON_PATH, JSON.stringify(payload, null, 2), "utf8");
+    console.log(`[admin] schemes_active.json salvo — ${payload.total_clients} clientes, ${payload.total_schemes} schemes`);
+
+    // ── PATCH_ADMIN_SYNC_SCHEME_IDS_V1 ──────────────────────────────────────
+    // 2. Regenerar scheme_ids.txt a partir da seleção do Admin.
+    //    Só inclui clientes que têm selected_scheme_id definido.
+    //    Formato: CLIENT_ID;CLIENT_DESCR;VEHICLE_SETTING_ID
+    try {
+      const lines: string[] = ["CLIENT_ID;CLIENT_DESCR;VEHICLE_SETTING_ID"];
+      for (const c of clients as any[]) {
+        if (c.selected_scheme_id && c.client_id && c.client_descr) {
+          lines.push(`${c.client_id};${c.client_descr};${c.selected_scheme_id}`);
+        }
+      }
+      const schemeIdDir = path.dirname(SCHEME_IDS_PATH);
+      if (!fs.existsSync(schemeIdDir)) fs.mkdirSync(schemeIdDir, { recursive: true });
+      fs.writeFileSync(SCHEME_IDS_PATH, lines.join("\n") + "\n", "utf8");
+      console.log(`[admin] scheme_ids.txt regenerado — ${lines.length - 1} clientes com scheme selecionado`);
+
+      // 3. Recarregar fontes em memória — próximo job já usa o scheme correto
+      reloadSchemeSources();
+      console.log("[admin] clientRoutes recarregado após atualização de schemes");
+    } catch (syncErr: any) {
+      // Não bloqueia a resposta — schemes_active.json já foi salvo
+      console.error("[admin] WARN: falha ao regenerar scheme_ids.txt:", syncErr?.message);
+    }
+    // ── fim PATCH_ADMIN_SYNC_SCHEME_IDS_V1 ──────────────────────────────────
+
+    return res.json({ ok: true, total_clients: payload.total_clients, total_schemes: payload.total_schemes });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/schemes/clients — busca lista de clientes no Traffilog
+// ---------------------------------------------------------------------------
+
+router.get("/schemes/clients", async (_req, res) => {
+  try {
+    console.log("[admin] buscando lista de clientes...");
+    const adminCookie = await loginAdminToHtml5();
+    if (!adminCookie) {
+      return res.status(502).json({ ok: false, error: "Login admin falhou" });
+    }
+
+    const bodyParams = new URLSearchParams({
+      REFRESH_FLG: "1",
+      action:      "CLIENTS",
+      VERSION_ID:  "2",
+    });
+
+    const resp = await httpPost(HTML5_ACTION_URL, bodyParams.toString(), { cookie: adminCookie });
+    const clients = parseClientsXml(resp.body);
+    console.log(`[admin] CLIENTS — ${clients.length} clientes encontrados`);
+    return res.json({ ok: true, total: clients.length, clients });
+  } catch (err: any) {
+    console.error("[admin] schemes/clients error:", err?.message);
+    return res.status(500).json({ ok: false, error: err?.message || "Erro interno" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/schemes/client/:clientId — schemes de um cliente específico
+// ---------------------------------------------------------------------------
+
+router.get("/schemes/client/:clientId", async (req, res) => {
+  const clientId = req.params["clientId"];
+  try {
+    console.log(`[admin] buscando schemes do cliente ${clientId}...`);
+    const adminCookie = await loginAdminToHtml5();
+    if (!adminCookie) {
+      return res.status(502).json({ ok: false, error: "Login admin falhou" });
+    }
+
+    const bodyParams = new URLSearchParams({
+      CLIENT_ID:  clientId,
+      action:     "GET_VEHICLE_SETTINGS_GRID",
+      VERSION_ID: "2",
+    });
+
+    const resp = await httpPost(HTML5_ACTION_URL, bodyParams.toString(), { cookie: adminCookie });
+    const schemes = parseSchemesXml(resp.body);
+    console.log(`[admin] cliente ${clientId} — ${schemes.length} schemes`);
+    return res.json({ ok: true, client_id: clientId, total: schemes.length, schemes });
+  } catch (err: any) {
+    console.error(`[admin] schemes/client/${clientId} error:`, err?.message);
+    return res.status(500).json({ ok: false, error: err?.message || "Erro interno" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Rotas de session-token (restauradas — existiam no adminRoutes original)
+// ---------------------------------------------------------------------------
+
+function requireAdminKey(req: any, res: any, next: any) {
+  const expected = (process.env.SESSION_TOKEN_ADMIN_KEY || "").trim();
+  const got = (req.header("x-admin-key") || req.header("X-Admin-Key") || "").trim();
+  if (!expected) return res.status(500).json({ error: "SESSION_TOKEN_ADMIN_KEY not set" });
+  if (!got || got !== expected) return res.status(401).json({ error: "unauthorized" });
+  return next();
+}
+
+router.get("/session-token/status", requireAdminKey, (_req, res) => {
+  return res.json(getSessionTokenStatus());
+});
+
+router.post("/session-token", requireAdminKey, (req, res) => {
+  const token = (req.body && (req.body.sessionToken || req.body.token))
+    ? String(req.body.sessionToken || req.body.token) : "";
+  if (!token.trim()) return res.status(400).json({ error: "missing token (body.token or body.sessionToken)" });
+  setSessionToken(token);
+  return res.json({ ok: true, ...getSessionTokenStatus() });
+});
+
+router.get("/session-token", requireAdminKey, (_req, res) => {
+  try {
+    const token = String(fs.readFileSync("/tmp/.session_token", "utf8") || "").trim();
+    if (!token) return res.status(404).json({ error: "empty_token" });
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({ token });
+  } catch (e) {
+    return res.status(404).json({ error: "not_found" });
   }
 });
 

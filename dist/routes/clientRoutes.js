@@ -3,6 +3,10 @@
 // GET /api/clients — retorna lista de clientes disponíveis na sessão HTML5,
 // enriquecida com vehicle_setting_id e profiles.
 //
+// MODOS:
+//   Com header X-Session-Token válido → lista filtrada do usuário (não cacheada globalmente)
+//   Sem header → comportamento admin atual (lista completa, cache de 5 min)
+//
 // FONTES DE DADOS:
 //   config/scheme_ids.txt                  → fonte de verdade para o vehicle_setting_id DEFAULT
 //   config/catalog_vehicle_settings.json   → define profiles alternativos (multi-profile)
@@ -47,16 +51,18 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.SCHEME_IDS_PATH = void 0;
 exports.reloadSchemeSources = reloadSchemeSources;
 const express_1 = require("express");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const html5Client_1 = require("../services/html5Client");
+const authRoutes_1 = require("./authRoutes");
 const router = (0, express_1.Router)();
 // ---------------------------------------------------------------------------
 // Caminhos dos arquivos de configuração
 // ---------------------------------------------------------------------------
-const SCHEME_IDS_PATH = path.resolve(process.env.SCHEME_IDS_PATH ||
+exports.SCHEME_IDS_PATH = path.resolve(process.env.SCHEME_IDS_PATH ||
     path.join(__dirname, "../../config/scheme_ids.txt"));
 const CATALOG_PATH = path.resolve(process.env.CATALOG_PATH ||
     path.join(__dirname, "../../config/catalog_vehicle_settings.json"));
@@ -66,7 +72,7 @@ const CATALOG_PATH = path.resolve(process.env.CATALOG_PATH ||
 function loadSchemeIds() {
     const map = new Map();
     try {
-        const lines = fs.readFileSync(SCHEME_IDS_PATH, "utf8")
+        const lines = fs.readFileSync(exports.SCHEME_IDS_PATH, "utf8")
             .split("\n")
             .map(l => l.trim())
             .filter(l => l && !l.startsWith("CLIENT_ID"));
@@ -153,7 +159,7 @@ function buildProfiles(clientId) {
     return profiles;
 }
 // ---------------------------------------------------------------------------
-// Cache em memória
+// Cache em memória (apenas para modo admin/sem token)
 // ---------------------------------------------------------------------------
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let clientsCache = null;
@@ -181,7 +187,29 @@ function enrichClients(rawClients) {
 // ---------------------------------------------------------------------------
 // GET /api/clients
 // ---------------------------------------------------------------------------
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
+    // ── MODO TOKEN: header X-Session-Token presente ──────────────────────────
+    const rawToken = (req.headers["x-session-token"] || "").toString().trim();
+    if (rawToken) {
+        const session = authRoutes_1.sessionMap.get(rawToken);
+        // Token inválido ou expirado → lista vazia (proteção passiva)
+        if (!session || session.expiresAt < Date.now()) {
+            authRoutes_1.sessionMap.delete(rawToken);
+            console.warn(`[GET /api/clients] token inválido/expirado: ${rawToken.slice(0, 8)}...`);
+            return res.json({
+                status: "ok",
+                cached: false,
+                clients: [],
+                warning: "invalid_session",
+            });
+        }
+        // Token válido → enriquece a lista filtrada do usuário
+        const enriched = enrichClients(session.clients);
+        console.log(`[GET /api/clients] token mode — user="${session.username}" ` +
+            `${enriched.length} clientes filtrados`);
+        return res.json({ status: "ok", cached: false, clients: enriched });
+    }
+    // ── MODO ADMIN: sem token → comportamento atual (retrocompat) ────────────
     if (isCacheValid()) {
         return res.json({ status: "ok", cached: true, clients: clientsCache.data });
     }

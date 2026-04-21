@@ -548,6 +548,15 @@ function _normLicenseKey(v) {
   return String(v || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "") // FIX_PLATE_NORM_V1;
 }
 
+// PATCH_INNER_ID_ZEROS_V1: normaliza serial para comparação ignorando zeros à esquerda
+function _normInnerId(v) {
+  const s = String(v || "").replace(/^0+/, "");
+  return s || "0";
+}
+function _innerIdMatch(a, b) {
+  return _normInnerId(a) === _normInnerId(b);
+}
+
 function _readCookieHeaderFromJarFile(ctx) {
   const fs = require("fs");
   const jarPath =
@@ -614,8 +623,12 @@ function _parseVehicleIdFromVhclsXml(xml, licenseKey) {
   const dataTags = xml.match(/<DATA\b[^>]*\/>/gi) || [];
   for (const tag of dataTags) {
     const lic = _normLicenseKey(_extractAttr(tag, "LICENSE_NMBR"));
+    const innerId = _extractAttr(tag, "INNER_ID");
     const vid = _extractAttr(tag, "VEHICLE_ID");
-    if (lic && vid && lic === lk) {
+    // PATCH_INNER_ID_ZEROS_V1: aceita match por LICENSE_NMBR ou INNER_ID (ignora zeros à esquerda)
+    const licMatch = lic && vid && lic === lk;
+    const innerMatch = innerId && vid && _innerIdMatch(innerId, lk);
+    if (licMatch || innerMatch) {
       const n = Number(vid);
       return { vehicleId: (n > 0 ? n : null), err: null };
     }
@@ -662,7 +675,7 @@ async function _vhclsResolveVehicleIdDirect(ctx, licenseKey) {
       body,
     });
 
-    const text = await res.text();
+    const text = typeof res.text === "function" ? await res.text() : String(res && res.text || "");
 
     // snapshot pro caller (MNS / debug)
     try {
@@ -827,7 +840,9 @@ async function _checkAndFreeCmdtSerial(newSerial, jobId, payload) {
           const innerId = mInner ? String(mInner[1]).trim() : "";
 
           // confirma que é o veículo do nosso serial
+          // PATCH_INNER_ID_ZEROS_V1: ignora zeros à esquerda no INNER_ID
           const matchesSerial =
+            _innerIdMatch(innerId, serial) ||
             String(innerId).toLowerCase() === serial.toLowerCase() ||
             String(licenseNmbr).toLowerCase() === serial.toLowerCase();
 
@@ -2693,6 +2708,25 @@ function buildSaveActivationFields(payload){
 
   ensureCustomField1(fields);
   ensureCustomField1_(fields, payload);
+  // PATCH_CF_EMPTY_V1: preenche campos obrigatórios vazios com valor padrão
+  try {
+    const _idsStr = String(fields.FIELD_IDS || '').trim();
+    const _valStr = String(fields.FIELD_VALUE || '').trim();
+    if (_idsStr) {
+      const _ids = _idsStr.split(',').map(s => s.trim()).filter(Boolean);
+      const _map = Object.create(null);
+      const _raw = _valStr.replace(/^,/, '').split(',').map(s => s.trim()).filter(Boolean);
+      for (const t of _raw) {
+        const i = t.indexOf(':'); if (i > 0) _map[t.slice(0,i).trim()] = t.slice(i+1);
+      }
+      let changed = false;
+      for (const id of _ids) {
+        if (!_map[id] || String(_map[id]).trim() === '') { _map[id] = 'n/a'; changed = true; }
+      }
+      if (changed) fields.FIELD_VALUE = ',' + _ids.map(id => id + ':' + _map[id]).join(',');
+    }
+  } catch(e) {}
+  // /PATCH_CF_EMPTY_V1
   return fields;
 }
 
@@ -4439,7 +4473,7 @@ if (service === "INSTALL" && !vId) {
     const __vv = await ensureVehicleIdByVhcls_(__ctx, payload);
     if (__vv) vId = __vv;
   } catch(e) {
-    console.log("[html5_v8] INSTALL preflight VHCLS resolve failed: " + (e && (e.message || e.toString())));
+    console.log("[html5_v8] INSTALL preflight VHCLS resolve failed: " + (e && (e.message || e.toString())) + " STACK: " + (e && e.stack ? String(e.stack).slice(0,400) : "no_stack"));
   }
 }
 

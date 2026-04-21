@@ -1870,7 +1870,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       const workers = d.workers || [];
       const w = workers.find(x => x.checks?.session_ok !== undefined) || workers[0];
       const sessionOk = w?.checks?.session_ok === true;
-      const workerOk  = !!w && (Date.now() - new Date(w.ts).getTime()) < 120000;
+      const workerOk  = !!w && (Date.now() - new Date(w.ts).getTime()) < 180000;
       if (sessionOk && workerOk) {
         dot.style.background = "var(--good)";
         dot.classList.remove("pulse-bad");

@@ -92,6 +92,41 @@
     border-top-color: #6da8d4; border-radius: 50%; animation: spin 0.7s linear infinite;
     vertical-align: middle; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Schemes tab ─────────────────────────────────────────────────── */
+  .client-block { border: 1px solid #1a1a1a; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
+  .client-header { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: #111; cursor: pointer; user-select: none; }
+  .client-header:hover { background: #161616; }
+  .client-name  { color: #ccc; font-size: 12px; flex: 1; }
+  .client-id    { color: #444; font-size: 11px; }
+  .client-badge { font-size: 10px; padding: 1px 7px; border-radius: 3px;
+    border: 1px solid #2a3a4a; color: #6da8d4; background: #0d1a26; }
+  .client-badge.none  { border-color: #3a2a10; color: #c08040; background: #1a1200; }
+  .client-badge.loading { border-color: #2a2a2a; color: #555; background: #111; }
+  .client-chevron { color: #444; font-size: 10px; transition: transform 0.15s; }
+  .client-block.open .client-chevron { transform: rotate(90deg); }
+  .client-schemes { display: none; padding: 8px 12px 10px 12px; border-top: 1px solid #1a1a1a; }
+  .client-block.open .client-schemes { display: block; }
+  .scheme-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+    border-radius: 3px; border: 1px solid #1a1a1a; margin-bottom: 5px;
+    background: #0d0d0d; transition: border-color 0.15s; }
+  .scheme-row:hover { border-color: #2a2a2a; }
+  .scheme-row.selected { border-color: #2a4a2a; background: #0a120a; }
+  .scheme-radio { accent-color: #6dbf6d; width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+  .scheme-info  { flex: 1; min-width: 0; }
+  .scheme-name  { color: #c8c8c8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scheme-meta  { color: #444; font-size: 10px; margin-top: 2px; }
+  .scheme-id    { color: #3a6a9a; font-size: 11px; font-weight: bold; flex-shrink: 0; }
+  .no-schemes   { color: #555; font-size: 11px; padding: 6px 0; font-style: italic; }
+  .schemes-progress { font-size: 11px; color: #555; margin: 8px 0; }
+  .schemes-progress span { color: #6da8d4; }
+  .scheme-search { background: #111; border: 1px solid #222; color: #ccc; font-family: monospace;
+    font-size: 12px; padding: 5px 10px; border-radius: 3px; width: 260px; }
+  .scheme-search:focus { outline: none; border-color: #444; }
+  .save-schemes-bar { display: flex; align-items: center; gap: 12px; padding: 10px 0 4px 0; }
+  .save-ok { color: #6dbf6d; font-size: 11px; opacity: 0; transition: opacity 0.4s; }
+  .save-ok.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -102,6 +137,7 @@
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab('jobs')">Jobs &amp; Instalações</button>
   <button class="tab-btn" onclick="switchTab('models')">Modelos de Veículos</button>
+  <button class="tab-btn" onclick="switchTab('schemes')">Schemes por Cliente</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ TAB: JOBS -->
@@ -206,6 +242,40 @@
 
 </div><!-- /tab-models -->
 
+<!-- ═══════════════════════════════════════════════════════ TAB: SCHEMES -->
+<div class="tab-panel" id="tab-schemes">
+
+  <div class="toolbar" style="margin-bottom:16px">
+    <button class="primary" id="btn-sync-schemes" onclick="syncSchemes()">⟳ Sincronizar Schemes</button>
+    <button onclick="loadCurrentSchemes()">↻ Ver Lista Atual</button>
+    <span class="status-bar" id="status-schemes">—</span>
+  </div>
+
+  <p style="color:#444;font-size:11px;margin-bottom:14px;line-height:1.6">
+    Busca todos os clientes e os schemes disponíveis em cada um via
+    <strong style="color:#666">GET_VEHICLE_SETTINGS_GRID</strong>.
+    Marque <strong style="color:#666">um scheme por cliente</strong> para ser usado nas instalações.
+    Execute quando novos clientes ou schemes forem cadastrados.
+  </p>
+
+  <div class="schemes-progress" id="schemes-progress" style="display:none">
+    Processando cliente <span id="prog-current">0</span> de <span id="prog-total">0</span>...
+  </div>
+
+  <!-- Barra de salvar -->
+  <div class="save-schemes-bar" id="save-schemes-bar" style="display:none">
+    <button class="primary" id="btn-save-schemes" onclick="saveSchemes()">💾 Salvar Seleção</button>
+    <span class="save-ok" id="save-ok">✓ Salvo com sucesso</span>
+    <input class="scheme-search" id="scheme-search" type="text"
+      placeholder="Buscar cliente..." oninput="filterSchemes()" style="margin-left:auto"/>
+  </div>
+
+  <div id="schemes-list">
+    <div class="empty" style="padding:24px">Execute a sincronização ou clique em "Ver Lista Atual".</div>
+  </div>
+
+</div><!-- /tab-schemes -->
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -213,6 +283,8 @@
   let allJobs = [], allInst = [];
   let jobFilter = 'active', instFilter = 'active';
   let allModels = [], filteredModels = [];
+  let allClients = [];       // [{client_id, client_descr, schemes:[...], selected_scheme_id}]
+  let filteredClients = [];
 
   const ACTIVE_JOB  = ['queued','processing','pending'];
   const ACTIVE_INST = ['HTML5_QUEUED','HTML5_RUNNING','SB_QUEUED','SB_RUNNING',
@@ -220,9 +292,10 @@
                        'GS_QUEUED','GS_RUNNING','HTML5_DONE','SB_DONE'];
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
+  const TAB_NAMES = ['jobs','models','schemes'];
   function switchTab(name) {
-    document.querySelectorAll('.tab-btn').forEach((b,i) => {
-      b.classList.toggle('active', ['jobs','models'][i] === name);
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      b.classList.toggle('active', TAB_NAMES[i] === name);
     });
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
@@ -466,6 +539,214 @@
       <td style="color:#555">${esc(m.sub_model)}</td>
     </tr>`).join('');
   }
+
+  // ── Schemes ───────────────────────────────────────────────────────────────
+  async function syncSchemes() {
+    const btn = document.getElementById('btn-sync-schemes');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Sincronizando...';
+    setStatusSchemes('buscando clientes...');
+    document.getElementById('schemes-progress').style.display = 'block';
+    document.getElementById('save-schemes-bar').style.display = 'none';
+    document.getElementById('schemes-list').innerHTML =
+      '<div class="empty" style="padding:16px">Carregando...</div>';
+
+    // Carregar seleção atual salva (para preservar marcações)
+    let savedSelection = {};
+    try {
+      const rs = await fetch(`${BASE}/api/admin/schemes`);
+      if (rs.ok) {
+        const ds = await rs.json();
+        (ds.clients || []).forEach(c => {
+          if (c.selected_scheme_id) savedSelection[c.client_id] = c.selected_scheme_id;
+        });
+      }
+    } catch(_) {}
+
+    try {
+      // 1. Buscar lista de clientes
+      const rc = await fetch(`${BASE}/api/admin/schemes/clients`);
+      const dc = await rc.json();
+      if (!dc.ok) throw new Error(dc.error || 'erro ao buscar clientes');
+
+      const clients = dc.clients; // [{client_id, client_descr}]
+      document.getElementById('prog-total').textContent = clients.length;
+      setStatusSchemes(`${clients.length} clientes — buscando schemes sequencialmente...`);
+
+      // 2. Para cada cliente, buscar schemes (sequencial)
+      const result = [];
+      for (let i = 0; i < clients.length; i++) {
+        const c = clients[i];
+        document.getElementById('prog-current').textContent = i + 1;
+        let schemes = [];
+        try {
+          const rs = await fetch(`${BASE}/api/admin/schemes/client/${c.client_id}`);
+          const ds = await rs.json();
+          if (ds.ok) schemes = ds.schemes || [];
+        } catch(_) { /* cliente sem schemes ou erro — continua */ }
+
+        const selected = savedSelection[c.client_id] ||
+          (schemes.length === 1 ? schemes[0].vehicle_setting_id : null);
+
+        result.push({ client_id: c.client_id, client_descr: c.client_descr, schemes, selected_scheme_id: selected });
+      }
+
+      allClients = result;
+      filteredClients = allClients;
+
+      // 3. Salvar resultado no servidor
+      const rSave = await fetch(`${BASE}/api/admin/schemes`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ clients: allClients })
+      });
+      const dSave = await rSave.json();
+      if (!dSave.ok) throw new Error(dSave.error || 'erro ao salvar');
+
+      renderSchemesList(filteredClients);
+      document.getElementById('save-schemes-bar').style.display = 'flex';
+      document.getElementById('scheme-search').value = '';
+      setStatusSchemes(`sincronizado — ${allClients.length} clientes, ${allClients.reduce((a,c)=>a+c.schemes.length,0)} schemes`);
+      toast(`Sync concluído: ${allClients.length} clientes processados`);
+
+    } catch(e) {
+      toast('Erro: ' + e.message, true);
+      setStatusSchemes('erro: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '⟳ Sincronizar Schemes';
+      document.getElementById('schemes-progress').style.display = 'none';
+    }
+  }
+
+  async function loadCurrentSchemes() {
+    setStatusSchemes('carregando...');
+    try {
+      const r = await fetch(`${BASE}/api/admin/schemes`);
+      if (r.status === 404) {
+        setStatusSchemes('nenhum JSON salvo — execute a sincronização primeiro');
+        toast('Nenhuma lista salva ainda', true);
+        return;
+      }
+      const d = await r.json();
+      allClients = d.clients || [];
+      filteredClients = allClients;
+      renderSchemesList(filteredClients);
+      document.getElementById('save-schemes-bar').style.display = allClients.length ? 'flex' : 'none';
+      document.getElementById('scheme-search').value = '';
+      const total_schemes = allClients.reduce((a,c)=>a+c.schemes.length,0);
+      setStatusSchemes(`lista de ${fmtDate(d.generated_at)} — ${allClients.length} clientes, ${total_schemes} schemes`);
+    } catch(e) {
+      toast('Erro: ' + e.message, true);
+      setStatusSchemes('erro ao carregar');
+    }
+  }
+
+  function filterSchemes() {
+    const q = document.getElementById('scheme-search').value.toLowerCase().trim();
+    filteredClients = q
+      ? allClients.filter(c =>
+          c.client_descr.toLowerCase().includes(q) ||
+          String(c.client_id).includes(q)
+        )
+      : allClients;
+    renderSchemesList(filteredClients);
+  }
+
+  function renderSchemesList(list) {
+    const container = document.getElementById('schemes-list');
+    if (!list.length) {
+      container.innerHTML = '<div class="empty" style="padding:16px">Nenhum cliente encontrado.</div>';
+      return;
+    }
+    container.innerHTML = list.map(c => {
+      const hasSchemes = c.schemes && c.schemes.length > 0;
+      const badgeClass = hasSchemes ? '' : ' none';
+      const badgeText  = hasSchemes ? `${c.schemes.length} scheme${c.schemes.length>1?'s':''}` : 'sem schemes';
+      const schemesHtml = hasSchemes
+        ? c.schemes.map(s => {
+            const checked = c.selected_scheme_id == s.vehicle_setting_id ? 'checked' : '';
+            const selClass = checked ? ' selected' : '';
+            return `<div class="scheme-row${selClass}" id="row-${c.client_id}-${s.vehicle_setting_id}">
+              <input type="radio" class="scheme-radio"
+                name="scheme-${c.client_id}"
+                value="${s.vehicle_setting_id}"
+                ${checked}
+                onchange="selectScheme(${c.client_id}, ${s.vehicle_setting_id})" />
+              <div class="scheme-info">
+                <div class="scheme-name">${esc(s.vehicle_setting_name)}</div>
+                <div class="scheme-meta">por ${esc(s.created_by_user_name)} · atualizado ${esc(s.updated_at)}</div>
+              </div>
+              <div class="scheme-id">#${s.vehicle_setting_id}</div>
+            </div>`;
+          }).join('')
+        : '<div class="no-schemes">Nenhum scheme disponível para este cliente.</div>';
+
+      return `<div class="client-block" id="cblock-${c.client_id}">
+        <div class="client-header" onclick="toggleClient(${c.client_id})">
+          <span class="client-chevron">▶</span>
+          <span class="client-name">${esc(c.client_descr)}</span>
+          <span class="client-id">${c.client_id}</span>
+          <span class="client-badge${badgeClass}">${badgeText}</span>
+          ${c.selected_scheme_id ? `<span class="client-badge" style="border-color:#2a4a2a;color:#6dbf6d;background:#0a120a">✓ #${c.selected_scheme_id}</span>` : ''}
+        </div>
+        <div class="client-schemes">${schemesHtml}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function toggleClient(clientId) {
+    const block = document.getElementById('cblock-' + clientId);
+    if (block) block.classList.toggle('open');
+  }
+
+  function selectScheme(clientId, schemeId) {
+    // Atualizar estado em memória
+    const client = allClients.find(c => c.client_id == clientId);
+    if (client) client.selected_scheme_id = schemeId;
+    // Atualizar classes visuais
+    const block = document.getElementById('cblock-' + clientId);
+    if (block) {
+      block.querySelectorAll('.scheme-row').forEach(row => row.classList.remove('selected'));
+      const selRow = document.getElementById(`row-${clientId}-${schemeId}`);
+      if (selRow) selRow.classList.add('selected');
+      // Atualizar badge do header
+      const badges = block.querySelectorAll('.client-badge');
+      badges.forEach(b => { if (b.style.color === 'rgb(109, 191, 109)' || b.textContent.startsWith('✓')) b.remove(); });
+      const header = block.querySelector('.client-header');
+      const badge = document.createElement('span');
+      badge.className = 'client-badge';
+      badge.style.cssText = 'border-color:#2a4a2a;color:#6dbf6d;background:#0a120a';
+      badge.textContent = `✓ #${schemeId}`;
+      header.appendChild(badge);
+    }
+  }
+
+  async function saveSchemes() {
+    const btn = document.getElementById('btn-save-schemes');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Salvando...';
+    try {
+      const r = await fetch(`${BASE}/api/admin/schemes`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ clients: allClients })
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || JSON.stringify(d));
+      const saveOk = document.getElementById('save-ok');
+      saveOk.classList.add('show');
+      setTimeout(() => saveOk.classList.remove('show'), 2500);
+      toast('Seleção de schemes salva com sucesso');
+    } catch(e) {
+      toast('Erro ao salvar: ' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Salvar Seleção';
+    }
+  }
+
+  function setStatusSchemes(msg) { document.getElementById('status-schemes').textContent = msg; }
 
   // ── Utils ─────────────────────────────────────────────────────────────────
   function setStatus(msg)       { document.getElementById('status-bar').textContent    = msg; }
