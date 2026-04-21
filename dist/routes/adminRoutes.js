@@ -43,6 +43,7 @@ const https = __importStar(require("https"));
 const http = __importStar(require("http"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const sessionTokenStore_1 = require("../services/sessionTokenStore");
 const router = (0, express_1.Router)();
 // ---------------------------------------------------------------------------
 // Constantes
@@ -505,6 +506,41 @@ router.get("/schemes/client/:clientId", async (req, res) => {
     catch (err) {
         console.error(`[admin] schemes/client/${clientId} error:`, err?.message);
         return res.status(500).json({ ok: false, error: err?.message || "Erro interno" });
+    }
+});
+// ---------------------------------------------------------------------------
+// Rotas de session-token (restauradas — existiam no adminRoutes original)
+// ---------------------------------------------------------------------------
+function requireAdminKey(req, res, next) {
+    const expected = (process.env.SESSION_TOKEN_ADMIN_KEY || "").trim();
+    const got = (req.header("x-admin-key") || req.header("X-Admin-Key") || "").trim();
+    if (!expected)
+        return res.status(500).json({ error: "SESSION_TOKEN_ADMIN_KEY not set" });
+    if (!got || got !== expected)
+        return res.status(401).json({ error: "unauthorized" });
+    return next();
+}
+router.get("/session-token/status", requireAdminKey, (_req, res) => {
+    return res.json((0, sessionTokenStore_1.getSessionTokenStatus)());
+});
+router.post("/session-token", requireAdminKey, (req, res) => {
+    const token = (req.body && (req.body.sessionToken || req.body.token))
+        ? String(req.body.sessionToken || req.body.token) : "";
+    if (!token.trim())
+        return res.status(400).json({ error: "missing token (body.token or body.sessionToken)" });
+    (0, sessionTokenStore_1.setSessionToken)(token);
+    return res.json({ ok: true, ...(0, sessionTokenStore_1.getSessionTokenStatus)() });
+});
+router.get("/session-token", requireAdminKey, (_req, res) => {
+    try {
+        const token = String(fs.readFileSync("/tmp/.session_token", "utf8") || "").trim();
+        if (!token)
+            return res.status(404).json({ error: "empty_token" });
+        res.setHeader("Cache-Control", "no-store");
+        return res.json({ token });
+    }
+    catch (e) {
+        return res.status(404).json({ error: "not_found" });
     }
 });
 exports.default = router;

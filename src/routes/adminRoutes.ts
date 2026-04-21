@@ -9,6 +9,7 @@ import * as https from "https";
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { getSessionTokenStatus, setSessionToken } from "../services/sessionTokenStore";
 
 const router = Router();
 
@@ -566,6 +567,41 @@ router.get("/schemes/client/:clientId", async (req, res) => {
   } catch (err: any) {
     console.error(`[admin] schemes/client/${clientId} error:`, err?.message);
     return res.status(500).json({ ok: false, error: err?.message || "Erro interno" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Rotas de session-token (restauradas — existiam no adminRoutes original)
+// ---------------------------------------------------------------------------
+
+function requireAdminKey(req: any, res: any, next: any) {
+  const expected = (process.env.SESSION_TOKEN_ADMIN_KEY || "").trim();
+  const got = (req.header("x-admin-key") || req.header("X-Admin-Key") || "").trim();
+  if (!expected) return res.status(500).json({ error: "SESSION_TOKEN_ADMIN_KEY not set" });
+  if (!got || got !== expected) return res.status(401).json({ error: "unauthorized" });
+  return next();
+}
+
+router.get("/session-token/status", requireAdminKey, (_req, res) => {
+  return res.json(getSessionTokenStatus());
+});
+
+router.post("/session-token", requireAdminKey, (req, res) => {
+  const token = (req.body && (req.body.sessionToken || req.body.token))
+    ? String(req.body.sessionToken || req.body.token) : "";
+  if (!token.trim()) return res.status(400).json({ error: "missing token (body.token or body.sessionToken)" });
+  setSessionToken(token);
+  return res.json({ ok: true, ...getSessionTokenStatus() });
+});
+
+router.get("/session-token", requireAdminKey, (_req, res) => {
+  try {
+    const token = String(fs.readFileSync("/tmp/.session_token", "utf8") || "").trim();
+    if (!token) return res.status(404).json({ error: "empty_token" });
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({ token });
+  } catch (e) {
+    return res.status(404).json({ error: "not_found" });
   }
 });
 
