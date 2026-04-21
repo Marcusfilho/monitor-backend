@@ -403,4 +403,145 @@ router.post("/installations/:id/cancel", (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEMES — Adicionar no adminRoutes.ts (após as rotas de asset-types)
+// Marco: ADMIN_SCHEMES_SYNC_V1 — 2026-04-20
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Dependências já existentes no arquivo (não duplicar):
+//   import { Router, Request, Response } from 'express';
+//   import * as fs from 'fs';
+//   import * as path from 'path';
+//   import fetch from 'node-fetch';
+//   import { parseStringPromise } from 'xml2js';        // ou DOMParser — usar o mesmo já em uso
+//   const router = Router();                            // já declarado
+//
+// ATENÇÃO: as funções loginUserToHtml5 e buildHtml5Headers devem ser as
+// mesmas já usadas nas rotas de asset-types. Não duplicar — apenas reusar.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SCHEMES_JSON_PATH = path.join(__dirname, '../../config/schemes_active.json');
+
+// ── Helpers de parse XML (reusar o DOMParser ou xml2js já em uso) ─────────────
+
+/** Extrai atributos de todos os elementos <CLIENT> da resposta CLIENTS */
+function parseClientsXml(xml: string): Array<{ client_id: string; client_descr: string }> {
+  const results: Array<{ client_id: string; client_descr: string }> = [];
+  const regex = /<CLIENT\s([^>]+)\/>/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(xml)) !== null) {
+    const attrs = m[1];
+    const client_id    = (attrs.match(/CLIENT_ID="([^"]*)"/)    || [])[1] || '';
+    const client_descr = (attrs.match(/CLIENT_DESCR="([^"]*)"/) || [])[1] || '';
+    if (client_id) results.push({ client_id, client_descr });
+  }
+  return results;
+}
+
+/** Extrai atributos de todos os <DATA> dentro de GET_VEHICLE_SETTINGS_GRID */
+function parseSchemesXml(xml: string): Array<{
+  vehicle_setting_id: number;
+  vehicle_setting_name: string;
+  created_by_user_name: string;
+  updated_at: string;
+}> {
+  const results = [];
+  // Só processar o datasource correto
+  const dsMatch = xml.match(/DATASOURCE="GET_VEHICLE_SETTINGS_GRID"[^>]*>([\s\S]*?)<\/DATASOURCE>/);
+  if (!dsMatch) return results;
+  const inner = dsMatch[1];
+  const regex = /<DATA\s([^>]+)\/>/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(inner)) !== null) {
+    const attrs = m[1];
+    const vehicle_setting_id   = parseInt((attrs.match(/VEHICLE_SETTING_ID="([^"]*)"/)   || [])[1] || '0', 10);
+    const vehicle_setting_name = (attrs.match(/VEHICLE_SETTING_NAME="([^"]*)"/)          || [])[1] || '';
+    const created_by_user_name = (attrs.match(/CREATED_BY_USER_NAME="([^"]*)"/)          || [])[1] || '';
+    const updated_at           = (attrs.match(/UPDATED_AT="([^"]*)"/)                    || [])[1] || '';
+    if (vehicle_setting_id) results.push({ vehicle_setting_id, vehicle_setting_name, created_by_user_name, updated_at });
+  }
+  return results;
+}
+
+// ── GET /api/admin/schemes — serve o JSON salvo ───────────────────────────────
+router.get('/schemes', (_req: Request, res: Response) => {
+  if (!fs.existsSync(SCHEMES_JSON_PATH)) {
+    return res.status(404).json({ ok: false, error: 'schemes_active.json não encontrado' });
+  }
+  try {
+    const raw = fs.readFileSync(SCHEMES_JSON_PATH, 'utf-8');
+    res.json(JSON.parse(raw));
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /api/admin/schemes — salva a seleção ─────────────────────────────────
+router.post('/schemes', (req: Request, res: Response) => {
+  try {
+    const { clients } = req.body;
+    if (!Array.isArray(clients)) {
+      return res.status(400).json({ ok: false, error: 'campo clients ausente ou inválido' });
+    }
+    const payload = {
+      ok: true,
+      generated_at: new Date().toISOString(),
+      total_clients: clients.length,
+      total_schemes: clients.reduce((acc: number, c: any) => acc + (c.schemes?.length || 0), 0),
+      clients
+    };
+    fs.mkdirSync(path.dirname(SCHEMES_JSON_PATH), { recursive: true });
+    fs.writeFileSync(SCHEMES_JSON_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+    res.json({ ok: true, total_clients: payload.total_clients, total_schemes: payload.total_schemes });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── GET /api/admin/schemes/clients — lista clientes da base ──────────────────
+router.get('/schemes/clients', async (_req: Request, res: Response) => {
+  try {
+    const adminCookie = await getAdminCookie(); // função já existente no arquivo
+    if (!adminCookie) return res.status(502).json({ ok: false, error: 'falha ao obter cookie admin' });
+
+    const body = 'REFRESH_FLG=1&action=CLIENTS&VERSION_ID=2';
+    const r = await fetch('https://html5.traffilog.com/AppEngine_2_1/default.aspx', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': adminCookie,
+      },
+      body
+    });
+    const xml = await r.text();
+    const clients = parseClientsXml(xml);
+    res.json({ ok: true, total: clients.length, clients });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── GET /api/admin/schemes/client/:clientId — schemes de 1 cliente ───────────
+router.get('/schemes/client/:clientId', async (req: Request, res: Response) => {
+  const { clientId } = req.params;
+  try {
+    const adminCookie = await getAdminCookie(); // função já existente no arquivo
+    if (!adminCookie) return res.status(502).json({ ok: false, error: 'falha ao obter cookie admin' });
+
+    const body = `CLIENT_ID=${clientId}&action=GET_VEHICLE_SETTINGS_GRID&VERSION_ID=2`;
+    const r = await fetch('https://html5.traffilog.com/AppEngine_2_1/default.aspx', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': adminCookie,
+      },
+      body
+    });
+    const xml = await r.text();
+    const schemes = parseSchemesXml(xml);
+    res.json({ ok: true, client_id: clientId, total: schemes.length, schemes });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 export default router;
