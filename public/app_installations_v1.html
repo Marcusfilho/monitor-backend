@@ -245,20 +245,6 @@
       <input id="serial" placeholder="ex.: 913055459" inputmode="numeric" />
     </div>
 
-    <!-- Banner de erro de serial — exibido quando serial não existe na VHCLS -->
-    <div id="serialErrorBanner" class="hidden" style="
-      margin-top:10px;display:flex;align-items:flex-start;gap:10px;
-      padding:12px 14px;border-radius:14px;
-      border:1px solid #7f1d1d;background:#1c0505;
-      animation:pulse-bad 1.2s ease-in-out 3
-    ">
-      <span style="font-size:18px;flex-shrink:0;line-height:1">⚠️</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700;color:#fca5a5;margin-bottom:2px">Equipamento não testado</div>
-        <div id="serialErrorDetail" style="font-size:12px;color:#f87171;line-height:1.4"></div>
-      </div>
-    </div>
-
     <!-- Fabricante + Modelo na mesma linha -->
     <div class="row" id="rowInstallModel" style="margin-top:0">
       <div style="flex:1;min-width:0">
@@ -311,7 +297,7 @@
   </section>
 
   <!-- 2) CAN -->
-  <section class="card hidden" id="cardCan">
+  <section class="card" id="cardCan">
     <h2>2) Validação CAN</h2>
 
     <div class="kv hidden" id="instKv"></div>
@@ -2117,38 +2103,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     return result;
   }
 
-  // ====== banner de serial não encontrado ======
-  function showSerialError(msg){
-    const banner = $("serialErrorBanner");
-    const detail = $("serialErrorDetail");
-    if (detail) detail.textContent = msg || "";
-    if (banner){
-      banner.classList.remove("hidden");
-      // reinicia animação de pulso
-      banner.style.animation = "none";
-      void banner.offsetWidth; // force reflow
-      banner.style.animation = "pulse-bad 1.2s ease-in-out 3";
-      banner.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }
-
-  function hideSerialError(){
-    const banner = $("serialErrorBanner");
-    if (banner) banner.classList.add("hidden");
-  }
-
-  // Limpa o banner quando o técnico começa a redigitar o serial
-  document.addEventListener("DOMContentLoaded", () => {
-    const serialInput = $("serial");
-    if (serialInput) serialInput.addEventListener("input", hideSerialError);
-  });
-  // Garante que também funciona se o DOM já estiver pronto
-  (function attachSerialListener(){
-    const serialInput = $("serial");
-    if (serialInput) serialInput.addEventListener("input", hideSerialError);
-  })();
-
-
+  $("btnCreate").onclick = async () => {
     const payload = buildPayload();
     const errs = validatePayload(payload);
     if (errs.length){
@@ -2195,34 +2150,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         resolveResult = await resolveVehicle(payload);
 
         if (resolveResult.status !== "OK") {
-          // Detecta serial não encontrado na VHCLS e exibe banner persistente no form
-          const errCode   = String(resolveResult.error_code   || "").toUpperCase();
-          const errStatus = String(resolveResult.status        || "").toUpperCase();
-          const errMsg    = resolveResult.error_message || "";
-
-          const isNotFound = (
-            errCode.includes("NOT_FOUND") || errCode.includes("VEHICLE_NOT_FOUND") ||
-            errStatus.includes("NOT_FOUND") ||
-            errCode === "SERIAL_NOT_FOUND" || errCode === "EQUIPMENT_NOT_FOUND" ||
-            // fallback: mensagem contém indicativo de não encontrado
-            /não (encontrad|cadastrad|testad)/i.test(errMsg) ||
-            /not.found/i.test(errMsg)
-          );
-
-          if (isNotFound) {
-            // Mantém o cardForm visível e exibe banner persistente
-            const serial = String($("serial")?.value || "").trim();
-            const detail = serial
-              ? `Serial ${serial} não foi encontrado no cadastro VHCLS. Verifique se o equipamento passou pelo processo de testes antes de instalar.`
-              : "Serial não encontrado no cadastro VHCLS.";
-            showSerialError(detail);
-            // Toast complementar, mas o banner é o feedback principal
-            showToast("Serial não encontrado na VHCLS", "bad");
-          } else {
-            // Outros erros de resolução: toast genérico, sem navegar
-            showToast(errMsg || "Erro na resolução do veículo", "bad");
-          }
-          console.warn("[resolveVehicle] status!=OK", resolveResult);
+          showToast(resolveResult.error_message || "Erro na resolução", "bad");
           return;
         }
 
@@ -2358,7 +2286,6 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   $("btnReset").onclick = () => {
     $("plate_real").value = "";
     $("serial").value = "";
-    hideSerialError();
     showToast("Campos limpos", "warn");
     refreshAdvancedPreview();
   };
