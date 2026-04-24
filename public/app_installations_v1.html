@@ -2182,6 +2182,19 @@ $("btnRefresh").disabled = !canRefreshEnabled;
           return;
         }
 
+        // Verifica vehicle_id_final nulo — serial inexistente ou não testado no HTML5
+        if (!resolveResult.vehicle_id_final) {
+          const serial = String($("serial")?.value || "").trim();
+          $("serialErrorDetail").textContent = serial
+            ? "Serial " + serial + " inexistente ou equipamento não testado. Verifique o cadastro antes de instalar."
+            : "Serial inexistente ou equipamento não testado.";
+          $("serialErrorBanner").classList.remove("hidden");
+          $("serialErrorBanner").scrollIntoView({ behavior: "smooth", block: "nearest" });
+          showToast("Serial inexistente ou equipamento não testado", "bad");
+          console.warn("[resolveVehicle] vehicle_id_final null", resolveResult);
+          return;
+        }
+
         // Confirmação de serial antigo (MAINT_WITH_SWAP)
         if (svc === "MAINT_WITH_SWAP" && resolveResult.serial_old_found) {
           const ok = await showConfirm(
