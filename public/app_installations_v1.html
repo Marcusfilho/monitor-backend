@@ -2052,6 +2052,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     $("cardCompleted").classList.add("hidden");
     $("cardCan").classList.add("hidden");
     $("cardForm").classList.remove("hidden");
+    _resetPhotoState();
     showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
@@ -2065,6 +2066,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     // não apagar o último installation_id/token ao clicar "Nova"
     $("cardForm").classList.remove("hidden");
     $("cardCan").classList.add("hidden");
+    _resetPhotoState();
     showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
@@ -2253,6 +2255,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       if (svc === "UNINSTALL") {
         $("cardForm").classList.add("hidden");
         $("cardCan").classList.add("hidden");
+        _resetPhotoState();
         setSubline("Desinstalando…");
         showToast("Desinstalação em andamento…", "warn");
         const deadline = Date.now() + 120000;
@@ -2292,6 +2295,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
           // Sem validação CAN — chama complete-maint e vai direto para tela de conclusão
           $("cardForm").classList.add("hidden");
           $("cardCan").classList.add("hidden");
+          _resetPhotoState();
           setSubline("Finalizando manutenção…");
           try {
             await api("/api/installations/" + encodeURIComponent(id) + "/actions/complete-maint", {
@@ -2309,6 +2313,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         renderAll(inst);
         $("cardForm").classList.add("hidden");
         $("cardCan").classList.remove("hidden");
+        _resetPhotoState();
         showBarCan();
         showToast("Manutenção registrada. Iniciando validação CAN…", "good");
         document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2320,6 +2325,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
       $("cardForm").classList.add("hidden");
       $("cardCan").classList.remove("hidden");
+      _resetPhotoState();
       showBarCan();
       showToast("Instalação criada. Vá para a validação CAN.", "good");
       document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2531,6 +2537,24 @@ function _getPlaca() {
   return ((document.getElementById("plate_real") || {}).value || "").trim().toUpperCase();
 }
 
+function _getCliente() {
+  var sel = document.getElementById("clientSelect");
+  if (!sel) return "";
+  var opt = sel.options[sel.selectedIndex];
+  return opt ? (opt.textContent || "").trim() : "";
+}
+
+function _resetPhotoState() {
+  _photoState = {};
+  _currentCategory = null;
+  var flag = document.getElementById("photoFlag");
+  if (flag) { flag.textContent = "Nenhuma enviada"; flag.style.color = "#5a7a9a"; }
+  var list = document.getElementById("photoCategoryList");
+  if (list) list.innerHTML = "";
+  var sumEl = document.getElementById("photoSummary");
+  if (sumEl) { sumEl.textContent = "Selecione uma categoria para começar"; sumEl.style.color = "#5a7a9a"; }
+}
+
 function _savePhotoState() {
   var placa = _getPlaca();
   if (placa) {
@@ -2593,7 +2617,7 @@ async function _uploadFotos(placa, categoria, files) {
   }
   var resp = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    body: JSON.stringify({ placa: placa, categoria: categoria, arquivos: arquivos })
+    body: JSON.stringify({ placa: placa, cliente: _getCliente(), categoria: categoria, arquivos: arquivos })
   });
   var data = await resp.json();
   if (!data.ok) throw new Error(data.erro || "Erro no upload");
