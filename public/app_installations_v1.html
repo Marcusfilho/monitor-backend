@@ -293,12 +293,21 @@
       <input type="hidden" id="gs_command" />
     </div>
 
+    <!-- INÍCIO MÓDULO DE FOTOS -->
     <div style="margin-top:12px">
-      <label>Fotos da instalação <span style="font-size:10px;opacity:.7">(em breve)</span></label>
-      <div style="border:1px dashed #2a3a52;border-radius:14px;padding:14px;text-align:center;color:var(--muted);font-size:12px;background:#0b1118;cursor:default">
-        📷 Tirar foto ou selecionar da galeria<br><span style="font-size:10px;opacity:.7">Funcionalidade em desenvolvimento</span>
-      </div>
+      <label>Fotos da instalação</label>
+      <button type="button" id="btnOpenPhotos" onclick="openPhotoModal()"
+        style="width:100%;background:#0b1118;border:1px dashed #2a3a52;border-radius:14px;
+               padding:14px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;
+               display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color .2s">
+        📷 Adicionar fotos da instalação
+        <span id="photoFlag"
+          style="font-size:11px;background:#1a2535;padding:3px 10px;border-radius:20px;color:#5a7a9a">
+          Nenhuma enviada
+        </span>
+      </button>
     </div>
+    <!-- FIM MÓDULO DE FOTOS -->
     <details id="advancedForm" class="hidden">
       <summary>Avançado (debug)</summary>
       <pre id="payloadPreview">{}</pre>
@@ -2467,6 +2476,220 @@ document.addEventListener("DOMContentLoaded", () => {
     $("cardCan").classList.add("hidden");
     showBarForm();
   })();
+</script>
+
+<!-- ============================================================
+     MODAL DE FOTOS DA INSTALAÇÃO
+     ============================================================ -->
+<div id="photoModal" style="display:none;position:fixed;inset:0;z-index:9000;
+     background:rgba(0,0,0,.85);overflow-y:auto;padding:16px">
+  <div style="max-width:480px;margin:0 auto;background:#0f1923;border-radius:18px;
+              border:1px solid #2a3a52;padding:20px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <span style="font-size:15px;font-weight:600;color:#e0e8f0">📷 Fotos da instalação</span>
+      <button onclick="closePhotoModal()"
+        style="background:none;border:none;color:#5a7a9a;font-size:22px;cursor:pointer;line-height:1">×</button>
+    </div>
+
+    <div id="photoPlacaWarn" style="display:none;background:#1a1200;border:1px solid #5a4000;
+         border-radius:10px;padding:10px 14px;font-size:12px;color:#c8a030;margin-bottom:14px">
+      ⚠️ Preencha a placa antes de enviar fotos.
+    </div>
+
+    <div id="photoCategoryList"></div>
+
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid #1e2d3d;
+                font-size:12px;color:#5a7a9a;text-align:center" id="photoSummary">
+      Selecione uma categoria para começar
+    </div>
+
+  </div>
+</div>
+
+<input type="file" id="photoFileInput" accept="image/*" multiple
+  style="display:none" onchange="handlePhotoFiles(this.files)">
+
+<script>
+var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzJxGlU5Dsm1mC5fsgxdEO9lksV_RwfgOA02eovsAnkoZw_GhSdhVx3vo6PCgZa0a6f/exec";
+
+var PHOTO_CATEGORIES = [
+  { id: "equipamento",  label: "Posição do equipamento" },
+  { id: "cabeamento",   label: "Cabeamento" },
+  { id: "localizacao",  label: "Localização no veículo" },
+  { id: "veiculo",      label: "Veículo (externo)" },
+  { id: "placa",        label: "Placa do veículo" },
+  { id: "chassi",       label: "Chassi" },
+  { id: "documento",    label: "Documento do veículo" },
+  { id: "outros",       label: "Outros / observações" }
+];
+
+var _photoState = {};
+var _currentCategory = null;
+
+function _getPlaca() {
+  return ((document.getElementById("plate_real") || {}).value || "").trim().toUpperCase();
+}
+
+function _savePhotoState() {
+  var placa = _getPlaca();
+  if (placa) {
+    try { sessionStorage.setItem("photoState_" + placa, JSON.stringify(_photoState)); } catch(e) {}
+  }
+}
+
+function _loadPhotoState() {
+  var placa = _getPlaca();
+  if (!placa) return;
+  try {
+    var saved = sessionStorage.getItem("photoState_" + placa);
+    if (saved) _photoState = JSON.parse(saved);
+  } catch(e) {}
+}
+
+function _totalFotos() {
+  return Object.values(_photoState).reduce(function(acc, s) { return acc + (s.count || 0); }, 0);
+}
+
+function _hasError() {
+  return Object.values(_photoState).some(function(s) { return s.error; });
+}
+
+function _compressImage(file, maxPx, quality) {
+  maxPx = maxPx || 1920; quality = quality || 0.82;
+  return new Promise(function(resolve) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) { resolve(blob); }, "image/jpeg", quality);
+    };
+    img.onerror = function() { resolve(file); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function _blobToBase64(blob) {
+  return new Promise(function(resolve, reject) {
+    var r = new FileReader();
+    r.onload = function() { resolve(r.result.split(",")[1]); };
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+async function _uploadFotos(placa, categoria, files) {
+  var arquivos = [];
+  for (var i = 0; i < files.length; i++) {
+    var compressed = await _compressImage(files[i]);
+    var b64 = await _blobToBase64(compressed);
+    arquivos.push({ nome: files[i].name, mime: "image/jpeg", base64: b64 });
+  }
+  var resp = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ placa: placa, categoria: categoria, arquivos: arquivos })
+  });
+  var data = await resp.json();
+  if (!data.ok) throw new Error(data.erro || "Erro no upload");
+  return data.salvos;
+}
+
+function _renderCategories() {
+  var list = document.getElementById("photoCategoryList");
+  if (!list) return;
+  list.innerHTML = "";
+  PHOTO_CATEGORIES.forEach(function(cat) {
+    var st = _photoState[cat.id] || {};
+    var count = st.count || 0, sending = st.sending, error = st.error;
+    var bg  = count > 0 ? "#1a3a1a" : "#0b1118";
+    var brd = count > 0 ? "#2a6a2a" : "#2a3a52";
+    var flagTxt = sending ? "⏳ Enviando…" : error ? "⚠️ Erro"
+                : count > 0 ? "✅ " + count + " foto" + (count > 1 ? "s" : "") : "Nenhuma";
+    var flagClr = sending ? "#c8a030" : error ? "#c83030" : count > 0 ? "#30a830" : "#5a7a9a";
+    var row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;justify-content:space-between;" +
+      "background:" + bg + ";border:1px solid " + brd + ";border-radius:12px;" +
+      "padding:11px 14px;margin-bottom:8px;cursor:pointer";
+    row.onclick = (function(id){ return function(){ _selectCategory(id); }; })(cat.id);
+    row.innerHTML = '<span style="font-size:13px;color:#c8d8e8">' + cat.label + '</span>' +
+      '<span style="font-size:11px;color:' + flagClr + ';background:#0b1118;' +
+      'padding:3px 10px;border-radius:20px;min-width:80px;text-align:center">' + flagTxt + '</span>';
+    list.appendChild(row);
+  });
+  var total = _totalFotos(), hasErr = _hasError();
+  var sumEl = document.getElementById("photoSummary");
+  if (sumEl) {
+    sumEl.textContent = hasErr ? "⚠️ Erro em um ou mais grupos — tente novamente"
+      : total > 0 ? "✅ " + total + " foto" + (total > 1 ? "s" : "") + " enviada" + (total > 1 ? "s" : "")
+      : "Selecione uma categoria para começar";
+    sumEl.style.color = hasErr ? "#c83030" : total > 0 ? "#30a830" : "#5a7a9a";
+  }
+}
+
+function _updateMainFlag() {
+  var flag = document.getElementById("photoFlag");
+  if (!flag) return;
+  var total = _totalFotos(), hasErr = _hasError();
+  if (hasErr)       { flag.textContent = "⚠️ Erro em envio"; flag.style.color = "#c83030"; }
+  else if (total>0) { flag.textContent = "📷 " + total + " foto" + (total>1?"s":"") + " ✅"; flag.style.color = "#30a830"; }
+  else              { flag.textContent = "Nenhuma enviada"; flag.style.color = "#5a7a9a"; }
+}
+
+function _selectCategory(catId) {
+  var placa = _getPlaca();
+  if (!placa) { document.getElementById("photoPlacaWarn").style.display = "block"; return; }
+  document.getElementById("photoPlacaWarn").style.display = "none";
+  _currentCategory = catId;
+  var inp = document.getElementById("photoFileInput");
+  inp.value = ""; inp.click();
+}
+
+async function handlePhotoFiles(files) {
+  if (!files || files.length === 0) return;
+  var placa = _getPlaca(), cat = _currentCategory;
+  if (!placa || !cat) return;
+  if (!_photoState[cat]) _photoState[cat] = {};
+  _photoState[cat].sending = true; _photoState[cat].error = false;
+  _renderCategories();
+  try {
+    var salvos = await _uploadFotos(placa, cat, Array.from(files));
+    _photoState[cat].count   = (_photoState[cat].count || 0) + salvos;
+    _photoState[cat].sending = false;
+    _photoState[cat].error   = false;
+  } catch(err) {
+    _photoState[cat].sending = false;
+    _photoState[cat].error   = true;
+    showToast("Erro ao enviar fotos: " + err.message, "bad");
+  }
+  _savePhotoState(); _renderCategories(); _updateMainFlag();
+}
+
+function openPhotoModal() {
+  _loadPhotoState();
+  var placa = _getPlaca();
+  var warn = document.getElementById("photoPlacaWarn");
+  if (warn) warn.style.display = placa ? "none" : "block";
+  _renderCategories();
+  document.getElementById("photoModal").style.display = "block";
+  document.body.style.overflow = "hidden";
+}
+
+function closePhotoModal() {
+  document.getElementById("photoModal").style.display = "none";
+  document.body.style.overflow = "";
+  _updateMainFlag();
+}
+
+document.getElementById("photoModal").addEventListener("click", function(e) {
+  if (e.target === this) closePhotoModal();
+});
 </script>
 </body>
 </html>
