@@ -2593,7 +2593,6 @@ async function _uploadFotos(placa, categoria, files) {
   }
   var resp = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ placa: placa, categoria: categoria, arquivos: arquivos })
   });
   var data = await resp.json();
