@@ -1,6 +1,7 @@
 // src/worker/schemeBuilderWorker.ts
 import axios from "axios";
 import { spawnSync } from "child_process";
+import { saveSnapshot } from "../services/snapshotStore";
 
 
 import * as fs from "fs";
@@ -348,6 +349,67 @@ await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=$
 
     const r = spawnSync(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
     if (r.status !== 0) throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
+
+    // ── SNAPSHOT_STORE_V1 ────────────────────────────────────────────────────
+    try {
+      const _p   = job.payload || {};
+      const _tech = String(_p.technician ?? _p.technicianName ?? "").trim() || null;
+
+      const cadastro = {
+        plate_real:      (_p.plate_real      ?? null) as string | null,
+        serial:          (_p.serial          ?? null) as string | null,
+        technician:      { id: _tech, nick: _tech },
+        client:          (_p.clientName      ?? null) as string | null,
+        service:         (_p.service         ?? null) as string | null,
+        vehicle: {
+          manufacturer:  (_p.vehicle?.manufacturer ?? null) as string | null,
+          model:         (_p.vehicle?.model        ?? null) as string | null,
+          year:          (_p.vehicle?.year ? Number(_p.vehicle.year) : null) as number | null,
+        },
+        gsensor:         (_p.gsensor ?? null) as any,
+        comment:         (_p.comment ?? null) as string | null,
+        cor:             (_p.cor             ?? null) as string | null,
+        chassi:          (_p.chassi          ?? null) as string | null,
+        localInstalacao: (_p.localInstalacao ?? null) as string | null,
+      };
+
+      let canData: any = {};
+      try {
+        const _instMod = require("../services/installationsStore");
+        const _store =
+          _instMod?.default?.getInstallation ? _instMod.default :
+          _instMod?.installationsStore       ? _instMod.installationsStore :
+          _instMod?.getInstallation          ? _instMod : null;
+        const _inst = _store?.getInstallation
+          ? _store.getInstallation(installationId)
+          : null;
+        if (_inst?.can && typeof _inst.can === "object") canData = _inst.can;
+      } catch { /* ignora */ }
+
+      await saveSnapshot({
+        job_id:             job.id,
+        service:            String(_p.service  ?? "UNKNOWN"),
+        technician:         _tech,
+        plate:              (_p.plate_real ?? null) as string | null,
+        serial:             (_p.serial    ?? null) as string | null,
+        vehicle_id:         _p.vehicleId        ? Number(_p.vehicleId)        : null,
+        asset_type:         _p.assetType        ? Number(_p.assetType)        : null,
+        vehicle_setting_id: _p.vehicleSettingId ? Number(_p.vehicleSettingId) : null,
+        client_id:          _p.clientId         ? Number(_p.clientId)         : null,
+        client_descr:       (_p.clientName ?? null) as string | null,
+        snapshot_json: {
+          cadastro,
+          can: canData,
+          ts:  Date.now(),
+        },
+      });
+    } catch (snapErr: any) {
+      console.error(
+        "[SNAPSHOT_STORE_V1] falha ao salvar snapshot (best-effort):",
+        snapErr?.message || snapErr,
+      );
+    }
+    // ── /SNAPSHOT_STORE_V1 ───────────────────────────────────────────────────
 
     await completeJob(job.id, "ok", { status: "ok" });
   } catch (err: any) {
