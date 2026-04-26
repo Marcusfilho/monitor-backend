@@ -358,6 +358,13 @@ router.post("/", async (req, res) => {
 
 
 
+    // CAMPOS_EXTRAS_V1: campos opcionais enviados pelo app
+    const vehicle = payload.vehicle || null;
+    const cor             = payload.cor             || null;
+    const chassi          = payload.chassi          || null;
+    const localInstalacao = payload.localInstalacao || null;
+    const ano             = payload.ano             != null ? payload.ano : null;
+
     const payloadForJob = {
 
 
@@ -431,6 +438,12 @@ router.post("/", async (req, res) => {
 
 
       gsensor,
+      // CAMPOS_EXTRAS_V1
+      vehicle,
+      cor,
+      chassi,
+      localInstalacao,
+      ano,
 
       // vehicle_id resolvido pelo vehicleResolverWorker (Fase 1)
       // worker v8 lê: vehicle_id || VEHICLE_ID || vehicleId
