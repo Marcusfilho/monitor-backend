@@ -318,6 +318,34 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
       const __svc = _upper(job?.payload?.service ?? job?.payload?.servico);
       const __finalSt = (__svc === "UNINSTALL") ? "COMPLETED" : "HTML5_DONE";
       try { installationsStore.patchInstallation(installationId, { status: __finalSt }); } catch {} // FIX_UNINSTALL_STATUS_V1
+
+      // SAVE_SNAPSHOT_V1: enfileira job para a VM gravar no SQLite
+      try {
+        const _inst = installationsStore.getInstallation(installationId);
+        const _p    = _inst?.payload || {};
+        createJob("save_snapshot", {
+          installation_id:  installationId,
+          service:          String(__svc || _p.service || "UNKNOWN"),
+          plate_real:       _p.plate_real       ?? _p.plate        ?? null,
+          serial:           _p.serial           ?? null,
+          technician:       _p.technician?.nick ?? _p.technician?.id ?? _p.technicianName ?? null,
+          clientId:         _p.target_client_id ?? _p.client_id    ?? null,
+          clientName:       _p.clientName       ?? null,
+          vehicleId:        _p.vehicle_id_final ?? _p.vehicleId    ?? null,
+          vehicleSettingId: _p.vehicleSettingId ?? null,
+          assetType:        _p.assetType        ?? null,
+          vehicle:          _p.vehicle          ?? null,
+          gsensor:          _p.gsensor          ?? null,
+          comment:          _p.comment          ?? null,
+          cor:              _p.cor              ?? null,
+          chassi:           _p.chassi           ?? null,
+          localInstalacao:  _p.localInstalacao  ?? null,
+        });
+        console.log("[jobs] [SAVE_SNAPSHOT_V1] job enfileirado installation=" + installationId + " service=" + __svc);
+      } catch (_se: any) {
+        console.error("[jobs] [SAVE_SNAPSHOT_V1] falha ao enfileirar job:", _se?.message || _se);
+      }
+
       return;
     }
 
