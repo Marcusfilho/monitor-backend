@@ -539,7 +539,7 @@ router.post("/:id/cancel", async (req, res) => {
     const { id } = req.params;
     const inst = installationsStore.getInstallation(id);
     if (!inst) return res.status(404).json({ ok: false, error: "not found" });
-    const TERMINAL = ["COMPLETED","CANCELLED","ERROR","CAN_SNAPSHOT_ERROR"];
+    const TERMINAL = ["COMPLETED","CANCELLED","ERROR","GS_ERROR","CAN_SNAPSHOT_ERROR"];
     if (TERMINAL.includes(String(inst.status||"").toUpperCase()))
       return res.json({ ok: true, skipped: true, reason: "already_terminal", status: inst.status });
     const updated = installationsStore.patchInstallation(id, {

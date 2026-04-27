@@ -719,7 +719,7 @@ function _handleGsComplete(job: any, result: any, jobId?: string) {
 
     // marca GS_DONE + COMPLETED (o técnico não espera no app)
     installationsStore.patchInstallation(installationId, {
-      status: _resultOk(result) ? "COMPLETED" : "ERROR",
+      status: _resultOk(result) ? "COMPLETED" : "GS_ERROR",
       gs: {
         done_at: new Date().toISOString(),
         ok: _resultOk(result),
