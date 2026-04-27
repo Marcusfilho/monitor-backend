@@ -8,7 +8,9 @@
 //         OK  → UPDATE status='exported'  (ou DELETE, ver CLEANUP_MODE)
 //         FAIL → permanece 'pending'; cron das 6h retenta via retryPending()
 
-import Database from "better-sqlite3";
+// better-sqlite3 é carregado dinamicamente — só disponível na VM
+let Database: any = null;
+try { Database = require("better-sqlite3"); } catch { /* Render: ignorar */ }
 import path from "path";
 
 // ─── configuração ────────────────────────────────────────────────────────────
@@ -55,7 +57,8 @@ export interface SnapshotPayload {
 
 // ─── helpers internos ────────────────────────────────────────────────────────
 
-function openDb(): Database.Database {
+function openDb(): any {
+  if (!Database) throw new Error("[snapshotStore] better-sqlite3 não disponível neste ambiente");
   return new Database(DB_PATH);
 }
 
