@@ -107,3 +107,21 @@ async function runForever() {
 }
 
 runForever().catch(e => console.error("[snapshot-worker] fatal:", e));
+
+// ─── cron de retry dos pendentes ─────────────────────────────────────────────
+import { retryPending } from "../services/snapshotStore";
+
+const RETRY_INTERVAL_MS = Number(process.env.SNAPSHOT_RETRY_MS || String(5 * 60 * 1000)); // 5min padrão
+
+async function startRetryCron() {
+  // roda imediatamente no boot para exportar pendentes acumulados
+  console.log("[snapshot-worker] retry boot: verificando pendentes...");
+  await retryPending().catch(e => console.error("[snapshot-worker] retryPending boot erro:", e));
+
+  // depois roda a cada RETRY_INTERVAL_MS
+  setInterval(async () => {
+    await retryPending().catch(e => console.error("[snapshot-worker] retryPending cron erro:", e));
+  }, RETRY_INTERVAL_MS);
+}
+
+startRetryCron().catch(e => console.error("[snapshot-worker] startRetryCron fatal:", e));
