@@ -1739,7 +1739,12 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       if (!pill || !dot || !txt) return;
       // pega o worker principal (vm-tunel-01 ou o primeiro disponível)
       const workers = d.workers || [];
-      const w = workers.find(x => x.checks?.session_ok !== undefined) || workers[0];
+      const w = (
+        workers
+          .filter(x => x.checks?.session_ok !== undefined)
+          .sort((a, b) => new Date(b.ts) - new Date(a.ts))[0]
+        || workers.sort((a, b) => new Date(b.ts) - new Date(a.ts))[0]
+      );
       const sessionOk = w?.checks?.session_ok === true;
       const workerOk  = !!w && (Date.now() - new Date(w.ts).getTime()) < 120000;
       if (sessionOk && workerOk) {
