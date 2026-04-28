@@ -247,6 +247,18 @@ const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : 
       installationsStore.patchInstallation(installationId, { can: __canPatched,
     can_snapshot_latest: (__snap || null),
     can_snapshot: (__hasData ? __snap : null), status: (__hasData ? "CAN_SNAPSHOT_READY" : "CAN_SNAPSHOT_ERROR") });
+
+      // SNAPSHOT_ALL_SERVICES_V1 — Ponto D: MAINT_NO_SWAP com CAN não tem GS posterior
+      // O CAN é o passo final — disparar snapshot aqui se service === MAINT_NO_SWAP
+      try {
+        const _svcCan = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service ?? inst?.payload?.servico);
+        if (_svcCan === "MAINT_NO_SWAP") {
+          // marca COMPLETED antes de enfileirar snapshot
+          try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
+          _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
+          console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
+        }
+      } catch {}
     } catch {}
 
     try {
@@ -329,36 +341,9 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
       const __finalSt = (__svc === "UNINSTALL") ? "COMPLETED" : "HTML5_DONE";
       try { installationsStore.patchInstallation(installationId, { status: __finalSt }); } catch {} // FIX_UNINSTALL_STATUS_V1
 
-      // SAVE_SNAPSHOT_V1: enfileira job para a VM gravar no SQLite
-      try {
-        if (_alreadyHasSnapshot(installationId)) {
-          console.log("[jobs] [SAVE_SNAPSHOT_V1] já existe job para installation=" + installationId + " — ignorando duplicata");
-          return;
-        }
-        const _inst = installationsStore.getInstallation(installationId);
-        const _p    = _inst?.payload || {};
-        createJob("save_snapshot", {
-          installation_id:  installationId,
-          service:          String(__svc || _p.service || "UNKNOWN"),
-          plate_real:       _p.plate_real       ?? _p.plate        ?? null,
-          serial:           _p.serial           ?? null,
-          technician:       _p.technician?.nick ?? _p.technician?.id ?? _p.technicianName ?? null,
-          clientId:         _p.target_client_id ?? _p.client_id    ?? null,
-          clientName:       _p.clientName       ?? null,
-          vehicleId:        _p.vehicle_id_final ?? _p.vehicleId    ?? null,
-          vehicleSettingId: _p.vehicleSettingId ?? null,
-          assetType:        _p.assetType        ?? null,
-          vehicle:          _p.vehicle          ?? null,
-          gsensor:          _p.gsensor          ?? null,
-          comment:          _p.comment          ?? null,
-          cor:              _p.cor              ?? null,
-          chassi:           _p.chassi           ?? null,
-          localInstalacao:  _p.localInstalacao  ?? null,
-        });
-        console.log("[jobs] [SAVE_SNAPSHOT_V1] job enfileirado installation=" + installationId + " service=" + __svc);
-      } catch (_se: any) {
-        console.error("[jobs] [SAVE_SNAPSHOT_V1] falha ao enfileirar job:", _se?.message || _se);
-      }
+      // SAVE_SNAPSHOT_V1 removido daqui — disparava antes do CAN/GS (muito cedo)
+      // O snapshot agora é enfileirado em _handleGsComplete (INSTALL/MAINT_WITH_SWAP/MAINT_NO_SWAP com CAN)
+      // e em _enqueueSchemeBuilderAfterHtml5 (UNINSTALL e MAINT_NO_SWAP sem CAN) via _enqueueSnapshotIfNeeded()
 
       return;
     }
@@ -554,6 +539,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
       const finalSt = html5Ok ? "COMPLETED" : "HTML5_ERROR";
       try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: finalSt }); } catch {}
       console.log(`[jobs] [PIPELINE] UNINSTALL → ${finalSt} installation=${installationId}`);
+      // SNAPSHOT_ALL_SERVICES_V1: UNINSTALL — dispara quando html5 confirma sucesso
+      if (html5Ok) _enqueueSnapshotIfNeeded(installationId, "UNINSTALL");
       return;
     }
     if (!_resultOk(result)) return;
@@ -609,6 +596,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
       if (service === "MAINT_NO_SWAP") {
         try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
         console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
+        // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP via SB_SKIP — sem CAN posterior
+        _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
         return;
       }
 
@@ -631,6 +620,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
       if (!vehicleId) {
         try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
         console.log(`[jobs] MAINT_NO_SWAP → COMPLETED (sem vehicleId para CAN).`);
+        // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP sem vehicleId — CAN não será disparado
+        _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
         return;
       }
       const canJob = createJob("monitor_can_snapshot", {
@@ -724,6 +715,42 @@ function _enqueueCanAfterSchemeBuilder(job: any, result: any) {
   }
 }
 
+// SNAPSHOT_ALL_SERVICES_V1: função centralizada — chamada em todos os pontos de COMPLETED real
+// Substitui SAVE_SNAPSHOT_V1 que disparava cedo demais (antes do CAN/GS)
+function _enqueueSnapshotIfNeeded(installationId: string, serviceOverride?: string) {
+  try {
+    if (!installationId) return;
+    if (_alreadyHasSnapshot(installationId)) {
+      console.log("[jobs] [SNAPSHOT_ALL_V1] já existe job para installation=" + installationId + " — skip");
+      return;
+    }
+    const _inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
+    const _p = _inst?.payload || {};
+    const _svc = serviceOverride || String(_p.service || _p.servico || "UNKNOWN").toUpperCase();
+    createJob("save_snapshot", {
+      installation_id:  installationId,
+      service:          _svc,
+      plate_real:       _p.plate_real       ?? _p.plate        ?? null,
+      serial:           _p.serial           ?? null,
+      technician:       _p.technician?.nick ?? _p.technician?.id ?? _p.technicianName ?? null,
+      clientId:         _p.target_client_id ?? _p.client_id    ?? null,
+      clientName:       _p.clientName       ?? null,
+      vehicleId:        _p.vehicle_id_final ?? _p.vehicleId    ?? null,
+      vehicleSettingId: _p.vehicleSettingId ?? null,
+      assetType:        _p.assetType        ?? null,
+      vehicle:          _p.vehicle          ?? null,
+      gsensor:          _p.gsensor          ?? null,
+      comment:          _p.comment          ?? null,
+      cor:              _p.cor              ?? null,
+      chassi:           _p.chassi           ?? null,
+      localInstalacao:  _p.localInstalacao  ?? null,
+    });
+    console.log("[jobs] [SNAPSHOT_ALL_V1] enfileirado installation=" + installationId + " service=" + _svc);
+  } catch (_se: any) {
+    console.error("[jobs] [SNAPSHOT_ALL_V1] falha ao enfileirar:", _se?.message || _se);
+  }
+}
+
 function _handleGsComplete(job: any, result: any, jobId?: string) {
   try {
     if (!job || String(job.type || "") !== "monitor_gs") return;
@@ -739,6 +766,12 @@ function _handleGsComplete(job: any, result: any, jobId?: string) {
         ok: _resultOk(result),
       }
     });
+
+    // SNAPSHOT_ALL_SERVICES_V1: cobre INSTALL, MAINT_WITH_SWAP e MAINT_NO_SWAP com CAN
+    // Dispara APÓS o GS — CAN já concluído, status real é COMPLETED
+    if (_resultOk(result)) {
+      _enqueueSnapshotIfNeeded(installationId);
+    }
 
     try {
       installationsStore.pushJob && installationsStore.pushJob(installationId, {
