@@ -16,7 +16,62 @@ const HEADER = [
   "ID", "Data", "Placa", "Serial", "Técnico", "Cliente",
   "Serviço", "Fabricante", "Modelo", "Ano",
   "Cor", "Chassi", "Local Instalação", "Comentário", "Job ID",
+  "Etiqueta", "Chicote", "CAN",
 ];
+
+// ─── decodificação gsensor → Etiqueta / Chicote ───────────────────────────────
+
+const LABEL_PT: Record<string, string> = {
+  UP: "CIMA", DOWN: "BAIXO", LEFT: "ESQUERDA",
+  RIGHT: "DIREITA", FRONT: "FRENTE", BACK: "TRASEIRO",
+};
+
+function gsensorToEtiquetaChicote(gsensor: any): { etiqueta: string; chicote: string } {
+  if (!gsensor || typeof gsensor !== "object") return { etiqueta: "", chicote: "" };
+  return {
+    etiqueta: LABEL_PT[String(gsensor.label_pos  ?? "").toUpperCase()] ?? "",
+    chicote:  LABEL_PT[String(gsensor.harness_pos ?? "").toUpperCase()] ?? "",
+  };
+}
+
+// ─── formatação CAN compacta ──────────────────────────────────────────────────
+
+function formatCanSummary(can: any): string {
+  if (!can || typeof can !== "object") return "";
+  const parts: string[] = [];
+
+  if (can.ignition !== undefined && can.ignition !== null && can.ignition !== "") {
+    parts.push(`IGN:${can.ignition}`);
+  }
+
+  if (can.config_key_db && can.config_key_db !== "00000000") {
+    parts.push(`KEY:${can.config_key_db}`);
+  }
+
+  if (Array.isArray(can.moduleState)) {
+    const activeModules = can.moduleState
+      .filter((m: any) => m.active === true && m.ok === true)
+      .map((m: any) => m.sub || m.name)
+      .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
+      .slice(0, 5);
+    if (activeModules.length > 0) {
+      parts.push(`MOD:${activeModules.join(",")}`);
+    }
+  }
+
+  if (Array.isArray(can.parameters)) {
+    for (const param of can.parameters) {
+      const val = param.value ?? param.raw_value;
+      if (!val || val === "00000000" || val === "0") continue;
+      const name = (param.name || param.original_name || param.id || "?")
+        .replace(/\s+/g, "_")
+        .substring(0, 12);
+      parts.push(`${name}:${val}`);
+    }
+  }
+
+  return parts.join(" | ");
+}
 
 // ─── JWT / OAuth2 sem googleapis (zero dependência extra) ────────────────────
 
@@ -111,7 +166,7 @@ async function sheetsRequest(
 }
 
 async function ensureHeader(token: string): Promise<void> {
-  const range    = encodeURIComponent(`${SHEET_NAME}!A1:O1`);
+  const range    = encodeURIComponent(`${SHEET_NAME}!A1:R1`);
   const existing = await sheetsRequest(
     "GET",
     `/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`,
@@ -159,6 +214,8 @@ export async function exportSnapshot(id: number, p: SnapshotPayload): Promise<vo
   await ensureHeader(token);
 
   const c   = p.snapshot_json.cadastro;
+  const { etiqueta, chicote } = gsensorToEtiquetaChicote(c.gsensor);
+  const canSummary = formatCanSummary(p.snapshot_json.can);
   const row = [
     id,
     new Date(p.snapshot_json.ts).toISOString(),
@@ -175,6 +232,9 @@ export async function exportSnapshot(id: number, p: SnapshotPayload): Promise<vo
     c.localInstalacao   ?? "",
     c.comment           ?? "",
     p.job_id,
+    etiqueta,
+    chicote,
+    canSummary,
   ];
 
   await appendRow(token, row);

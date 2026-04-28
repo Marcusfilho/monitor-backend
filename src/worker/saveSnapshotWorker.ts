@@ -38,6 +38,20 @@ async function completeJob(jobId: string, status: string, result: any) {
   }
 }
 
+function _readCanFromStore(installationId: string | undefined): any {
+  if (!installationId) return {};
+  try {
+    const _instMod = require("../services/installationsStore");
+    const _store =
+      _instMod?.default?.getInstallation ? _instMod.default :
+      _instMod?.installationsStore       ? _instMod.installationsStore :
+      _instMod?.getInstallation          ? _instMod : null;
+    const _inst = _store?.getInstallation?.(installationId);
+    if (_inst?.can && typeof _inst.can === "object") return _inst.can;
+  } catch { /* melhor esforço */ }
+  return {};
+}
+
 async function processJob(job: any) {
   const p = job.payload || {};
   console.log(`[snapshot-worker] processando job=${job.id} service=${p.service} plate=${p.plate_real}`);
@@ -72,7 +86,7 @@ async function processJob(job: any) {
           chassi:          p.chassi           ?? null,
           localInstalacao: p.localInstalacao  ?? null,
         },
-        can: {},
+        can: _readCanFromStore(p.installation_id),
         ts:  Date.now(),
       },
     });

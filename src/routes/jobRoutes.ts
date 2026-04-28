@@ -168,6 +168,16 @@ function _alreadyHasSb(installationId: string): boolean {
   } catch { return false; }
 }
 
+function _alreadyHasSnapshot(installationId: string): boolean {
+  try {
+    return listJobs().some((j: any) =>
+      j?.type === "save_snapshot" &&
+      String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(installationId) &&
+      j?.status !== "error"
+    );
+  } catch { return false; }
+}
+
 function _alreadyHasCan(installationId: string): boolean {
   try {
     return listJobs().some((j: any) =>
@@ -321,6 +331,10 @@ function _handleHtml5CompleteToInstallation(job: any, result: any, finalStatus: 
 
       // SAVE_SNAPSHOT_V1: enfileira job para a VM gravar no SQLite
       try {
+        if (_alreadyHasSnapshot(installationId)) {
+          console.log("[jobs] [SAVE_SNAPSHOT_V1] já existe job para installation=" + installationId + " — ignorando duplicata");
+          return;
+        }
         const _inst = installationsStore.getInstallation(installationId);
         const _p    = _inst?.payload || {};
         createJob("save_snapshot", {
