@@ -38,18 +38,32 @@ function gsensorToEtiquetaChicote(gsensor: any): { etiqueta: string; chicote: st
 
 function formatCanSummary(can: any): string {
   if (!can || typeof can !== "object") return "";
+
+  // CAN_SNAPSHOT_UNWRAP_V1: os dados reais ficam dentro de can.snapshots[0]
+  // O campo can raiz contém: { snapshots: [...], summary, last_snapshot_at, phase }
+  // Precisamos descer para o snapshot antes de ler ignition, moduleState, parameters
+  const snap = (Array.isArray(can.snapshots) && can.snapshots.length > 0)
+    ? can.snapshots[0]
+    : can; // fallback: se vier flat (compatibilidade futura)
+
   const parts: string[] = [];
 
-  if (can.ignition !== undefined && can.ignition !== null && can.ignition !== "") {
-    parts.push(`IGN:${can.ignition}`);
+  // ignition: snap.header.raw.ignition
+  const ignition = snap?.header?.raw?.ignition ?? snap?.ignition ?? null;
+  if (ignition !== undefined && ignition !== null && ignition !== "") {
+    parts.push(`IGN:${ignition}`);
   }
 
-  if (can.config_key_db && can.config_key_db !== "00000000") {
-    parts.push(`KEY:${can.config_key_db}`);
+  // config_key_db: snap.header.configuration_key_db
+  const configKey = snap?.header?.configuration_key_db ?? snap?.config_key_db ?? null;
+  if (configKey && configKey !== "00000000") {
+    parts.push(`KEY:${configKey}`);
   }
 
-  if (Array.isArray(can.moduleState)) {
-    const activeModules = can.moduleState
+  // moduleState: snap.moduleState
+  const moduleState = snap?.moduleState ?? snap?.module_state ?? null;
+  if (Array.isArray(moduleState)) {
+    const activeModules = moduleState
       .filter((m: any) => m.active === true && m.ok === true)
       .map((m: any) => m.sub || m.name)
       .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
@@ -59,8 +73,10 @@ function formatCanSummary(can: any): string {
     }
   }
 
-  if (Array.isArray(can.parameters)) {
-    for (const param of can.parameters) {
+  // parameters: snap.parameters
+  const parameters = snap?.parameters ?? null;
+  if (Array.isArray(parameters)) {
+    for (const param of parameters) {
       const val = param.value ?? param.raw_value;
       if (!val || val === "00000000" || val === "0") continue;
       const name = (param.name || param.original_name || param.id || "?")

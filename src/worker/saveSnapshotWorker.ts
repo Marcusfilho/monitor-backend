@@ -86,7 +86,9 @@ async function processJob(job: any) {
           chassi:          p.chassi           ?? null,
           localInstalacao: p.localInstalacao  ?? null,
         },
-        can: _readCanFromStore(p.installation_id),
+        // CAN_IN_PAYLOAD_V1: prioriza o CAN serializado no payload (enviado pelo Render no momento do disparo)
+        // Fallback para _readCanFromStore apenas se não vier no payload (worker no mesmo processo)
+        can: (p.can && typeof p.can === "object") ? p.can : _readCanFromStore(p.installation_id),
         ts:  Date.now(),
       },
     });
