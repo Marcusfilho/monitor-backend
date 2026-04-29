@@ -518,7 +518,7 @@ function _enqueueChangeCompanyAfterHtml5(job: any, result: any) {
   }
 }
 
-async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
+async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any, finalStatus?: string) {
   try {
     const jobType = String(job?.type || "");
     if (jobType !== "html5_install" && jobType !== "html5_maint_no_swap" && jobType !== "html5_maint_with_swap" && jobType !== "resolver_change_company") return;
@@ -535,10 +535,15 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any) {
 
     // UNINSTALL: marca COMPLETED direto — result.status é null mesmo com sucesso
     if (service === "UNINSTALL") {
-      const html5Ok = !!(result && (result.ok === true || (Array.isArray(result.steps) && result.steps.some((s: any) => s.ok === true))));
+      // UNINSTALL_HTML5_OK_V2: worker pode não mandar ok/steps — aceitar finalStatus como fallback
+      const html5Ok = !!(
+        (result && result.ok === true) ||
+        (result && Array.isArray(result.steps) && result.steps.some((s: any) => s.ok === true)) ||
+        finalStatus === "completed"  // fallback: confiar no envelope do router
+      );
       const finalSt = html5Ok ? "COMPLETED" : "HTML5_ERROR";
       try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: finalSt }); } catch {}
-      console.log(`[jobs] [PIPELINE] UNINSTALL → ${finalSt} installation=${installationId}`);
+      console.log(`[jobs] [PIPELINE] UNINSTALL → ${finalSt} installation=${installationId} html5Ok=${html5Ok}`);
       // SNAPSHOT_ALL_SERVICES_V1: UNINSTALL — dispara quando html5 confirma sucesso
       if (html5Ok) _enqueueSnapshotIfNeeded(installationId, "UNINSTALL");
       return;
@@ -727,6 +732,9 @@ function _enqueueSnapshotIfNeeded(installationId: string, serviceOverride?: stri
     const _inst = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : null;
     const _p = _inst?.payload || {};
     const _svc = serviceOverride || String(_p.service || _p.servico || "UNKNOWN").toUpperCase();
+    // CAN_IN_PAYLOAD_V1: lê o CAN do store no momento do disparo (após CAN/GS concluídos)
+    // Worker roda na VM separada — não tem acesso ao installationsStore do Render.
+    const _can = (_inst && typeof (_inst as any).can === "object") ? (_inst as any).can : null;
     createJob("save_snapshot", {
       installation_id:  installationId,
       service:          _svc,
@@ -744,6 +752,7 @@ function _enqueueSnapshotIfNeeded(installationId: string, serviceOverride?: stri
       cor:              _p.cor              ?? null,
       chassi:           _p.chassi           ?? null,
       localInstalacao:  _p.localInstalacao  ?? null,
+      can:              _can,               // CAN_IN_PAYLOAD_V1
     });
     console.log("[jobs] [SNAPSHOT_ALL_V1] enfileirado installation=" + installationId + " service=" + _svc);
   } catch (_se: any) {
@@ -769,8 +778,10 @@ function _handleGsComplete(job: any, result: any, jobId?: string) {
 
     // SNAPSHOT_ALL_SERVICES_V1: cobre INSTALL, MAINT_WITH_SWAP e MAINT_NO_SWAP com CAN
     // Dispara APÓS o GS — CAN já concluído, status real é COMPLETED
+    // GS_SERVICE_OVERRIDE_V1: passa o service do job do GS para evitar fallback UNKNOWN
     if (_resultOk(result)) {
-      _enqueueSnapshotIfNeeded(installationId);
+      const _gsService = String(job?.payload?.service ?? job?.payload?.servico ?? "").toUpperCase() || undefined;
+      _enqueueSnapshotIfNeeded(installationId, _gsService);
     }
 
     try {
@@ -896,7 +907,7 @@ try {
   // dispara encadeamento para Monitor (SB) após HTML5 somente em sucesso
   if (finalStatus === "completed") {
     _enqueueChangeCompanyAfterHtml5(job, result);
-    _enqueueSchemeBuilderAfterHtml5(job, result);
+    _enqueueSchemeBuilderAfterHtml5(job, result, finalStatus);
     _enqueueCanAfterSchemeBuilder(job, result);
   }
 
