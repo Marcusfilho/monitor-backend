@@ -270,6 +270,38 @@
       <label>Comentário</label>
       <input id="comment" placeholder="Comentário para os comandos no Monitor" />
     </div>
+
+    <!-- CAMPOS_EXTRAS_V1: campos opcionais de detalhe do veículo/instalação -->
+    <details id="detalhesAdicionais" style="margin-top:10px;">
+      <summary style="cursor:pointer;font-size:13px;color:var(--muted);user-select:none;">▼ Detalhes adicionais</summary>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+
+        <div>
+          <label style="font-size:12px;">Ano do veículo</label>
+          <select id="extraAno" style="font-size:13px;"></select>
+        </div>
+
+        <div>
+          <label style="font-size:12px;">Cor do veículo</label>
+          <input type="text" id="extraCor" placeholder="Ex: Branco" style="font-size:13px;" />
+        </div>
+
+        <div>
+          <label style="font-size:12px;">Chassi</label>
+          <input type="text" id="extraChassi" placeholder="17 caracteres"
+                 maxlength="17"
+                 oninput="this.value = this.value.toUpperCase()"
+                 style="font-size:13px;letter-spacing:1px;" />
+        </div>
+
+        <div>
+          <label style="font-size:12px;">Local de instalação</label>
+          <input type="text" id="extraLocal" placeholder="Ex: Painel central" style="font-size:13px;" />
+        </div>
+
+      </div>
+    </details>
+    <!-- /CAMPOS_EXTRAS_V1 -->
     <!-- assetType: mantido no DOM para o JS, mas nunca exibido ao usuário -->
     <div class="hidden" id="assetTypeWrap"><span class="pill"><span class="dot"></span>assetType: <b id="assetTypeText">—</b></span></div>
 
@@ -847,6 +879,8 @@
       },
       comment: norm($("comment")?.value || "") || null,
       technician: state.technician || null,
+      // CAMPOS_EXTRAS_V1
+      ..._getExtraFields(),
     };
 
     if (svc === "INSTALL"){
@@ -855,7 +889,7 @@
       body.vehicle = {
         manufacturer: $("cat_manufacturer").value || null,
         model: $("cat_model").value || null,
-        year: null,
+        year: $("extraAno")?.value ? Number($("extraAno").value) : null,
       };
     }
 
@@ -1886,7 +1920,12 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       if (!pill || !dot || !txt) return;
       // pega o worker principal (vm-tunel-01 ou o primeiro disponível)
       const workers = d.workers || [];
-      const w = workers.find(x => x.checks?.session_ok !== undefined) || workers[0];
+      const w = (
+        workers
+          .filter(x => x.checks?.session_ok !== undefined)
+          .sort((a, b) => new Date(b.ts) - new Date(a.ts))[0]
+        || workers.sort((a, b) => new Date(b.ts) - new Date(a.ts))[0]
+      );
       const sessionOk = w?.checks?.session_ok === true;
       const workerOk  = !!w && (Date.now() - new Date(w.ts).getTime()) < 180000;
       if (sessionOk && workerOk) {
@@ -2052,6 +2091,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     $("cardCompleted").classList.add("hidden");
     $("cardCan").classList.add("hidden");
     $("cardForm").classList.remove("hidden");
+    _resetPhotoState();
     showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
@@ -2065,6 +2105,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
     // não apagar o último installation_id/token ao clicar "Nova"
     $("cardForm").classList.remove("hidden");
     $("cardCan").classList.add("hidden");
+    _resetPhotoState();
     showBarForm();
     renderEmpty();
     showToast("Nova instalação", "warn");
@@ -2253,6 +2294,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
       if (svc === "UNINSTALL") {
         $("cardForm").classList.add("hidden");
         $("cardCan").classList.add("hidden");
+        _resetPhotoState();
         setSubline("Desinstalando…");
         showToast("Desinstalação em andamento…", "warn");
         const deadline = Date.now() + 120000;
@@ -2292,6 +2334,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
           // Sem validação CAN — chama complete-maint e vai direto para tela de conclusão
           $("cardForm").classList.add("hidden");
           $("cardCan").classList.add("hidden");
+          _resetPhotoState();
           setSubline("Finalizando manutenção…");
           try {
             await api("/api/installations/" + encodeURIComponent(id) + "/actions/complete-maint", {
@@ -2309,6 +2352,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         renderAll(inst);
         $("cardForm").classList.add("hidden");
         $("cardCan").classList.remove("hidden");
+        _resetPhotoState();
         showBarCan();
         showToast("Manutenção registrada. Iniciando validação CAN…", "good");
         document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2320,6 +2364,7 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
       $("cardForm").classList.add("hidden");
       $("cardCan").classList.remove("hidden");
+      _resetPhotoState();
       showBarCan();
       showToast("Instalação criada. Vá para a validação CAN.", "good");
       document.getElementById("cardCan").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2531,6 +2576,69 @@ function _getPlaca() {
   return ((document.getElementById("plate_real") || {}).value || "").trim().toUpperCase();
 }
 
+function _getCliente() {
+  var sel = document.getElementById("clientSelect");
+  if (!sel) return "";
+  var opt = sel.options[sel.selectedIndex];
+  return opt ? (opt.textContent || "").trim() : "";
+}
+
+
+  // CAMPOS_EXTRAS_V1 — retorna campos extras do formulário
+  function _getExtraFields() {
+    return {
+      ano:              $("extraAno")?.value   ? Number($("extraAno").value)   : null,
+      cor:              $("extraCor")?.value?.trim()    || null,
+      chassi:           $("extraChassi")?.value?.trim() || null,
+      localInstalacao:  $("extraLocal")?.value?.trim()  || null,
+    };
+  }
+
+  // CAMPOS_EXTRAS_V1 — limpar campos extras no reset
+  function _resetExtraFields() {
+    const sel = $("extraAno");
+    if (sel) sel.value = "";
+    const cor = $("extraCor");
+    if (cor) cor.value = "";
+    const chassi = $("extraChassi");
+    if (chassi) chassi.value = "";
+    const local = $("extraLocal");
+    if (local) local.value = "";
+    // Fechar o bloco details
+    const det = document.getElementById("detalhesAdicionais");
+    if (det) det.removeAttribute("open");
+  }
+
+  // CAMPOS_EXTRAS_V1 — popular select de anos (1990 → ano atual)
+  (function _populateAnoSelect() {
+    const sel = $("extraAno");
+    if (!sel) return;
+    const anoAtual = new Date().getFullYear();
+    // opção vazia
+    const opt0 = document.createElement("option");
+    opt0.value = ""; opt0.textContent = "— não informado —";
+    sel.appendChild(opt0);
+    // anos do mais recente ao mais antigo
+    for (let y = anoAtual; y >= 1990; y--) {
+      const opt = document.createElement("option");
+      opt.value = String(y); opt.textContent = String(y);
+      sel.appendChild(opt);
+    }
+  })();
+
+function _resetPhotoState() {
+  _photoState = {};
+  _currentCategory = null;
+  // CAMPOS_EXTRAS_V1
+  if (typeof _resetExtraFields === "function") _resetExtraFields();
+  var flag = document.getElementById("photoFlag");
+  if (flag) { flag.textContent = "Nenhuma enviada"; flag.style.color = "#5a7a9a"; }
+  var list = document.getElementById("photoCategoryList");
+  if (list) list.innerHTML = "";
+  var sumEl = document.getElementById("photoSummary");
+  if (sumEl) { sumEl.textContent = "Selecione uma categoria para começar"; sumEl.style.color = "#5a7a9a"; }
+}
+
 function _savePhotoState() {
   var placa = _getPlaca();
   if (placa) {
@@ -2593,8 +2701,7 @@ async function _uploadFotos(placa, categoria, files) {
   }
   var resp = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ placa: placa, categoria: categoria, arquivos: arquivos })
+    body: JSON.stringify({ placa: placa, cliente: _getCliente(), categoria: categoria, arquivos: arquivos })
   });
   var data = await resp.json();
   if (!data.ok) throw new Error(data.erro || "Erro no upload");
