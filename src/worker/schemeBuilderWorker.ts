@@ -1,6 +1,7 @@
 // src/worker/schemeBuilderWorker.ts
 import axios from "axios";
 import { spawnSync } from "child_process";
+import { saveSnapshot } from "../services/snapshotStore";
 
 
 import * as fs from "fs";
@@ -26,10 +27,21 @@ try {
         const tok = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
         session_ok = tok.length >= 20;
       } catch {}
+
+      // TRAFFILOG_CONNECTIVITY_CHECK_V1: testa conectividade a cada heartbeat
+      // Resultados são cacheados para não bloquear o getState (testes rodam em background)
       return {
         status: "running",
-        checks: { backend_ok: true, session_ok },
-        meta: { uptime_s: Math.round(process.uptime()) },
+        checks: {
+          backend_ok: true,
+          session_ok,
+          traffilog_ws_ok:  (globalThis as any).__hb_traffilog_ws_ok  ?? null,
+          traffilog_op_ok:  (globalThis as any).__hb_traffilog_op_ok  ?? null,
+        },
+        meta: {
+          uptime_s: Math.round(process.uptime()),
+          traffilog_ws_checked_at: (globalThis as any).__hb_traffilog_ws_at ?? null,
+        },
       };
     },
   });
@@ -39,6 +51,38 @@ try {
   console.error("[hb] init fail (src):", e?.message || e);
 }
 // === /HEARTBEAT ===
+
+// TRAFFILOG_CONNECTIVITY_CHECK_V1
+// Testa conectividade com os servidores do Traffilog em background a cada 60s.
+// Resultado fica em globalThis para o getState do heartbeat ler sem bloquear.
+async function _checkTraffilogConnectivity() {
+  const fetchFn: any = (globalThis as any).fetch;
+  // teste WebSocket (porta 8182) via HTTP HEAD — só verifica se o host responde
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    await fetchFn("https://websocket.traffilog.com:8182/", { method: "HEAD", signal: ctrl.signal }).catch(() => null);
+    clearTimeout(t);
+    (globalThis as any).__hb_traffilog_ws_ok = true;
+  } catch {
+    (globalThis as any).__hb_traffilog_ws_ok = false;
+  }
+  // teste operation (HTTPS normal)
+  try {
+    const ctrl2 = new AbortController();
+    const t2 = setTimeout(() => ctrl2.abort(), 8000);
+    const r = await fetchFn("https://operation.traffilog.com", { method: "HEAD", signal: ctrl2.signal }).catch(() => null);
+    clearTimeout(t2);
+    (globalThis as any).__hb_traffilog_op_ok = !!(r && r.status < 600);
+  } catch {
+    (globalThis as any).__hb_traffilog_op_ok = false;
+  }
+  (globalThis as any).__hb_traffilog_ws_at = new Date().toISOString();
+}
+// rodar imediatamente e depois a cada 60s
+_checkTraffilogConnectivity().catch(() => {});
+setInterval(() => _checkTraffilogConnectivity().catch(() => {}), 60000);
+// === /TRAFFILOG_CONNECTIVITY_CHECK_V1 ===
 
 async function reportProgress(jobId: string, percent: number, stage: string, detail?: string) {
   try {
@@ -348,6 +392,7 @@ await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=$
 
     const r = spawnSync(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
     if (r.status !== 0) throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
+
 
     await completeJob(job.id, "ok", { status: "ok" });
   } catch (err: any) {

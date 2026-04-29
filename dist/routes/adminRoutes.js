@@ -45,6 +45,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const sessionTokenStore_1 = require("../services/sessionTokenStore");
 const clientRoutes_1 = require("./clientRoutes");
+const jobStore_1 = require("../jobs/jobStore");
 const router = (0, express_1.Router)();
 // ---------------------------------------------------------------------------
 // Constantes
@@ -271,6 +272,14 @@ router.post("/asset-types/sync", async (_req, res) => {
             fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(ASSET_TYPES_PATH, JSON.stringify(output, null, 2), "utf8");
         console.log(`[admin] JSON salvo em ${ASSET_TYPES_PATH}`);
+        // Persistir no SQLite da VM via job assíncrono
+        try {
+            (0, jobStore_1.createJob)("admin_config_sync", { key: "asset_types", value: output });
+            console.log("[admin] admin_config_sync (asset_types) enfileirado");
+        }
+        catch (e) {
+            console.warn("[admin] admin_config_sync (asset_types) falhou (não crítico):", e?.message);
+        }
         return res.json({
             ok: true,
             total_vhcls_pairs: usedIds.size,
@@ -478,6 +487,14 @@ router.post("/schemes", (req, res) => {
             console.error("[admin] WARN: falha ao regenerar scheme_ids.txt:", syncErr?.message);
         }
         // ── fim PATCH_ADMIN_SYNC_SCHEME_IDS_V1 ──────────────────────────────────
+        // Persistir no SQLite da VM via job assíncrono
+        try {
+            (0, jobStore_1.createJob)("admin_config_sync", { key: "schemes_active", value: payload });
+            console.log("[admin] admin_config_sync (schemes_active) enfileirado");
+        }
+        catch (e) {
+            console.warn("[admin] admin_config_sync (schemes_active) falhou (não crítico):", e?.message);
+        }
         return res.json({ ok: true, total_clients: payload.total_clients, total_schemes: payload.total_schemes });
     }
     catch (err) {

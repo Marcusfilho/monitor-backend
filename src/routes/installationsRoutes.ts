@@ -358,6 +358,13 @@ router.post("/", async (req, res) => {
 
 
 
+    // CAMPOS_EXTRAS_V1: campos opcionais enviados pelo app
+    const vehicle = payload.vehicle || null;
+    const cor             = payload.cor             || null;
+    const chassi          = payload.chassi          || null;
+    const localInstalacao = payload.localInstalacao || null;
+    const ano             = payload.ano             != null ? payload.ano : null;
+
     const payloadForJob = {
 
 
@@ -431,6 +438,12 @@ router.post("/", async (req, res) => {
 
 
       gsensor,
+      // CAMPOS_EXTRAS_V1
+      vehicle,
+      cor,
+      chassi,
+      localInstalacao,
+      ano,
 
       // vehicle_id resolvido pelo vehicleResolverWorker (Fase 1)
       // worker v8 lê: vehicle_id || VEHICLE_ID || vehicleId
@@ -526,7 +539,7 @@ router.post("/:id/cancel", async (req, res) => {
     const { id } = req.params;
     const inst = installationsStore.getInstallation(id);
     if (!inst) return res.status(404).json({ ok: false, error: "not found" });
-    const TERMINAL = ["COMPLETED","CANCELLED","ERROR","CAN_SNAPSHOT_ERROR"];
+    const TERMINAL = ["COMPLETED","CANCELLED","ERROR","GS_ERROR","CAN_SNAPSHOT_ERROR"];
     if (TERMINAL.includes(String(inst.status||"").toUpperCase()))
       return res.json({ ok: true, skipped: true, reason: "already_terminal", status: inst.status });
     const updated = installationsStore.patchInstallation(id, {
