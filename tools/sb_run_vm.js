@@ -890,7 +890,40 @@ try {
     let lastStatus   = "";
     const deadline = Date.now() + SB_MAX_WAIT_MS;
 
+    // PATCH SB_SILENCE_WATCHDOG_V1: detectar silêncio do WS (reset do equipamento)
+    // Se passar SB_SILENCE_TIMEOUT_MS sem nenhum pacote UNIT_CONFIG_STATUS,
+    // o equipamento pode ter resetado. Aguarda SB_SILENCE_MAX_WAIT_MS pelo retorno.
+    // Se retornar → continua normalmente. Se não retornar → sb_disconnected.
+    const SB_SILENCE_TIMEOUT_MS  = Number(process.env.SB_SILENCE_TIMEOUT_MS  || 90000);  // 90s sem pacote = reset detectado
+    const SB_SILENCE_MAX_WAIT_MS = Number(process.env.SB_SILENCE_MAX_WAIT_MS || 180000); // aguarda até 3min pelo retorno
+    let lastPacketAt = Date.now();
+    let silenceAlerted = false;
+    let silenceDeadline = 0;
+    let _resolveWait: () => void; // PATCH SB_SILENCE_WATCHDOG_V1: ref para o watchdog desbloquear a Promise
+
+    const silenceWatchdog = setInterval(() => {
+      if (resolved) { clearInterval(silenceWatchdog); return; }
+      const silentMs = Date.now() - lastPacketAt;
+      if (!silenceAlerted && silentMs >= SB_SILENCE_TIMEOUT_MS) {
+        silenceAlerted = true;
+        silenceDeadline = Date.now() + SB_SILENCE_MAX_WAIT_MS;
+        console.log(`[sb] SB_SILENCE_WATCHDOG_V1: silêncio de ${Math.round(silentMs/1000)}s detectado (lastProgress=${lastProgress}%) — aguardando reconexão por até ${SB_SILENCE_MAX_WAIT_MS/1000}s`);
+      }
+      if (silenceAlerted && Date.now() >= silenceDeadline) {
+        if (!resolved) {
+          resolved = true;
+          clearInterval(silenceWatchdog);
+          clearInterval(resubInterval);
+          ws.__sbDisconnected = true;
+          ws.__sbError = `SB disconnected: silêncio de ${Math.round(silentMs/1000)}s — equipamento não retornou após reset (lastProgress=${lastProgress}%)`;
+          console.log(`[sb] SB_SILENCE_WATCHDOG_V1: equipamento não retornou após ${SB_SILENCE_MAX_WAIT_MS/1000}s — declarando desconexão`);
+          if (_resolveWait) _resolveWait(); // desbloqueia o await new Promise
+        }
+      }
+    }, 5000); // checa a cada 5s
+
     await new Promise((resolve) => {
+      _resolveWait = resolve; // PATCH SB_SILENCE_WATCHDOG_V1
       function onMessage(raw) {
         try {
           const txt = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw ?? "");
@@ -928,6 +961,15 @@ try {
 
           const pct = parseFloat(progress) || 0;
 
+          // PATCH SB_SILENCE_WATCHDOG_V1: registrar chegada de pacote e detectar reconexão
+          const wasAlerting = silenceAlerted;
+          lastPacketAt = Date.now();
+          if (silenceAlerted) {
+            silenceAlerted = false;
+            silenceDeadline = 0;
+            console.log(`[sb] SB_SILENCE_WATCHDOG_V1: equipamento reconectou — retomando SB normalmente (progress=${pct}%)`);
+          }
+
           // Só logar quando mudar (evitar spam)
           const key = `${status}|${progress}`;
           if (key !== `${lastStatus}|${lastProgress}`) {
@@ -947,12 +989,20 @@ try {
           const isError = status === "error" || status === "Error" ||
                          (error && error.trim().length > 0 &&
                           error.trim() !== " " && error.trim() !== "");
+          // PATCH SB_DISCONNECTED_V1: Disconnected/Retry = falha de comunicação
+          const SB_DISCONNECTED_STATUSES = ["Disconnected Unit", "Disconnected", "Retry", "Batch Timeout", "Internal Timeout"];
+          const isDisconnected = SB_DISCONNECTED_STATUSES.some(s => (status || "").includes(s));
 
-          if ((isDone || isError) && !resolved) {
+          if ((isDone || isError || isDisconnected) && !resolved) {
             resolved = true;
             clearInterval(resubInterval);
+            clearInterval(silenceWatchdog);
             ws.off("message", onMessage);
-            if (isError && !isDone) {
+            if (isDisconnected) {
+              console.log(`[sb] SB_WAIT_V1: DISCONNECTED status="${status}" progress="${progress}%" — equipamento perdeu comunicação`);
+              ws.__sbDisconnected = true;
+              ws.__sbError = `SB disconnected: status="${status}" progress="${progress}"`;
+            } else if (isError && !isDone) {
               console.log(`[sb] SB_WAIT_V1: ERRO no SB: status="${status}" error="${error}" progress="${progress}%" — reportando falha`);
               // Guardar erro para o worker reportar ao backend
               ws.__sbError = `SB error: status="${status}" error="${error}"`;
@@ -973,14 +1023,19 @@ try {
         if (!resolved) {
           resolved = true;
           clearInterval(resubInterval);
+          clearInterval(silenceWatchdog);
           ws.off("message", onMessage);
           const lastPct = parseFloat(lastProgress) || 0;
           if (lastPct < 50) {
             // Timeout com progress baixo = SB provavelmente nem começou
+            ws.__sbDisconnected = true;
             ws.__sbError = `SB timeout após ${SB_MAX_WAIT_MS/1000}s com progress=${lastProgress}% — equipamento pode estar offline`;
             console.log(`[sb] SB_WAIT_V1: TIMEOUT (progress baixo=${lastProgress}%) — equipamento offline?`);
           } else {
-            console.log(`[sb] SB_WAIT_V1: TIMEOUT após ${SB_MAX_WAIT_MS / 1000}s (último status="${lastStatus}" progress="${lastProgress}%") — continuando`);
+            // PATCH SB_TIMEOUT_AS_ERROR_V1: timeout com SB parcialmente enviado = desconexão
+            ws.__sbDisconnected = true;
+            ws.__sbError = `SB timeout após ${SB_MAX_WAIT_MS/1000}s com progress=${lastProgress}% — comunicação perdida durante envio`;
+            console.log(`[sb] SB_WAIT_V1: TIMEOUT após ${SB_MAX_WAIT_MS / 1000}s (último status="${lastStatus}" progress="${lastProgress}%") — abortando como desconexão`);
           }
           resolve();
         }
@@ -994,7 +1049,25 @@ try {
 
   // Se o SB reportou erro, encerrar com falha para o worker reportar ao backend
   if (ws.__sbError) {
+    // PATCH SB_STDOUT_STATUS_V1: emitir linha parseável antes de encerrar
+    const finalPayload = {
+      sb_status: ws.__sbDisconnected ? "disconnected" : "error",
+      last_progress: String(lastProgress || "0"),
+      last_status: String(lastStatus || ""),
+      message: ws.__sbError,
+    };
+    process.stdout.write("SB_FINAL_JSON:" + JSON.stringify(finalPayload) + "\n");
     throw new Error(ws.__sbError);
+  }
+
+  // SB concluído com sucesso — emitir confirmação
+  {
+    const finalPayload = {
+      sb_status: "ok",
+      last_progress: String(lastProgress || "100"),
+      last_status: String(lastStatus || "Completed"),
+    };
+    process.stdout.write("SB_FINAL_JSON:" + JSON.stringify(finalPayload) + "\n");
   }
 
   } // /SB
