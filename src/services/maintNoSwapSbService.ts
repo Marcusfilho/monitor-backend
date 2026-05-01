@@ -18,10 +18,33 @@ function extractSbParams(inst: any): {
   const p = inst?.payload ?? {};
   const r = inst?.resolved ?? {};
 
-  const clientId         = String(p.clientId         ?? p.client_id         ?? r.clientId         ?? r.client_id         ?? "").trim() || null;
-  const clientName       = String(p.clientName       ?? p.client_name       ?? r.clientName       ?? r.client_name       ?? clientId ?? "").trim() || null;
-  const vehicleId        = String(p.vehicleId        ?? p.vehicle_id        ?? r.vehicleId        ?? r.vehicle_id        ?? "").trim() || null;
-  const vsRaw            =        p.vehicleSettingId ?? p.vehicle_setting_id ?? r.vehicleSettingId ?? r.vehicle_setting_id ?? null;
+  // clientId: payload usa target_client_id para MAINT_NO_SWAP
+  const clientId = String(
+    p.clientId ?? p.client_id ?? p.target_client_id ??
+    r.clientId ?? r.client_id ?? r.target_client_id ?? ""
+  ).trim() || null;
+
+  const clientName = String(
+    p.clientName ?? p.client_name ?? r.clientName ?? r.client_name ?? clientId ?? ""
+  ).trim() || null;
+
+  // vehicleId: payload não tem para MAINT_NO_SWAP — buscar em jobs[].meta.vehicleId
+  const vehicleIdDirect = String(
+    p.vehicleId ?? p.vehicle_id ?? r.vehicleId ?? r.vehicle_id ?? ""
+  ).trim() || null;
+
+  let vehicleIdFromJobs: string | null = null;
+  try {
+    const jobs: any[] = Array.isArray(inst?.jobs) ? inst.jobs : [];
+    for (const j of jobs) {
+      const vid = j?.meta?.vehicleId ?? j?.result?.vehicleId ?? j?.result?.vehicle_id ?? null;
+      if (vid) { vehicleIdFromJobs = String(vid).trim() || null; break; }
+    }
+  } catch {}
+
+  const vehicleId = vehicleIdDirect ?? vehicleIdFromJobs;
+
+  const vsRaw = p.vehicleSettingId ?? p.vehicle_setting_id ?? r.vehicleSettingId ?? r.vehicle_setting_id ?? null;
   const vehicleSettingId = vsRaw != null ? Number(vsRaw) : null;
 
   let comment = String(p.comment ?? "").trim();
