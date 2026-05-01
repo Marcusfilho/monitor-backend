@@ -915,7 +915,9 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
     if (svc !== "MAINT_NO_SWAP") return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
 
     // Cancelar job CAN pendente para não continuar enviando refreshes ao Monitor
-    let _sbVehicleId: string | null = null; // SILENT_SB_V1: captura vehicleId do canJob
+    // SILENT_SB_V1: vehicleId vem do body (frontend já fez vhcls-lookup), fallback no canJob
+    const _bodyVehicleId = String((req.body as any)?.vehicle_id ?? (req.body as any)?.vehicleId ?? "").trim() || null;
+    let _sbVehicleId: string | null = _bodyVehicleId;
     try {
       const allJobs = jobStore?.listJobs ? jobStore.listJobs() : [];
       const canJob = allJobs.find((j: any) =>
@@ -924,11 +926,12 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         !["completed", "cancelled", "error"].includes(String(j?.status || ""))
       );
       if (canJob) {
-        _sbVehicleId = String(canJob?.payload?.vehicleId ?? "").trim() || null; // SILENT_SB_V1
+        if (!_sbVehicleId) _sbVehicleId = String(canJob?.payload?.vehicleId ?? "").trim() || null; // fallback
         jobStore.updateJob(canJob.id, { status: "cancelled" });
         console.log(`[installationsRoutes] complete-maint: CAN job=${canJob.id} cancelado`);
       }
     } catch (_) {}
+    console.log(`[installationsRoutes] complete-maint: _sbVehicleId=${_sbVehicleId} (body=${_bodyVehicleId})`);
 
     installationsStore.patchInstallation(id, { status: "COMPLETED" });
     console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
