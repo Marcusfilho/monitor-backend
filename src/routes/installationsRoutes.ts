@@ -931,7 +931,14 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
     installationsStore.patchInstallation(id, { status: "COMPLETED" });
     console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
     // SILENT_SB_V1: SB silencioso — Ponto D (complete-maint, sem CAN)
-    try { enqueueSilentSB(id, inst); } catch {}
+    // Injeta vehicle_id do body (resolvido pelo frontend via vhcls-lookup) no inst antes de enfileirar
+    try {
+      const _bodyVehicleId = req.body?.vehicle_id ?? null;
+      const _instForSb = _bodyVehicleId
+        ? { ...inst, payload: { ...(inst?.payload ?? {}), vehicleId: String(_bodyVehicleId), vehicle_id: String(_bodyVehicleId) } }
+        : inst;
+      enqueueSilentSB(id, _instForSb);
+    } catch {}
     return res.json({ ok: true, status: "COMPLETED" });
   } catch (e: any) {
     console.error("[installationsRoutes] complete-maint error:", e && (e.stack || e.message || String(e)));
