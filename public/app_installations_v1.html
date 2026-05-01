@@ -2352,8 +2352,26 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
       // MAINT_NO_SWAP: pergunta se deseja validar CAN
       if (svc === "MAINT_NO_SWAP") {
+        // Busca serial e vehicle_id via vhcls-lookup antes de abrir o modal
+        let _mnsSerial = null;
+        let _mnsVehicleId = null;
+        try {
+          setSubline("Buscando equipamento…");
+          const _mnsResp = await api("/api/installations/vhcls-lookup?plate=" + encodeURIComponent(payload.plate_real || ""));
+          if (_mnsResp.ok && _mnsResp.data) {
+            _mnsSerial    = _mnsResp.data.serial     || null;
+            _mnsVehicleId = _mnsResp.data.vehicle_id || _mnsResp.data.vehicleId || null;
+          }
+        } catch (_) { /* silencioso */ }
+        setSubline("");
+
+        const _mnsPlate = (payload.plate_real || payload.plate || "—").toUpperCase();
+        const _mnsTitle = _mnsSerial
+          ? `Placa: ${_mnsPlate} / Serial: ${_mnsSerial}`
+          : `Placa: ${_mnsPlate}`;
+
         const querCAN = await showConfirm(
-          "Validar CAN?",
+          _mnsTitle,
           "Deseja validar a CAN do veículo agora?"
         );
         if (!querCAN) {
@@ -2365,7 +2383,11 @@ $("btnRefresh").disabled = !canRefreshEnabled;
           try {
             await api("/api/installations/" + encodeURIComponent(id) + "/actions/complete-maint", {
               method: "POST",
-              headers: { "x-installation-token": tok }
+              headers: {
+                "x-installation-token": tok,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ vehicle_id: _mnsVehicleId })
             });
           } catch(_) {}
           showToast("Manutenção finalizada.", "good");
