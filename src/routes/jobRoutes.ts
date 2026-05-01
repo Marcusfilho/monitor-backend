@@ -259,7 +259,12 @@ const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : 
           _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
           console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
           // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN)
-          const _instForSb = (installationsStore as any)?.getInstallation ? (installationsStore as any).getInstallation(installationId) : inst;
+          // vehicleId vem do result.meta do job CAN que acabou de completar
+          const _instBase = (installationsStore as any)?.getInstallation ? (installationsStore as any).getInstallation(installationId) : inst;
+          const _canVehicleId = (result as any)?.meta?.vehicleId ?? (result as any)?.vehicleId ?? null;
+          const _instForSb = _canVehicleId
+            ? { ..._instBase, payload: { ...(_instBase?.payload ?? {}), vehicleId: String(_canVehicleId), vehicle_id: String(_canVehicleId) } }
+            : _instBase;
           enqueueSilentSB(installationId, _instForSb);
         }
       } catch {}

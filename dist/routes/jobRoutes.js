@@ -274,7 +274,12 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                     _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
                     console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
                     // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN)
-                    const _instForSb = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : inst;
+                    // vehicleId vem do result.meta do job CAN que acabou de completar
+                    const _instBase = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : inst;
+                    const _canVehicleId = result?.meta?.vehicleId ?? result?.vehicleId ?? null;
+                    const _instForSb = _canVehicleId
+                        ? { ..._instBase, payload: { ...(_instBase?.payload ?? {}), vehicleId: String(_canVehicleId), vehicle_id: String(_canVehicleId) } }
+                        : _instBase;
                     (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, _instForSb);
                 }
             }
