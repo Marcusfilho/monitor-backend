@@ -254,16 +254,19 @@ const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : 
       try {
         const _svcCan = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service ?? inst?.payload?.servico);
         if (_svcCan === "MAINT_NO_SWAP") {
+          // Persiste vehicle_id no store para uso pelo enqueueSilentSB nos Pontos A/B
+          const _canVid = (result as any)?.meta?.vehicleId ?? (result as any)?.vehicleId ?? null;
+          if (_canVid) {
+            try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { vehicle_id: String(_canVid) }); } catch {}
+          }
           // marca COMPLETED antes de enfileirar snapshot
           try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
           _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
           console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
           // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN)
-          // vehicleId vem do result.meta do job CAN que acabou de completar
           const _instBase = (installationsStore as any)?.getInstallation ? (installationsStore as any).getInstallation(installationId) : inst;
-          const _canVehicleId = (result as any)?.meta?.vehicleId ?? (result as any)?.vehicleId ?? null;
-          const _instForSb = _canVehicleId
-            ? { ..._instBase, payload: { ...(_instBase?.payload ?? {}), vehicleId: String(_canVehicleId), vehicle_id: String(_canVehicleId) } }
+          const _instForSb = _canVid
+            ? { ..._instBase, payload: { ...(_instBase?.payload ?? {}), vehicleId: String(_canVid), vehicle_id: String(_canVid) } }
             : _instBase;
           enqueueSilentSB(installationId, _instForSb);
         }

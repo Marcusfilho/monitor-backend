@@ -266,6 +266,14 @@ function _handleCanSnapshotComplete(job, result, jobId) {
             try {
                 const _svcCan = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service ?? inst?.payload?.servico);
                 if (_svcCan === "MAINT_NO_SWAP") {
+                    // Persiste vehicle_id no store para uso pelo enqueueSilentSB nos Pontos A/B
+                    const _canVid = result?.meta?.vehicleId ?? result?.vehicleId ?? null;
+                    if (_canVid) {
+                        try {
+                            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { vehicle_id: String(_canVid) });
+                        }
+                        catch { }
+                    }
                     // marca COMPLETED antes de enfileirar snapshot
                     try {
                         installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
@@ -274,11 +282,9 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                     _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
                     console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
                     // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN)
-                    // vehicleId vem do result.meta do job CAN que acabou de completar
                     const _instBase = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : inst;
-                    const _canVehicleId = result?.meta?.vehicleId ?? result?.vehicleId ?? null;
-                    const _instForSb = _canVehicleId
-                        ? { ..._instBase, payload: { ...(_instBase?.payload ?? {}), vehicleId: String(_canVehicleId), vehicle_id: String(_canVehicleId) } }
+                    const _instForSb = _canVid
+                        ? { ..._instBase, payload: { ...(_instBase?.payload ?? {}), vehicleId: String(_canVid), vehicle_id: String(_canVid) } }
                         : _instBase;
                     (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, _instForSb);
                 }

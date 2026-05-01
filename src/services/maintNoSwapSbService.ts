@@ -28,9 +28,10 @@ function extractSbParams(inst: any): {
     p.clientName ?? p.client_name ?? r.clientName ?? r.client_name ?? clientId ?? ""
   ).trim() || null;
 
-  // vehicleId: payload não tem para MAINT_NO_SWAP — buscar em jobs[].meta.vehicleId
+  // vehicleId: busca em payload, resolved, raiz do inst (persistido pelo patchInstallation) e jobs[].meta
   const vehicleIdDirect = String(
-    p.vehicleId ?? p.vehicle_id ?? r.vehicleId ?? r.vehicle_id ?? ""
+    p.vehicleId ?? p.vehicle_id ?? r.vehicleId ?? r.vehicle_id ??
+    inst?.vehicle_id ?? inst?.vehicleId ?? ""
   ).trim() || null;
 
   let vehicleIdFromJobs: string | null = null;

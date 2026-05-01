@@ -295,7 +295,7 @@ router.get("/vhcls-lookup", async (req, res) => {
         if (!match || (0, html5Client_1.isEmptyInnerId)(match.inner_id)) {
             return res.json({ ok: true, serial: null });
         }
-        return res.json({ ok: true, serial: (0, html5Client_1.normalizeSerial)(match.inner_id) });
+        return res.json({ ok: true, serial: (0, html5Client_1.normalizeSerial)(match.inner_id), vehicle_id: match.vehicle_id ?? null });
     }
     catch (e) {
         return res.status(500).json({ ok: false, error: e.message || "erro interno" });
