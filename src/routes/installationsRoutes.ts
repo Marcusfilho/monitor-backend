@@ -2,6 +2,7 @@ import { Router } from "express";
 import { resolveForInstall, resolveForMaintWithSwap } from "../services/vehicleResolver";
 import { vhclsQueryByPlate, isEmptyInnerId, normalizeSerial } from "../services/html5Client";
 import { requireWorkerKey } from "../middleware/requireWorkerKey";
+import { enqueueSilentSB } from "../services/maintNoSwapSbService";
 
 const router = Router();
 
@@ -914,6 +915,7 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
     if (svc !== "MAINT_NO_SWAP") return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
 
     // Cancelar job CAN pendente para não continuar enviando refreshes ao Monitor
+    let _sbVehicleId: string | null = null; // SILENT_SB_V1: captura vehicleId do canJob
     try {
       const allJobs = jobStore?.listJobs ? jobStore.listJobs() : [];
       const canJob = allJobs.find((j: any) =>
@@ -922,6 +924,7 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         !["completed", "cancelled", "error"].includes(String(j?.status || ""))
       );
       if (canJob) {
+        _sbVehicleId = String(canJob?.payload?.vehicleId ?? "").trim() || null; // SILENT_SB_V1
         jobStore.updateJob(canJob.id, { status: "cancelled" });
         console.log(`[installationsRoutes] complete-maint: CAN job=${canJob.id} cancelado`);
       }
@@ -929,6 +932,17 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
 
     installationsStore.patchInstallation(id, { status: "COMPLETED" });
     console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
+    // SILENT_SB_V1: Ponto D — SB silencioso após MAINT_NO_SWAP sem validação CAN
+    try {
+      enqueueSilentSB(
+        id,
+        _sbVehicleId,
+        inst?.payload?.vehicleSettingId ?? inst?.payload?.vehicle_setting_id ?? null,
+        inst?.payload?.clientId ?? inst?.payload?.client_id ?? null,
+        inst?.payload?.clientName ?? inst?.payload?.client_name ?? null,
+        inst?.payload?.comment ?? null
+      );
+    } catch (_) {}
     return res.json({ ok: true, status: "COMPLETED" });
   } catch (e: any) {
     console.error("[installationsRoutes] complete-maint error:", e && (e.stack || e.message || String(e)));

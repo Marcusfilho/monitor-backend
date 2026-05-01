@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const html5Client_1 = require("../services/html5Client");
 const requireWorkerKey_1 = require("../middleware/requireWorkerKey");
+const maintNoSwapSbService_1 = require("../services/maintNoSwapSbService");
 const router = (0, express_1.Router)();
 // require(any) pra não travar por typings enquanto estabiliza V1
 const installationsStore = require("../services/installationsStore");
@@ -602,12 +603,14 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         if (svc !== "MAINT_NO_SWAP")
             return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
         // Cancelar job CAN pendente para não continuar enviando refreshes ao Monitor
+        let _sbVehicleId = null; // SILENT_SB_V1: captura vehicleId do canJob
         try {
             const allJobs = jobStore?.listJobs ? jobStore.listJobs() : [];
             const canJob = allJobs.find((j) => j?.type === "monitor_can_snapshot" &&
                 String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(id) &&
                 !["completed", "cancelled", "error"].includes(String(j?.status || "")));
             if (canJob) {
+                _sbVehicleId = String(canJob?.payload?.vehicleId ?? "").trim() || null; // SILENT_SB_V1
                 jobStore.updateJob(canJob.id, { status: "cancelled" });
                 console.log(`[installationsRoutes] complete-maint: CAN job=${canJob.id} cancelado`);
             }
@@ -615,6 +618,11 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         catch (_) { }
         installationsStore.patchInstallation(id, { status: "COMPLETED" });
         console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
+        // SILENT_SB_V1: Ponto D — SB silencioso após MAINT_NO_SWAP sem validação CAN
+        try {
+            (0, maintNoSwapSbService_1.enqueueSilentSB)(id, _sbVehicleId, inst?.payload?.vehicleSettingId ?? inst?.payload?.vehicle_setting_id ?? null, inst?.payload?.clientId ?? inst?.payload?.client_id ?? null, inst?.payload?.clientName ?? inst?.payload?.client_name ?? null, inst?.payload?.comment ?? null);
+        }
+        catch (_) { }
         return res.json({ ok: true, status: "COMPLETED" });
     }
     catch (e) {
