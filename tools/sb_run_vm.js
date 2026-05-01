@@ -866,7 +866,9 @@ try {
   // Estrutura confirmada pelo sniffer v7:
   //   { "status": "In Progress", "progress": "60", "type": "Scheme Builder", "error": " ", "retries": "0" }
   // Fim do SB: status === "Completed" || status === "Done" || parseInt(progress) >= 100
-  await (async function waitForSBCompletion() {
+  let lastProgress = "";
+  let lastStatus   = "";
+    await (async function waitForSBCompletion() {
     const SB_MAX_WAIT_MS     = Number(process.env.SB_MAX_WAIT_MS     || 720000); // 12 min
     const SB_POLL_INTERVAL_MS = Number(process.env.SB_POLL_INTERVAL_MS || 2000);  // 2s entre polls
     const SB_SUBSCRIBE_RETRY_MS = Number(process.env.SB_SUBSCRIBE_RETRY_MS || 3000);
@@ -886,8 +888,6 @@ try {
 
     // Escutar mensagens push e aguardar conclusão
     let resolved = false;
-    let lastProgress = "";
-    let lastStatus   = "";
     const deadline = Date.now() + SB_MAX_WAIT_MS;
 
     // PATCH SB_SILENCE_WATCHDOG_V1: detectar silêncio do WS (reset do equipamento)
@@ -899,7 +899,7 @@ try {
     let lastPacketAt = Date.now();
     let silenceAlerted = false;
     let silenceDeadline = 0;
-    let _resolveWait: () => void; // PATCH SB_SILENCE_WATCHDOG_V1: ref para o watchdog desbloquear a Promise
+    let _resolveWait; // PATCH SB_SILENCE_WATCHDOG_V1: ref para o watchdog desbloquear a Promise
 
     const silenceWatchdog = setInterval(() => {
       if (resolved) { clearInterval(silenceWatchdog); return; }
@@ -1069,7 +1069,6 @@ try {
     };
     process.stdout.write("SB_FINAL_JSON:" + JSON.stringify(finalPayload) + "\n");
   }
-
   } // /SB
 
   // === GS stage ==============================================================

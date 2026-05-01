@@ -1,0 +1,169 @@
+nohup: ignoring input
+[hb] init fail (src): HB: missing BASE_URL
+[worker] Iniciando. JOB_SERVER_BASE_URL=http://127.0.0.1:3000, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+[worker] erro ao buscar job: connect ECONNREFUSED 127.0.0.1:3000
+nohup: ignoring input
+[hb] enabled (src): { workerId: 'tunel', intervalMs: 30000 }
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+nohup: ignoring input
+[hb] enabled (src): { workerId: 'tunel', intervalMs: 30000 }
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+[worker] Processando job ac29a1fe8350f072 (vehicleId=1940478)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_15693bfeb8b5a6bdf22783e9 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_15693bfeb8b5a6bdf22783e9 plate=🐶 - MARCUS123 tech=Marcus_Prod
+[hb] fail: fetch failed
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+nohup: ignoring input
+[hb] enabled (src): { workerId: 'tunel', intervalMs: 30000 }
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+[PATCH_BOOT_SCHEME_GUARD_V1] Render tem schemes (56 clientes) — ok
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[hb] fail: fetch failed
+[worker] erro ao buscar job: timeout of 45000ms exceeded
+[hb] fail: fetch failed
+[worker] erro ao buscar job: timeout of 45000ms exceeded
+[worker] Processando job 3ef822a2afad6857 (vehicleId=1992042)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_9cdc8a1e0af0d29787eb77d9 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_9cdc8a1e0af0d29787eb77d9 plate=867 - PDP6875 tech=Marcus_Prod
+[worker] Processando job 3d1a36e92ab66da4 (vehicleId=1992125)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_c397a9fbaf4f1a4f3ce05957 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_c397a9fbaf4f1a4f3ce05957 plate=971 - PDP2258 tech=Marcus_Prod
+[worker] Processando job 5386b0700c8a4249 (vehicleId=1992054)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_958fbdd4284152571a8862dd → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_958fbdd4284152571a8862dd plate=979 - QYA0E50 tech=Marcus_Prod
+[worker] Processando job ddb190f476631ab6 (vehicleId=1990730)...
+[worker] Erro no job ddb190f476631ab6: [sb_run_vm] exit=1
+/home/questar/monitor-backend-dev/tools/sb_run_vm.js:997
+    throw new Error(ws.__sbError);
+          ^
+
+Error: SB timeout após 720s com progress=% — equipamento pode estar offline
+    at /home/questar/monitor-backend-dev/tools/sb_run_vm.js:997:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+Node.js v20.19.6
+
+[worker] mainLoop caiu: ReferenceError: isGs is not defined
+    at processJob (/home/questar/monitor-backend-dev/dist/worker/schemeBuilderWorker.js:417:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async mainLoop (/home/questar/monitor-backend-dev/dist/worker/schemeBuilderWorker.js:470:13)
+    at async runForever (/home/questar/monitor-backend-dev/dist/worker/schemeBuilderWorker.js:482:13)
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+[PATCH_BOOT_SCHEME_GUARD_V1] Render tem schemes (56 clientes) — ok
+[worker] Processando job 2cd3bdcdfd3de15c (vehicleId=1992040)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_975f5b0ac3fc366d2046794c → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_975f5b0ac3fc366d2046794c plate=780 - PEB0479 tech=Marcus_Prod
+[worker] Processando job e4b967c720b28a4b (vehicleId=1992072)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_714b1c22526947612f374db5 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_714b1c22526947612f374db5 plate=276 - RZP9C71 tech=Marcus_Prod
+[worker] Processando job 7f19f75888323c21 (vehicleId=1992024)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_008f9a7ecd628a9b83156c78 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_008f9a7ecd628a9b83156c78 plate=985 - PGZ4A29 tech=Marcus_Prod
+[worker] Processando job 6620ad85c9cd1b6c (vehicleId=1992035)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_699560489260fb1f9152a592 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_699560489260fb1f9152a592 plate=865 - PDP6795 tech=Marcus_Prod
+[worker] Processando job c2c94b1855a13077 (vehicleId=1940478)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_b90aaa9a52ccb2400134f52c → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_b90aaa9a52ccb2400134f52c plate=🐶 - QUESTAR TEST003 tech=Marcus_Prod
+[worker] erro ao buscar job: Error
+[worker] erro ao buscar job: Error
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] erro ao buscar job: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[worker] Processando job 4646baf0e452196b (vehicleId=1940478)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_894c01fb6461c1e35976c81b → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_894c01fb6461c1e35976c81b plate=🐶 - QUESTAR_TEST3 tech=Marcus_Prod
+[worker] Processando job b318f76fc28b3a11 (vehicleId=1940478)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_ac03c4d3cefe55c01a61591d → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_ac03c4d3cefe55c01a61591d plate=🐶 - QUESTAR_TEST3 tech=Marcus_Prod
+[hb] fail: fetch failed
+[worker] Processando job 7605b0f76d78a3f5 (vehicleId=1940478)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_6ea91607c5939f8ad9a9ddab → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_6ea91607c5939f8ad9a9ddab plate=🐶 - QUESTAR_TEST3 tech=Marcus_Prod
+[worker] Processando job af3768ca837bf7a1 (vehicleId=1940478)...
+[worker] PATCH_GS_COMPLETE_V1: installation=inst_7b06ec92352b4add7adda3d2 → COMPLETED
+[SNAPSHOT_V1] GS snapshot saved installation=inst_7b06ec92352b4add7adda3d2 plate=🐶 - QUESTAR_TEST3 tech=Marcus_Prod
+nohup: ignoring input
+[hb] enabled (src): { workerId: 'tunel', intervalMs: 30000 }
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+nohup: ignoring input
+[hb] enabled (src): { workerId: 'tunel', intervalMs: 30000 }
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)
+nohup: ignoring input
+[hb] enabled (src): { workerId: 'tunel', intervalMs: 30000 }
+[worker] Iniciando. JOB_SERVER_BASE_URL=https://monitor-backend-dev.onrender.com, WORKER_ID=vm-worker-01
+[worker] session_token renovado no boot (len=42)

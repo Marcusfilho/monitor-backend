@@ -400,11 +400,18 @@ await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=$
     } catch (_) {}
 
     const isDisconnected = sbFinal.sb_status === "disconnected";
+    const isOk = sbFinal.sb_status === "ok";
     const lastProgress = Number(sbFinal.last_progress ?? 0);
 
     if (r.status !== 0 && !isDisconnected) {
       // Erro real (não desconexão) — lançar para o catch reportar
       throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
+    }
+
+    // PATCH SB_OK_GUARD_V1: exige confirmação explícita de sucesso no SB_FINAL_JSON (apenas jobs SB, não GS)
+    if (!isGs && !isDisconnected && !isOk) {
+      const snippet = (r.stdout || "").slice(-400);
+      throw new Error(`[sb_run_vm] SB encerrou sem sb_status=ok (sb_status="${sbFinal.sb_status || "ausente"}"). stdout_tail=${snippet}`);
     }
 
     if (isDisconnected) {

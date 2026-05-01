@@ -128,7 +128,6 @@ const catalogs = (() => { try {
 catch {
     return null;
 } })();
-const maintNoSwapSbService_1 = require("../services/maintNoSwapSbService");
 function _num(v) {
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -266,14 +265,6 @@ function _handleCanSnapshotComplete(job, result, jobId) {
             try {
                 const _svcCan = _upper(job?.payload?.service ?? job?.payload?.servico ?? inst?.payload?.service ?? inst?.payload?.servico);
                 if (_svcCan === "MAINT_NO_SWAP") {
-                    // Persiste vehicle_id no store para uso pelo enqueueSilentSB nos Pontos A/B
-                    const _canVid = result?.meta?.vehicleId ?? result?.vehicleId ?? null;
-                    if (_canVid) {
-                        try {
-                            installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { vehicle_id: String(_canVid) });
-                        }
-                        catch { }
-                    }
                     // marca COMPLETED antes de enfileirar snapshot
                     try {
                         installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" });
@@ -281,33 +272,6 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                     catch { }
                     _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
                     console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
-                    // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN) — createJob direto
-                    try {
-                        const _sbVehicleId = _canVid ? String(_canVid) : null;
-                        const _sbVsId = inst?.payload?.vehicleSettingId ?? inst?.payload?.vehicle_setting_id ?? null;
-                        const _sbClientId = inst?.payload?.target_client_id ?? inst?.payload?.clientId ?? inst?.payload?.client_id ?? null;
-                        const _sbClientName = inst?.payload?.clientName ?? inst?.payload?.client_name ?? String(_sbClientId ?? "");
-                        const _sbComment = inst?.payload?.comment || (() => { const d = new Date(); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} MAINT_NO_SWAP`; })();
-                        if (_sbVehicleId && _sbVsId && _sbClientId) {
-                            const _sbJob = (0, jobStore_1.createJob)("scheme_builder", {
-                                installation_id: installationId,
-                                service: "MAINT_NO_SWAP",
-                                silent: true,
-                                clientId: String(_sbClientId),
-                                clientName: String(_sbClientName),
-                                vehicleId: _sbVehicleId,
-                                vehicleSettingId: Number(_sbVsId),
-                                comment: _sbComment,
-                            });
-                            console.log(`[SILENT_SB_V1] Ponto C: job enfileirado job=${_sbJob.id} installation=${installationId} vehicleId=${_sbVehicleId}`);
-                        }
-                        else {
-                            console.log(`[SILENT_SB_V1] Ponto C: skip — campos insuficientes installation=${installationId}`, { _sbVehicleId, _sbVsId, _sbClientId });
-                        }
-                    }
-                    catch (_e) {
-                        console.error(`[SILENT_SB_V1] Ponto C: erro installation=${installationId}`, _e?.message ?? String(_e));
-                    }
                 }
             }
             catch { }
@@ -681,8 +645,6 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result, finalStatus) {
                 console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
                 // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP via SB_SKIP — sem CAN posterior
                 _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
-                // SILENT_SB_V1: SB silencioso — Ponto A (SB_SKIP)
-                (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, inst);
                 return;
             }
             const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
@@ -714,8 +676,6 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result, finalStatus) {
                 console.log(`[jobs] MAINT_NO_SWAP → COMPLETED (sem vehicleId para CAN).`);
                 // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP sem vehicleId — CAN não será disparado
                 _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
-                // SILENT_SB_V1: SB silencioso — Ponto B (sem vehicleId para CAN)
-                (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, inst);
                 return;
             }
             const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {

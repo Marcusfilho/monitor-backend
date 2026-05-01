@@ -1,0 +1,52 @@
+nohup: ignoring input
+[snapshot-worker] iniciando. server=https://monitor-backend-dev.onrender.com worker=vm-snapshot-worker
+[snapshot-worker] fetchNext erro: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+nohup: ignoring input
+[snapshot-worker] iniciando. server=https://monitor-backend-dev.onrender.com worker=vm-snapshot-worker
+[snapshot-worker] processando job=84c798ae91a4b708 service=INSTALL plate=🐶 - QUESTAR_TEST3
+[SNAPSHOT_STORE_V1] INSERT id=35 plate=🐶 - QUESTAR_TEST3 job=84c798ae91a4b708
+[SNAPSHOT_STORE_V1] export imediato falhou (id=35) — ficará pendente para o cron: [DRIVE_EXPORT_V1] desabilitado (DRIVE_EXPORT_ENABLED != 1) — id=35 permanece pending
+[snapshot-worker] fetchNext erro: getaddrinfo EAI_AGAIN monitor-backend-dev.onrender.com
+[snapshot-worker] processando job=d117522677046337 service=INSTALL plate=QUESTAR_TEST3
+[SNAPSHOT_STORE_V1] INSERT id=36 plate=QUESTAR_TEST3 job=d117522677046337
+[SNAPSHOT_STORE_V1] export imediato falhou (id=36) — ficará pendente para o cron: [DRIVE_EXPORT_V1] desabilitado (DRIVE_EXPORT_ENABLED != 1) — id=36 permanece pending
+[snapshot-worker] fetchNext erro: timeout of 30000ms exceeded
+nohup: ignoring input
+[snapshot-worker] iniciando. server=https://monitor-backend-dev.onrender.com worker=vm-tunel-01
+[snapshot-worker] fetchNext erro: timeout of 30000ms exceeded
+nohup: ignoring input
+[snapshot-worker] iniciando. server=https://monitor-backend-dev.onrender.com worker=vm-tunel-01
+nohup: ignoring input
+[snapshot-worker] iniciando. server=https://monitor-backend-dev.onrender.com worker=vm-tunel-01
+[snapshot-worker] retry boot: verificando pendentes...
+[SNAPSHOT_STORE_V1] retryPending: 6 registro(s) para retentar
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Instalações"
+[SNAPSHOT_STORE_V1] retryPending: falha no id=32: Sheets API: {"code":400,"message":"Unable to parse range: Instalações!A1","status":"INVALID_ARGUMENT"}
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Instalações"
+[SNAPSHOT_STORE_V1] retryPending: falha no id=33: Sheets API: {"code":400,"message":"Unable to parse range: Instalações!A1","status":"INVALID_ARGUMENT"}
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Instalações"
+[SNAPSHOT_STORE_V1] retryPending: falha no id=34: Sheets API: {"code":400,"message":"Unable to parse range: Instalações!A1","status":"INVALID_ARGUMENT"}
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Instalações"
+[SNAPSHOT_STORE_V1] retryPending: falha no id=35: Sheets API: {"code":400,"message":"Unable to parse range: Instalações!A1","status":"INVALID_ARGUMENT"}
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Instalações"
+[SNAPSHOT_STORE_V1] retryPending: falha no id=36: Sheets API: {"code":400,"message":"Unable to parse range: Instalações!A1","status":"INVALID_ARGUMENT"}
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Instalações"
+[SNAPSHOT_STORE_V1] retryPending: falha no id=37: Sheets API: {"code":400,"message":"Unable to parse range: Instalações!A1","status":"INVALID_ARGUMENT"}
+nohup: ignoring input
+[snapshot-worker] iniciando. server=https://monitor-backend-dev.onrender.com worker=vm-tunel-01
+[snapshot-worker] retry boot: verificando pendentes...
+[SNAPSHOT_STORE_V1] retryPending: 6 registro(s) para retentar
+[DRIVE_EXPORT_V1] cabeçalho criado na aba "Installations"
+[DRIVE_EXPORT_V1] exportado id=32 plate=null → Sheets ✅
+[SNAPSHOT_STORE_V1] deleted id=32
+[DRIVE_EXPORT_V1] exportado id=33 plate=null → Sheets ✅
+[SNAPSHOT_STORE_V1] deleted id=33
+[DRIVE_EXPORT_V1] exportado id=34 plate=null → Sheets ✅
+[SNAPSHOT_STORE_V1] deleted id=34
+[DRIVE_EXPORT_V1] exportado id=35 plate=🐶 - QUESTAR_TEST3 → Sheets ✅
+[SNAPSHOT_STORE_V1] deleted id=35
+[DRIVE_EXPORT_V1] exportado id=36 plate=QUESTAR_TEST3 → Sheets ✅
+[SNAPSHOT_STORE_V1] deleted id=36
+[DRIVE_EXPORT_V1] exportado id=37 plate=null → Sheets ✅
+[SNAPSHOT_STORE_V1] deleted id=37
+[SNAPSHOT_STORE_V1] retryPending: nenhum registro pendente

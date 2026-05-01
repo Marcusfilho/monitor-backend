@@ -1,0 +1,66 @@
+nohup: ignoring input
+[PATCH_MNS_VHCLS_JOURNAL_V2] installed
+[PATCH_MNS_VHCLS_JOURNAL_V1] installed
+[WARN] patchC8_allowedGroups missing; skipping allowed-groups patch
+[PATCH_C6] installed (fetch hook active)
+[A3_FETCH_PATCH_V3] installed tokenPath=/tmp/.session_token
+[html5_v8] started base=https://monitor-backend-dev.onrender.com worker=tunel poll=3000ms httpTimeout=60000 jobMax=60000 dryRun=true exec=false cookiejar=/tmp/html5_cookiejar.json maxConcurrent=3
+[JOBSERVER_FETCH] ok status=204 ms=231 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=159 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=166 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=220 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=172 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=164 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=198 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=150 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=156 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=159 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=162 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=148 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=151 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=352 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=177 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=157 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=163 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=149 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=153 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=156 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=167 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=146 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=163 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=145 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=163 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=157 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=156 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=176 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=157 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=167 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=156 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=158 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=152 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=159 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=150 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=145 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=156 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=164 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=154 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=164 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=168 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=165 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=174 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=149 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=162 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=159 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=168 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=148 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=153 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=162 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=274 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=151 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=158 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=173 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=162 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=169 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=169 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=151 path=/api/jobs/next
+[JOBSERVER_FETCH] ok status=204 ms=154 path=/api/jobs/next

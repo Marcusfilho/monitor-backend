@@ -26,3 +26,5 @@ node_modules/
 # runtime/debug artifacts
 /tmp/
 dist/
+data/*.db
+data/

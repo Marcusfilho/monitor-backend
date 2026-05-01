@@ -882,10 +882,11 @@ async function _checkAndFreeCmdtSerial(newSerial, jobId, payload) {
 
       const lic = String(licenseNmbr || "").trim();
 
-      // LICENSE_NMBR é o próprio serial → veículo de bancada, serial livre
+      // LICENSE_NMBR é o próprio serial → veículo de bancada (placeholder)
+      // BANCADA_DEACTIVATE_V1: tratar como CMDT — deactivate para liberar o serial
       if (lic.toLowerCase() === serial.toLowerCase()) {
-        console.log(`[${TAG}] serial=${serial} vid=${vid} -> bancada (LICENSE_NMBR==serial), serial is FREE`);
-        return { status: "free" };
+        console.log(`[${TAG}] serial=${serial} vid=${vid} -> bancada (LICENSE_NMBR==serial), will DEACTIVATE to free serial`);
+        return { status: "cmdt", vid, licenseNmbr: lic };
       }
 
       // LICENSE_NMBR contém CMDT → veículo fictício de cobrança
@@ -3631,7 +3632,7 @@ if (typ === "checkbox" || typ === "radio") {
           if (!checked) continue; // browser só envia se marcado
           const v = getAttr(tag, "value") || "on";
           out[nm] = decode(v);
-          return; // FIX_CLOSURE_V1: continue->return
+          continue; // CHECKBOX_CLOSURE_FIX_V1: era return (errado), corrigido para continue
         }
 
         const v = getAttr(tag, "value") || "";
@@ -3722,7 +3723,7 @@ return out;
           // sempre sobrescreve estes (são críticos pro SAVE)
           if (k === "ASSET_TYPE" || k === "FIELD_IDS" || k === "FIELD_VALUE" || k === "GROUP_ID") {
             base[k] = v;
-            return; // FIX_CLOSURE_V1: continue->return
+            continue; // MWS_XML_MERGE_FIX_V1: era return, corrigido para continue
           }
           // só preenche se estiver vazio
           if (base[k] === undefined || base[k] === null || String(base[k]).trim() === "") base[k] = v;
@@ -3829,7 +3830,10 @@ try { delete base.action; delete base.ACTION; } catch(e) {}
       }
     } catch (e) { throw e; }
 
-    } catch (e) {}
+    } catch (e) {
+      await completeJobLogged(id, "error", { flow: "MAINT_WITH_SWAP", plate, vehicle_id: vid, serial_new: newSerial, error: "mws_save_exception", detail: e && (e.message || String(e)) });
+      return;
+    }
 
     // Confirma se o serial realmente foi aplicado (evita "rodou uninstall" sem install)
     const pc = await __va_appenginePost("GET_VHCL_ACTIVATION_DATA_NEW", {
@@ -4612,6 +4616,33 @@ if (service === "INSTALL") {
             }
           }
 
+
+          // [MWS_CC_V1] MAINT_WITH_SWAP: se veiculo esta em outra empresa, prepende CHANGE_COMPANY
+          if (service === 'MAINT_WITH_SWAP') {
+            try {
+              const targetClientId = String(
+                payload.target_client_id || payload.client_id_target ||
+                payload.CLIENT_ID_TARGET || payload.clientIdTarget || ''
+              ).trim();
+              const curClientId = String(
+                (payload.__assetLoadAttrs && payload.__assetLoadAttrs.CLIENT_ID) || ''
+              ).trim();
+              if (targetClientId && curClientId && targetClientId !== curClientId) {
+                payload.client_id_target = payload.client_id_target || targetClientId;
+                payload.CLIENT_ID_TARGET = payload.CLIENT_ID_TARGET || targetClientId;
+                payload.clientIdTarget   = payload.clientIdTarget   || targetClientId;
+                const ccSteps = buildStepsForService('CHANGE_COMPANY', payload);
+                if (ccSteps && ccSteps.length) {
+                  steps = [].concat(ccSteps, (steps || []));
+                  console.log('[html5_v8] [MWS_CC_V1] client mismatch: current=' + curClientId + ' target=' + targetClientId + ' -> queued CHANGE_COMPANY steps=' + ccSteps.length);
+                } else {
+                  console.log('[html5_v8] [MWS_CC_V1] client mismatch but no CHANGE_COMPANY steps (need __assetLoadAttrs + client_id_target)');
+                }
+              }
+            } catch(e) {
+              console.log('[html5_v8] [MWS_CC_V1] client-check failed: ' + (e && (e.message || e.toString())));
+            }
+          }
 
           steps = buildStepsForService(service, payload);
         }

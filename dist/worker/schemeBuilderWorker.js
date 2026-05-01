@@ -366,8 +366,46 @@ async function processJob(job) {
             SB_WORKER_KEY: WORKER_KEY,
         };
         const r = (0, child_process_1.spawnSync)(process.execPath, args, { cwd: process.cwd(), env, encoding: "utf8" });
-        if (r.status !== 0)
+        // PATCH SB_DISCONNECTED_V1: parsear SB_FINAL_JSON do stdout (emitido pelo sb_run_vm.js)
+        let sbFinal = {};
+        try {
+            const match = (r.stdout || "").match(/SB_FINAL_JSON:({.*})/);
+            if (match)
+                sbFinal = JSON.parse(match[1]);
+        }
+        catch (_) { }
+        const isDisconnected = sbFinal.sb_status === "disconnected";
+        const isOk = sbFinal.sb_status === "ok";
+        const lastProgress = Number(sbFinal.last_progress ?? 0);
+        if (r.status !== 0 && !isDisconnected) {
+            // Erro real (não desconexão) — lançar para o catch reportar
             throw new Error(`[sb_run_vm] exit=${r.status}\n${r.stderr || r.stdout || ""}`);
+        }
+        // PATCH SB_OK_GUARD_V1: exige confirmação explícita de sucesso no SB_FINAL_JSON (apenas jobs SB, não GS)
+        if (!isGs && !isDisconnected && !isOk) {
+            const snippet = (r.stdout || "").slice(-400);
+            throw new Error(`[sb_run_vm] SB encerrou sem sb_status=ok (sb_status="${sbFinal.sb_status || "ausente"}"). stdout_tail=${snippet}`);
+        }
+        if (isDisconnected) {
+            // SB interrompido por desconexão — completar com status especial, NÃO avançar para CAN
+            console.log(`[worker] SB_DISCONNECTED_V1: detectado — jobId=${job.id} lastProgress=${lastProgress}%`);
+            await completeJob(job.id, "sb_disconnected", {
+                status: "sb_disconnected",
+                last_progress: lastProgress,
+                message: "Equipamento perdeu comunicação durante o SB.",
+            });
+            if (installationId) {
+                await patchInstallation(installationId, {
+                    status: "SB_DISCONNECTED",
+                    sb: {
+                        job_id: job.id,
+                        last_progress: lastProgress,
+                        disconnected_at: new Date().toISOString(),
+                    },
+                });
+            }
+            return; // não avança para CAN automaticamente
+        }
         await completeJob(job.id, "ok", { status: "ok" });
     }
     catch (err) {
