@@ -9,6 +9,7 @@ const router = Router();
 const installationsStore: any = require("../services/installationsStore");
 const jobStore: any = (() => { try { return require("../jobs/jobStore"); } catch(_) { return null; } })();
 const installationsEngine: any = require("../services/installationsEngine");
+import { enqueueSilentSB } from "../services/maintNoSwapSbService";
 
 function pickFn(obj: any, names: string[]) {
   for (const n of names) if (obj && typeof obj[n] === "function") return obj[n].bind(obj);
@@ -929,6 +930,8 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
 
     installationsStore.patchInstallation(id, { status: "COMPLETED" });
     console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
+    // SILENT_SB_V1: SB silencioso — Ponto D (complete-maint, sem CAN)
+    try { enqueueSilentSB(id, inst); } catch {}
     return res.json({ ok: true, status: "COMPLETED" });
   } catch (e: any) {
     console.error("[installationsRoutes] complete-maint error:", e && (e.stack || e.message || String(e)));

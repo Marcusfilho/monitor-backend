@@ -13,6 +13,7 @@ catch (_) {
     return null;
 } })();
 const installationsEngine = require("../services/installationsEngine");
+const maintNoSwapSbService_1 = require("../services/maintNoSwapSbService");
 function pickFn(obj, names) {
     for (const n of names)
         if (obj && typeof obj[n] === "function")
@@ -615,6 +616,11 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         catch (_) { }
         installationsStore.patchInstallation(id, { status: "COMPLETED" });
         console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
+        // SILENT_SB_V1: SB silencioso — Ponto D (complete-maint, sem CAN)
+        try {
+            (0, maintNoSwapSbService_1.enqueueSilentSB)(id, inst);
+        }
+        catch { }
         return res.json({ ok: true, status: "COMPLETED" });
     }
     catch (e) {

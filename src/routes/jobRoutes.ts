@@ -110,6 +110,7 @@ const installationsStore: any = (() => {
 })();
 
 const catalogs: any = (() => { try { return require("../services/catalogs"); } catch { return null; } })();
+import { enqueueSilentSB } from "../services/maintNoSwapSbService";
 
 function _num(v: any): number | null {
   const n = Number(v);
@@ -257,6 +258,9 @@ const __canPatched = Object.assign({}, (can && typeof can === "object") ? can : 
           try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "COMPLETED" }); } catch {}
           _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
           console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
+          // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN)
+          const _instForSb = (installationsStore as any)?.getInstallation ? (installationsStore as any).getInstallation(installationId) : inst;
+          enqueueSilentSB(installationId, _instForSb);
         }
       } catch {}
     } catch {}
@@ -603,6 +607,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any, finalStatu
         console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
         // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP via SB_SKIP — sem CAN posterior
         _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
+  // SILENT_SB_V1: SB silencioso — Ponto A (SB_SKIP)
+  enqueueSilentSB(installationId, inst);
         return;
       }
 
@@ -627,6 +633,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job: any, result: any, finalStatu
         console.log(`[jobs] MAINT_NO_SWAP → COMPLETED (sem vehicleId para CAN).`);
         // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP sem vehicleId — CAN não será disparado
         _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
+    // SILENT_SB_V1: SB silencioso — Ponto B (sem vehicleId para CAN)
+    enqueueSilentSB(installationId, inst);
         return;
       }
       const canJob = createJob("monitor_can_snapshot", {

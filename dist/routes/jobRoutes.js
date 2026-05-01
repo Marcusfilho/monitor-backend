@@ -128,6 +128,7 @@ const catalogs = (() => { try {
 catch {
     return null;
 } })();
+const maintNoSwapSbService_1 = require("../services/maintNoSwapSbService");
 function _num(v) {
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -272,6 +273,9 @@ function _handleCanSnapshotComplete(job, result, jobId) {
                     catch { }
                     _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
                     console.log(`[jobs] [SNAPSHOT_ALL_V1] Ponto D: MAINT_NO_SWAP pós-CAN → COMPLETED + snapshot installation=${installationId}`);
+                    // SILENT_SB_V1: SB silencioso — Ponto C (pós-CAN)
+                    const _instForSb = installationsStore?.getInstallation ? installationsStore.getInstallation(installationId) : inst;
+                    (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, _instForSb);
                 }
             }
             catch { }
@@ -645,6 +649,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result, finalStatus) {
                 console.log(`[jobs] SB_SKIP_V3: MAINT_NO_SWAP → COMPLETED.`);
                 // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP via SB_SKIP — sem CAN posterior
                 _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
+                // SILENT_SB_V1: SB silencioso — Ponto A (SB_SKIP)
+                (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, inst);
                 return;
             }
             const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
@@ -676,6 +682,8 @@ async function _enqueueSchemeBuilderAfterHtml5(job, result, finalStatus) {
                 console.log(`[jobs] MAINT_NO_SWAP → COMPLETED (sem vehicleId para CAN).`);
                 // SNAPSHOT_ALL_SERVICES_V1: MAINT_NO_SWAP sem vehicleId — CAN não será disparado
                 _enqueueSnapshotIfNeeded(installationId, "MAINT_NO_SWAP");
+                // SILENT_SB_V1: SB silencioso — Ponto B (sem vehicleId para CAN)
+                (0, maintNoSwapSbService_1.enqueueSilentSB)(installationId, inst);
                 return;
             }
             const canJob = (0, jobStore_1.createJob)("monitor_can_snapshot", {
