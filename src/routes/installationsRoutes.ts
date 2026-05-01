@@ -930,15 +930,45 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
 
     installationsStore.patchInstallation(id, { status: "COMPLETED" });
     console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
-    // SILENT_SB_V1: SB silencioso — Ponto D (complete-maint, sem CAN)
-    // Injeta vehicle_id do body (resolvido pelo frontend via vhcls-lookup) no inst antes de enfileirar
+    // SILENT_SB_V1: SB silencioso — Ponto D (complete-maint) — createJob direto
     try {
-      const _bodyVehicleId = req.body?.vehicle_id ?? null;
-      const _instForSb = _bodyVehicleId
-        ? { ...inst, payload: { ...(inst?.payload ?? {}), vehicleId: String(_bodyVehicleId), vehicle_id: String(_bodyVehicleId) } }
-        : inst;
-      enqueueSilentSB(id, _instForSb);
-    } catch {}
+      const _p = inst?.payload ?? {};
+      // vehicle_id: tenta body (vhcls-lookup frontend), depois jobs do store (CAN pode ter completado)
+      const _bodyVid = req.body?.vehicle_id ?? null;
+      let _vid = _bodyVid ? String(_bodyVid) : null;
+      if (!_vid) {
+        try {
+          const _allJobs = jobStore?.listJobs ? jobStore.listJobs() : [];
+          const _canDone = _allJobs.find((j: any) =>
+            j?.type === "monitor_can_snapshot" &&
+            String(j?.payload?.installation_id ?? j?.payload?.installationId ?? "") === String(id) &&
+            j?.status === "completed" && j?.result?.meta?.vehicleId
+          );
+          if (_canDone) _vid = String(_canDone.result.meta.vehicleId);
+        } catch {}
+      }
+      const _vsId     = _p.vehicleSettingId ?? _p.vehicle_setting_id ?? null;
+      const _clientId = _p.target_client_id ?? _p.clientId ?? _p.client_id ?? null;
+      const _clientName = _p.clientName ?? _p.client_name ?? String(_clientId ?? "");
+      const _comment  = _p.comment || (() => { const d = new Date(); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()} MAINT_NO_SWAP`; })();
+      if (_vid && _vsId && _clientId) {
+        const _sbJob = jobStore.createJob("scheme_builder", {
+          installation_id: id,
+          service: "MAINT_NO_SWAP",
+          silent: true,
+          clientId: String(_clientId),
+          clientName: String(_clientName),
+          vehicleId: _vid,
+          vehicleSettingId: Number(_vsId),
+          comment: _comment,
+        });
+        console.log(`[SILENT_SB_V1] Ponto D: job enfileirado job=${_sbJob.id} installation=${id} vehicleId=${_vid}`);
+      } else {
+        console.log(`[SILENT_SB_V1] Ponto D: skip — campos insuficientes installation=${id}`, { _vid, _vsId, _clientId });
+      }
+    } catch (_e: any) {
+      console.error(`[SILENT_SB_V1] Ponto D: erro installation=${id}`, (_e as any)?.message ?? String(_e));
+    }
     return res.json({ ok: true, status: "COMPLETED" });
   } catch (e: any) {
     console.error("[installationsRoutes] complete-maint error:", e && (e.stack || e.message || String(e)));
