@@ -931,7 +931,7 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         console.log(`[installationsRoutes] complete-maint: CAN job=${canJob.id} cancelado`);
       }
     } catch (_) {}
-    console.log(`[installationsRoutes] complete-maint: _sbVehicleId=${_sbVehicleId} (body=${_bodyVehicleId})`);
+    console.log(`[installationsRoutes] complete-maint: _sbVehicleId=${_sbVehicleId} (body=${_bodyVehicleId}) reqBody=${JSON.stringify(req.body).slice(0,200)}`);
 
     installationsStore.patchInstallation(id, { status: "COMPLETED" });
     console.log(`[installationsRoutes] complete-maint: installation=${id} → COMPLETED`);
