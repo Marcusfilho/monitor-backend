@@ -2360,9 +2360,11 @@ $("btnRefresh").disabled = !canRefreshEnabled;
         try {
           setSubline("Buscando equipamento…");
           const _mnsResolve = await resolveVehicle({ ...payload, service: "MAINT_NO_SWAP", flow: "MAINT_NO_SWAP" });
+          console.log("[MNS_DEBUG] resolveVehicle result:", JSON.stringify(_mnsResolve));
           if (_mnsResolve?.vehicle_id_final) {
             _mnsVehicleId = _mnsResolve.vehicle_id_final;
           }
+          console.log("[MNS_DEBUG] _mnsVehicleId após resolve:", _mnsVehicleId);
           // Busca serial via vhcls-lookup para exibir no modal (melhor esforço)
           try {
             const _mnsResp = await api("/api/installations/vhcls-lookup?plate=" + encodeURIComponent(payload.plate_real || ""));
@@ -2394,6 +2396,8 @@ $("btnRefresh").disabled = !canRefreshEnabled;
                 "Content-Type": "application/json"
               },
               body: JSON.stringify({ vehicle_id: _mnsVehicleId })
+              // MNS_DEBUG
+              , __debug: (() => { console.log("[MNS_DEBUG] complete-maint body vehicle_id:", _mnsVehicleId); return undefined; })()
             });
           } catch(_) {}
           showToast("Manutenção finalizada.", "good");
