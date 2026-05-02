@@ -352,7 +352,8 @@ await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=$
     const jobType = String(job.type || "").trim();
     const isGs = jobType === "monitor_gs";
 
-    if (installationId) {
+    const isSilent = job.payload?.silent === true; // SILENT_SB_V1
+    if (installationId && !isSilent) {
       await patchInstallation(installationId, {
         status: isGs ? "GS_RUNNING" : "SB_RUNNING",
         sb: isGs ? undefined : { job_id: job.id, started_at: new Date().toISOString() },
@@ -422,7 +423,7 @@ await reportProgress(job.id, 5, "started", `type=${String(job.type)} vehicleId=$
         last_progress: lastProgress,
         message: "Equipamento perdeu comunicação durante o SB.",
       });
-      if (installationId) {
+      if (installationId && !isSilent) { // SILENT_SB_V1
         await patchInstallation(installationId, {
           status: "SB_DISCONNECTED",
           sb: {

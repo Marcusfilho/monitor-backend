@@ -683,8 +683,9 @@ function _enqueueCanAfterSchemeBuilder(job: any, result: any) {
       try { installationsStore?.patchInstallation && installationsStore.patchInstallation(installationId, { status: "SB_DONE" }); } catch {}
     }
 
-    if (!service) { _sbDoneFallback("service ausente"); return; }
-    if (!["INSTALL", "MAINT_WITH_SWAP"].includes(service)) { _sbDoneFallback(`service=${service} não requer CAN`); return; }
+    const _isSilentSb = job?.payload?.silent === true; // SILENT_SB_V1
+    if (!service) { if (!_isSilentSb) _sbDoneFallback("service ausente"); return; }
+    if (!["INSTALL", "MAINT_WITH_SWAP"].includes(service)) { if (!_isSilentSb) _sbDoneFallback(`service=${service} não requer CAN`); return; }
 
     // FIX_SB_STUCK_V1: fallback busca vehicleId na instalação se não vier no payload do job
     const vehicleId = _num(
