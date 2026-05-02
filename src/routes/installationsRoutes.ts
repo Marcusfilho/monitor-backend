@@ -915,7 +915,7 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
     if (svc !== "MAINT_NO_SWAP") return res.status(400).json({ ok: false, error: "only MAINT_NO_SWAP allowed" });
 
     // Cancelar job CAN pendente para não continuar enviando refreshes ao Monitor
-    // SILENT_SB_V1: vehicleId vem do body (frontend já fez vhcls-lookup), fallback no canJob
+    // SILENT_SB_V1: vehicleId vem do body (frontend já fez vhcls-lookup), fallback no canJob — v2
     const _bodyVehicleId = String((req.body as any)?.vehicle_id ?? (req.body as any)?.vehicleId ?? "").trim() || null;
     let _sbVehicleId: string | null = _bodyVehicleId;
     try {
