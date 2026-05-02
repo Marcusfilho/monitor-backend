@@ -941,7 +941,7 @@ router.post("/:id/actions/complete-maint", async (req, res) => {
         id,
         _sbVehicleId,
         inst?.payload?.vehicleSettingId ?? inst?.payload?.vehicle_setting_id ?? null,
-        inst?.payload?.clientId ?? inst?.payload?.client_id ?? null,
+        inst?.payload?.clientId ?? inst?.payload?.client_id ?? inst?.payload?.target_client_id ?? null,
         inst?.payload?.clientName ?? inst?.payload?.client_name ?? null,
         inst?.payload?.comment ?? null
       );
