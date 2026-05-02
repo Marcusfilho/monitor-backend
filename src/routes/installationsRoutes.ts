@@ -566,9 +566,9 @@ router.get("/vhcls-lookup", async (req, res) => {
       r => r.licence_nmbr.trim().toUpperCase() === plate.toUpperCase()
     );
     if (!match || isEmptyInnerId(match.inner_id)) {
-      return res.json({ ok: true, serial: null });
+      return res.json({ ok: true, serial: null, vehicle_id: null });
     }
-    return res.json({ ok: true, serial: normalizeSerial(match.inner_id) });
+    return res.json({ ok: true, serial: normalizeSerial(match.inner_id), vehicle_id: match.vehicle_id || null });
   } catch (e: any) {
     return res.status(500).json({ ok: false, error: e.message || "erro interno" });
   }
