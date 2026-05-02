@@ -303,3 +303,31 @@ export async function resolveForMaintWithSwap(params: {
     resolution_path: isEmptyInnerId(plateRecord.inner_id) ? "PLATE_EMPTY" : "PLATE_SERIAL_MATCH",
   };
 }
+
+// ---------------------------------------------------------------------------
+// MAINT_NO_SWAP: resolve apenas o vehicle_id pela placa (sem serial)
+// Usado pelo vehicleResolverWorker para enfileirar o SB silencioso.
+// ---------------------------------------------------------------------------
+export interface ResolveMaintNoSwapResult {
+  status: ResolveStatus;
+  vehicle_id_final: number | null;
+  error_message?: string;
+}
+
+export async function resolveForMaintNoSwap(params: {
+  licence_nmbr: string;
+}): Promise<ResolveMaintNoSwapResult> {
+  const { licence_nmbr } = params;
+
+  console.log(`[resolver] MAINT_NO_SWAP: buscando placa licence_nmbr="${licence_nmbr}"`);
+  const plateRecords = await vhclsQueryByPlate(licence_nmbr);
+  const plateRecord = plateRecords.find(
+    (r) => r.licence_nmbr.trim().toUpperCase() === licence_nmbr.trim().toUpperCase()
+  ) || null;
+
+  if (!plateRecord) {
+    return { status: "ERROR_PLATE_NOT_FOUND", vehicle_id_final: null, error_message: `Placa ${licence_nmbr} não encontrada no VHCLS` };
+  }
+
+  return { status: "OK", vehicle_id_final: plateRecord.vehicle_id };
+}

@@ -5,6 +5,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveForInstall = resolveForInstall;
 exports.resolveForMaintWithSwap = resolveForMaintWithSwap;
+exports.resolveForMaintNoSwap = resolveForMaintNoSwap;
 const html5Client_1 = require("./html5Client");
 // ---------------------------------------------------------------------------
 // INSTALL — Fase 1 (resolução sem execução)
@@ -218,4 +219,14 @@ async function resolveForMaintWithSwap(params) {
         needs_uninstall_cmdt,
         resolution_path: (0, html5Client_1.isEmptyInnerId)(plateRecord.inner_id) ? "PLATE_EMPTY" : "PLATE_SERIAL_MATCH",
     };
+}
+async function resolveForMaintNoSwap(params) {
+    const { licence_nmbr } = params;
+    console.log(`[resolver] MAINT_NO_SWAP: buscando placa licence_nmbr="${licence_nmbr}"`);
+    const plateRecords = await (0, html5Client_1.vhclsQueryByPlate)(licence_nmbr);
+    const plateRecord = plateRecords.find((r) => r.licence_nmbr.trim().toUpperCase() === licence_nmbr.trim().toUpperCase()) || null;
+    if (!plateRecord) {
+        return { status: "ERROR_PLATE_NOT_FOUND", vehicle_id_final: null, error_message: `Placa ${licence_nmbr} não encontrada no VHCLS` };
+    }
+    return { status: "OK", vehicle_id_final: plateRecord.vehicle_id };
 }

@@ -377,6 +377,17 @@ async function resolveInstall({ licence_nmbr, serial, client_descr }) {
 }
 
 // ---------------------------------------------------------------------------
+// Resolução MAINT_NO_SWAP (apenas vehicle_id pela placa)
+async function resolveMaintNoSwap({ licence_nmbr }) {
+  console.log(`[resolver] MAINT_NO_SWAP plate="${licence_nmbr}"`);
+  const plateRecs = await vhclsByPlate(licence_nmbr);
+  const plateRec  = plateRecs.find(r => upper(r.licence_nmbr) === upper(licence_nmbr)) || null;
+  if (!plateRec) {
+    return { status: "ERROR_PLATE_NOT_FOUND", vehicle_id_final: null, error_message: `Placa ${licence_nmbr} não encontrada no VHCLS` };
+  }
+  return { status: "OK", vehicle_id_final: plateRec.vehicle_id };
+}
+
 // Resolução MAINT_WITH_SWAP
 // ---------------------------------------------------------------------------
 async function resolveMaintWithSwap({ licence_nmbr, serial_old, serial_new, client_descr }) {
@@ -658,6 +669,10 @@ async function processJob(job) {
         serial_old:   String(payload.serial_old || "").trim(),
         serial_new:   String(payload.serial_new || payload.serial || "").trim(),
         client_descr: String(payload.client_descr || payload.clientName || "").trim(),
+      });
+    } else if (flow === "MAINT_NO_SWAP") {
+      result = await resolveMaintNoSwap({
+        licence_nmbr: String(payload.licence_nmbr || payload.plate || "").trim(),
       });
     } else if (flow === "CHANGE_COMPANY") {
       const vehicle_id   = payload.vehicle_id   ?? payload.vehicleId   ?? payload.VEHICLE_ID   ?? null;

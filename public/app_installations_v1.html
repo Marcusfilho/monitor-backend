@@ -2155,7 +2155,9 @@ $("btnRefresh").disabled = !canRefreshEnabled;
   // ====== resolver: dispara job vehicle_resolve e aguarda resultado ======
   async function resolveVehicle(payload) {
     const svc = String(payload.service || "").toUpperCase();
-    const flow = (svc === "MAINT_WITH_SWAP") ? "MAINT_WITH_SWAP" : "INSTALL";
+    const flow = payload.flow
+      ? String(payload.flow).toUpperCase()
+      : (svc === "MAINT_WITH_SWAP") ? "MAINT_WITH_SWAP" : "INSTALL";
 
     const jobPayload = {
       flow,
@@ -2352,17 +2354,21 @@ $("btnRefresh").disabled = !canRefreshEnabled;
 
       // MAINT_NO_SWAP: pergunta se deseja validar CAN
       if (svc === "MAINT_NO_SWAP") {
-        // Busca serial e vehicle_id via vhcls-lookup antes de abrir o modal
+        // Resolve vehicle_id via vehicleResolverWorker (VM tem sessão HTML5)
         let _mnsSerial = null;
         let _mnsVehicleId = null;
         try {
           setSubline("Buscando equipamento…");
-          const _mnsResp = await api("/api/installations/vhcls-lookup?plate=" + encodeURIComponent(payload.plate_real || ""));
-          if (_mnsResp.ok && _mnsResp.data) {
-            _mnsSerial    = _mnsResp.data.serial     || null;
-            _mnsVehicleId = _mnsResp.data.vehicle_id || _mnsResp.data.vehicleId || null;
+          const _mnsResolve = await resolveVehicle({ ...payload, service: "MAINT_NO_SWAP", flow: "MAINT_NO_SWAP" });
+          if (_mnsResolve?.vehicle_id_final) {
+            _mnsVehicleId = _mnsResolve.vehicle_id_final;
           }
-        } catch (_) { /* silencioso */ }
+          // Busca serial via vhcls-lookup para exibir no modal (melhor esforço)
+          try {
+            const _mnsResp = await api("/api/installations/vhcls-lookup?plate=" + encodeURIComponent(payload.plate_real || ""));
+            if (_mnsResp.ok && _mnsResp.data?.serial) _mnsSerial = _mnsResp.data.serial;
+          } catch (_) {}
+        } catch (_) { /* silencioso — modal abre mesmo sem resolver */ }
         setSubline("");
 
         const _mnsPlate = (payload.plate_real || payload.plate || "—").toUpperCase();
