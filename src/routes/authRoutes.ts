@@ -6,6 +6,7 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import * as https from "https";
 import * as http from "http";
+import { saveJar, configFromEnv } from "../core/html5Session";
 
 const router = Router();
 
@@ -357,6 +358,9 @@ router.post("/html5-login", async (req, res) => {
     const filtered = allClients.filter(c =>
       allowedSet.has((c.client_descr || "").toUpperCase().trim())
     );
+
+    // 4b. Persiste adminCookie no jar para vhclsService reutilizar
+    saveJar(configFromEnv().cookieJarPath, adminCookie, { source: "auth-login" }).catch(() => {});
 
     // 5. Gera token de sessão
     const token = randomUUID();
