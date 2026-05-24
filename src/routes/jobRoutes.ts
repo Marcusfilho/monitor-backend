@@ -1,0 +1,233 @@
+import { Router, Request, Response } from "express";
+import {
+  createJob,
+  getNextJob,
+  completeJob,
+  updateJob,
+  getJob,
+  listJobs,
+  BaseJob,
+} from "../jobs/jobStore";
+import { getGsCommand } from "../core/gsCommandMap";
+
+const router = Router();
+
+// ─── Pipeline do rewrite ──────────────────────────────────────────────────────
+//
+//  html5_install        → ok  → scheme_builder
+//  html5_uninstall      → ok  → save_snapshot
+//  html5_maint_no_swap  → ok  → monitor_can_snapshot   (monitor_skip=1 no payload)
+//  html5_maint_with_swap→ ok  → scheme_builder
+//  scheme_builder       → ok  → monitor_can_snapshot   (se GS_ONLY=1 → save_snapshot)
+//  monitor_can_snapshot → ok  → scheme_builder(GS)     (install/maint_with_swap)
+//                             → save_snapshot           (uninstall/maint_no_swap)
+//  scheme_builder(GS)   → ok  → save_snapshot
+//  save_snapshot        → ok  → fim
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void {
+  if (finalStatus !== "completed") return;
+
+  const plate: string = job.payload?.plate ?? job.payload?.installation_id ?? "";
+
+  switch (job.type) {
+    case "html5_install":
+      createJob("scheme_builder", { ...job.payload, ...result, plate, _from: job.id });
+      break;
+
+    case "html5_uninstall":
+      createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      break;
+
+    case "html5_maint_no_swap":
+      // monitor_skip=1 já está no payload (definido pelo worker)
+      createJob("monitor_can_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      break;
+
+    case "html5_maint_with_swap":
+      createJob("scheme_builder", { ...job.payload, ...result, plate, _from: job.id });
+      break;
+
+    case "scheme_builder":
+      createJob("monitor_can_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      break;
+
+    // GS_PIPELINE_V1: CAN decide se enfileira gs_calibration ou save_snapshot
+    case "monitor_can_snapshot": {
+      const service = String(job.payload?.service ?? job.payload?.flow ?? "").toUpperCase();
+      const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
+
+      if (needsGs) {
+        const label   = String(job.payload?.label_position   ?? job.payload?.labelPosition   ?? "").toUpperCase();
+        const harness = String(job.payload?.harness_position ?? job.payload?.harnessPosition ?? "").toUpperCase();
+        const gsCmd   = getGsCommand(label, harness);
+
+        if (gsCmd) {
+          createJob("gs_calibration", {
+            ...job.payload,
+            ...result,
+            plate,
+            _from             : job.id,
+            GS_ACTION_ID      : gsCmd.action_id,
+            GS_COMMAND_SYNTAX : gsCmd.command_syntax,
+          });
+          console.log(
+            `[pipeline] gs_calibration enfileirado` +
+            ` label=${label} harness=${harness}` +
+            ` action=${gsCmd.action_id}` +
+            ` plate=${plate}`
+          );
+        } else {
+          console.warn(
+            `[pipeline] GS: combinação não encontrada` +
+            ` label=${label} harness=${harness}` +
+            ` service=${service} — pulando GS`
+          );
+          createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+        }
+      } else {
+        createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      }
+      break;
+    }
+
+    // GS_PIPELINE_V1: GS concluído → save_snapshot
+    case "gs_calibration":
+      createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      console.log(`[pipeline] gs_calibration concluído → save_snapshot plate=${plate}`);
+      break;
+
+    case "save_snapshot":
+      // fim da cadeia
+      break;
+
+    default:
+      // job type desconhecido — não encadeia nada
+      break;
+  }
+}
+
+// ─── POST /api/jobs  — enfileirar job ─────────────────────────────────────────
+router.post("/", (req: Request, res: Response) => {
+  try {
+    const { type, payload } = req.body ?? {};
+    if (!type || typeof type !== "string") {
+      res.status(400).json({ error: "missing_type" });
+      return;
+    }
+    const job = createJob(type.trim(), payload ?? {});
+    res.status(201).json({ ok: true, job });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+// ─── POST /api/jobs/next  — dequeue (workers usam POST) ──────────────────────
+router.post("/next", (req: Request, res: Response) => {
+  try {
+    const { job_type, worker_key } = req.body ?? {};
+    if (!job_type || typeof job_type !== "string") {
+      res.status(400).json({ error: "missing_job_type" });
+      return;
+    }
+    const workerId = String(worker_key || job_type);
+    const job = getNextJob(job_type.trim(), workerId);
+    if (!job) {
+      res.status(204).end();
+      return;
+    }
+    res.json({ ok: true, job });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+// ─── GET /api/jobs/next  — alias GET (alguns workers usam) ───────────────────
+router.get("/next", (req: Request, res: Response) => {
+  try {
+    const job_type = req.query.job_type as string | undefined;
+    const worker_key = req.query.worker_key as string | undefined;
+    if (!job_type) {
+      res.status(400).json({ error: "missing_job_type" });
+      return;
+    }
+    const workerId = String(worker_key || job_type);
+    const job = getNextJob(job_type.trim(), workerId);
+    if (!job) {
+      res.status(204).end();
+      return;
+    }
+    res.json({ ok: true, job });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+// ─── POST /api/jobs/:id/complete  — completar + disparar pipeline ─────────────
+router.post("/:id/complete", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const { status, result, worker_key } = req.body ?? {};
+
+    const finalStatus: string =
+      status === "error" || status === "cancelled" ? status : "completed";
+
+    const job = completeJob(id, finalStatus as any, result ?? {}, worker_key ? String(worker_key) : undefined);
+    if (!job) {
+      res.status(404).json({ error: "job_not_found" });
+      return;
+    }
+
+    dispatchPipeline(job, result, finalStatus);
+
+    res.json({ ok: true, job });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+// ─── POST /api/jobs/:id/progress  — atualizar progresso ──────────────────────
+router.post("/:id/progress", (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const { progress, message } = req.body ?? {};
+
+    const job = updateJob(id, {
+      result: { progress, message },
+    });
+    if (!job) {
+      res.status(404).json({ error: "job_not_found" });
+      return;
+    }
+    res.json({ ok: true, job });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+// ─── GET /api/jobs  — listar (debug) ──────────────────────────────────────────
+router.get("/", (_req: Request, res: Response) => {
+  try {
+    const jobs = listJobs();
+    res.json({ ok: true, count: jobs.length, jobs });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+// ─── GET /api/jobs/:id  — buscar por id (debug) ───────────────────────────────
+router.get("/:id", (req: Request, res: Response) => {
+  try {
+    const job = getJob(String(req.params.id));
+    if (!job) {
+      res.status(404).json({ error: "job_not_found" });
+      return;
+    }
+    res.json({ ok: true, job });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
+export default router;

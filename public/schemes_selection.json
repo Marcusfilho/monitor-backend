@@ -1,0 +1,1192 @@
+{
+  "ok": true,
+  "generated_at": "2026-05-24T17:58:03.864Z",
+  "clients": [
+    {
+      "client_id": 215795,
+      "client_descr": "QBR Production",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5404,
+          "vehicle_setting_name": "TESTE",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "03/10/2025 14:28:35"
+        },
+        {
+          "vehicle_setting_id": 5489,
+          "vehicle_setting_name": "DMAS TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "26/05/2025 15:41:14"
+        },
+        {
+          "vehicle_setting_id": 5491,
+          "vehicle_setting_name": "RFID TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "11/12/2024 18:51:25"
+        },
+        {
+          "vehicle_setting_id": 5506,
+          "vehicle_setting_name": "General Tests",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "01/05/2026 11:58:55"
+        },
+        {
+          "vehicle_setting_id": 5546,
+          "vehicle_setting_name": "Fuel Drop Tests",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "06/06/2025 14:08:46"
+        }
+      ],
+      "selected_scheme_id": 5506,
+      "_loaded": true
+    },
+    {
+      "client_id": 217062,
+      "client_descr": "ENEVA",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5410,
+          "vehicle_setting_name": "Default - Eneva",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "12/06/2025 16:43:09"
+        },
+        {
+          "vehicle_setting_id": 5470,
+          "vehicle_setting_name": "Default - Read Only",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "14/04/2025 14:34:07"
+        },
+        {
+          "vehicle_setting_id": 5536,
+          "vehicle_setting_name": "Default - Eneva FW A.79",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "28/01/2026 19:19:05"
+        }
+      ],
+      "selected_scheme_id": 5536,
+      "_loaded": true
+    },
+    {
+      "client_id": 217065,
+      "client_descr": "BRASPRESS TRANSPORTES URGENTES",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5412,
+          "vehicle_setting_name": "Default - MBU",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "26/08/2024 12:31:07"
+        },
+        {
+          "vehicle_setting_id": 5416,
+          "vehicle_setting_name": "Default - Connect",
+          "created_by_user_name": "Emanuel_Lib",
+          "updated_at": "22/11/2024 16:44:41"
+        },
+        {
+          "vehicle_setting_id": 5486,
+          "vehicle_setting_name": "Default - Electric",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "05/12/2024 19:34:12"
+        }
+      ],
+      "selected_scheme_id": 5416,
+      "_loaded": true
+    },
+    {
+      "client_id": 217066,
+      "client_descr": "QBR_TEST",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5406,
+          "vehicle_setting_name": "TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "16/04/2026 13:03:46"
+        },
+        {
+          "vehicle_setting_id": 5422,
+          "vehicle_setting_name": "ANATEL - HOMOLOGATION",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "11/09/2024 16:39:12"
+        },
+        {
+          "vehicle_setting_id": 5505,
+          "vehicle_setting_name": "General Tests",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "08/05/2026 18:18:54"
+        },
+        {
+          "vehicle_setting_id": 5655,
+          "vehicle_setting_name": "JBS - Default Buzzer Out1",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/05/2026 17:14:55"
+        },
+        {
+          "vehicle_setting_id": 5656,
+          "vehicle_setting_name": "Desativa Buzzer Maluco",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/05/2026 17:26:11"
+        }
+      ],
+      "selected_scheme_id": 5505,
+      "_loaded": true
+    },
+    {
+      "client_id": 217172,
+      "client_descr": "SUL AMERICANO",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5421,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "01/07/2025 20:00:43"
+        }
+      ],
+      "selected_scheme_id": 5421,
+      "_loaded": true
+    },
+    {
+      "client_id": 217212,
+      "client_descr": "Rally dos Sertões",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5428,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "28/07/2025 13:15:37"
+        },
+        {
+          "vehicle_setting_id": 5568,
+          "vehicle_setting_name": "Default - by wire",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "28/07/2025 13:16:08"
+        }
+      ],
+      "selected_scheme_id": 5568,
+      "_loaded": true
+    },
+    {
+      "client_id": 217226,
+      "client_descr": "ACCERT TRANSPORTES E LOGÍSTICA",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5433,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "17/09/2025 17:02:45"
+        },
+        {
+          "vehicle_setting_id": 5435,
+          "vehicle_setting_name": "ITU",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "18/10/2024 13:06:24"
+        },
+        {
+          "vehicle_setting_id": 5436,
+          "vehicle_setting_name": "RALLY COMPETITION",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "02/09/2024 18:07:18"
+        }
+      ],
+      "selected_scheme_id": 5433,
+      "_loaded": true
+    },
+    {
+      "client_id": 217301,
+      "client_descr": "VIRTU GNL",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5439,
+          "vehicle_setting_name": "Default - Virtu",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "27/08/2025 20:29:26"
+        },
+        {
+          "vehicle_setting_id": 5566,
+          "vehicle_setting_name": "TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "22/07/2025 14:08:50"
+        },
+        {
+          "vehicle_setting_id": 5581,
+          "vehicle_setting_name": "Default - Virtu - FWA79",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "27/03/2026 19:19:29"
+        },
+        {
+          "vehicle_setting_id": 5596,
+          "vehicle_setting_name": "HOMOLOGACAO SCANIA",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "18/11/2025 16:35:24"
+        }
+      ],
+      "selected_scheme_id": 5581,
+      "_loaded": true
+    },
+    {
+      "client_id": 217318,
+      "client_descr": "TRANZIRAN TRANSPORTES LTDA",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5440,
+          "vehicle_setting_name": "Default - Free mode",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 20:55:37"
+        },
+        {
+          "vehicle_setting_id": 5465,
+          "vehicle_setting_name": "Tranziran - Local Mode",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 20:55:43"
+        },
+        {
+          "vehicle_setting_id": 5483,
+          "vehicle_setting_name": "Default - No Identification",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "30/09/2025 18:17:58"
+        },
+        {
+          "vehicle_setting_id": 5647,
+          "vehicle_setting_name": "Default - Ibutton e Buzzer",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/05/2026 17:38:46"
+        }
+      ],
+      "selected_scheme_id": 5647,
+      "_loaded": true
+    },
+    {
+      "client_id": 217322,
+      "client_descr": "DUPLA QUÍMICA",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5441,
+          "vehicle_setting_name": "TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "11/09/2024 16:22:44"
+        },
+        {
+          "vehicle_setting_id": 5449,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "16/10/2024 19:13:45"
+        },
+        {
+          "vehicle_setting_id": 5456,
+          "vehicle_setting_name": "Default - Without Continuous Buzzer",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "16/10/2024 14:33:07"
+        },
+        {
+          "vehicle_setting_id": 5458,
+          "vehicle_setting_name": "Default-Higher_Rain_Speed",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "16/10/2024 19:13:59"
+        }
+      ],
+      "selected_scheme_id": 5449,
+      "_loaded": true
+    },
+    {
+      "client_id": 217323,
+      "client_descr": "PIPELINE",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5442,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "29/08/2024 19:45:03"
+        }
+      ],
+      "selected_scheme_id": 5442,
+      "_loaded": true
+    },
+    {
+      "client_id": 217379,
+      "client_descr": "UNIDÃO",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5451,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "03/12/2024 18:11:40"
+        }
+      ],
+      "selected_scheme_id": 5451,
+      "_loaded": true
+    },
+    {
+      "client_id": 217391,
+      "client_descr": "JC Distribuição",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5452,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "02/10/2024 18:49:44"
+        },
+        {
+          "vehicle_setting_id": 5482,
+          "vehicle_setting_name": "Adaptado Basilio",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "29/11/2024 14:22:46"
+        }
+      ],
+      "selected_scheme_id": 5452,
+      "_loaded": true
+    },
+    {
+      "client_id": 217434,
+      "client_descr": "JT Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5459,
+          "vehicle_setting_name": "JT - Default - FW A.79",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "09/02/2026 17:14:24"
+        },
+        {
+          "vehicle_setting_id": 5466,
+          "vehicle_setting_name": "Default - FOE",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "31/10/2024 14:47:11"
+        },
+        {
+          "vehicle_setting_id": 5485,
+          "vehicle_setting_name": "JT - RO",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "04/12/2024 12:54:48"
+        },
+        {
+          "vehicle_setting_id": 5512,
+          "vehicle_setting_name": "JT - GPS Only",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "03/02/2025 19:49:40"
+        }
+      ],
+      "selected_scheme_id": 5459,
+      "_loaded": true
+    },
+    {
+      "client_id": 217445,
+      "client_descr": "QBR_Storage",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5461,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "06/06/2025 13:18:24"
+        }
+      ],
+      "selected_scheme_id": 5461,
+      "_loaded": true
+    },
+    {
+      "client_id": 217573,
+      "client_descr": "Seda Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5469,
+          "vehicle_setting_name": "Seda - PVHM VW",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 21:04:40"
+        },
+        {
+          "vehicle_setting_id": 5538,
+          "vehicle_setting_name": "Seda - PVHM MBZ",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 21:05:14"
+        },
+        {
+          "vehicle_setting_id": 5539,
+          "vehicle_setting_name": "Seda - PVHM VOLVO",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 21:05:25"
+        },
+        {
+          "vehicle_setting_id": 5540,
+          "vehicle_setting_name": "Seda - PVHM SCANIA",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 21:05:39"
+        },
+        {
+          "vehicle_setting_id": 5541,
+          "vehicle_setting_name": "Seda - PVHM DAF",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 21:05:50"
+        },
+        {
+          "vehicle_setting_id": 5555,
+          "vehicle_setting_name": "Seda - Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "24/11/2025 21:07:31"
+        },
+        {
+          "vehicle_setting_id": 5567,
+          "vehicle_setting_name": "TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "22/07/2025 14:34:39"
+        },
+        {
+          "vehicle_setting_id": 5613,
+          "vehicle_setting_name": "Seda - Default [read only]",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "30/12/2025 14:39:31"
+        }
+      ],
+      "selected_scheme_id": 5555,
+      "_loaded": true
+    },
+    {
+      "client_id": 217642,
+      "client_descr": "Via Sudeste",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5476,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "12/12/2024 20:26:55"
+        }
+      ],
+      "selected_scheme_id": 5476,
+      "_loaded": true
+    },
+    {
+      "client_id": 217645,
+      "client_descr": "Dago Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5477,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "22/11/2024 11:58:26"
+        }
+      ],
+      "selected_scheme_id": 5477,
+      "_loaded": true
+    },
+    {
+      "client_id": 217657,
+      "client_descr": "Souza Araujo",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5479,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "02/09/2025 11:53:08"
+        },
+        {
+          "vehicle_setting_id": 5493,
+          "vehicle_setting_name": "Default - RO",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "02/09/2025 11:53:24"
+        },
+        {
+          "vehicle_setting_id": 5554,
+          "vehicle_setting_name": "Default A79",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "11/05/2026 19:23:30"
+        }
+      ],
+      "selected_scheme_id": 5554,
+      "_loaded": true
+    },
+    {
+      "client_id": 217684,
+      "client_descr": "ETT Carapicuiba",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5484,
+          "vehicle_setting_name": "NÃO USAR - Contém schemes da Via sudeste imopssíveis de remover",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "13/08/2025 14:38:05"
+        },
+        {
+          "vehicle_setting_id": 5577,
+          "vehicle_setting_name": "ETT - Firmware A79",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "07/04/2026 17:18:51"
+        },
+        {
+          "vehicle_setting_id": 5629,
+          "vehicle_setting_name": "ETT - Firmware A79 - Teste MBZ",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "10/03/2026 12:18:33"
+        }
+      ],
+      "selected_scheme_id": 5577,
+      "_loaded": true
+    },
+    {
+      "client_id": 217693,
+      "client_descr": "Renova",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5487,
+          "vehicle_setting_name": "Default - Renova",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "10/02/2026 19:00:39"
+        }
+      ],
+      "selected_scheme_id": 5487,
+      "_loaded": true
+    },
+    {
+      "client_id": 217694,
+      "client_descr": "Track7",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5488,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "30/01/2025 16:29:58"
+        }
+      ],
+      "selected_scheme_id": 5488,
+      "_loaded": true
+    },
+    {
+      "client_id": 217811,
+      "client_descr": "Ativa Logística",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5500,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "06/05/2026 14:47:28"
+        }
+      ],
+      "selected_scheme_id": 5500,
+      "_loaded": true
+    },
+    {
+      "client_id": 217832,
+      "client_descr": "Dream Factory",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5504,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "20/01/2025 17:43:24"
+        }
+      ],
+      "selected_scheme_id": 5504,
+      "_loaded": true
+    },
+    {
+      "client_id": 217857,
+      "client_descr": "JBS",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5507,
+          "vehicle_setting_name": "Default - JBS",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "16/01/2026 14:59:57"
+        },
+        {
+          "vehicle_setting_id": 5643,
+          "vehicle_setting_name": "JBS - Default Buzzer Out1",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/05/2026 17:43:54"
+        },
+        {
+          "vehicle_setting_id": 5657,
+          "vehicle_setting_name": "JBS - Teste no buzzer",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/05/2026 17:50:54"
+        },
+        {
+          "vehicle_setting_id": 5658,
+          "vehicle_setting_name": "Não usar",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/05/2026 17:52:08"
+        }
+      ],
+      "selected_scheme_id": 5643,
+      "_loaded": true
+    },
+    {
+      "client_id": 217896,
+      "client_descr": "Bendo Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5513,
+          "vehicle_setting_name": "Default - Bendo",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "14/03/2025 19:28:37"
+        }
+      ],
+      "selected_scheme_id": 5513,
+      "_loaded": true
+    },
+    {
+      "client_id": 217916,
+      "client_descr": "Raça Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5515,
+          "vehicle_setting_name": "Default - Raça",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "02/02/2026 11:51:06"
+        },
+        {
+          "vehicle_setting_id": 5545,
+          "vehicle_setting_name": "Default - Raça - FWA79",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "07/05/2026 15:15:48"
+        },
+        {
+          "vehicle_setting_id": 5547,
+          "vehicle_setting_name": "Raça - volvo test",
+          "created_by_user_name": "OfirE_admin_3",
+          "updated_at": "08/06/2025 12:11:43"
+        },
+        {
+          "vehicle_setting_id": 5635,
+          "vehicle_setting_name": "Default - Raça - FWA79 - PVHM",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "25/03/2026 17:59:51"
+        },
+        {
+          "vehicle_setting_id": 5649,
+          "vehicle_setting_name": "Default - Raça - IGN VIRTUAL",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "28/04/2026 22:15:43"
+        }
+      ],
+      "selected_scheme_id": 5545,
+      "_loaded": true
+    },
+    {
+      "client_id": 218136,
+      "client_descr": "ANKAI BR",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5525,
+          "vehicle_setting_name": "Default - Ankai",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "18/11/2025 14:01:25"
+        }
+      ],
+      "selected_scheme_id": 5525,
+      "_loaded": true
+    },
+    {
+      "client_id": 218204,
+      "client_descr": "EVMOBILITY",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5528,
+          "vehicle_setting_name": "Default - Evmobility",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "19/05/2026 23:49:27"
+        },
+        {
+          "vehicle_setting_id": 5597,
+          "vehicle_setting_name": "TESTE EWONDER",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "25/03/2026 19:53:50"
+        },
+        {
+          "vehicle_setting_id": 5606,
+          "vehicle_setting_name": "Default - Evmobility - Dallas",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "19/05/2026 23:47:33"
+        },
+        {
+          "vehicle_setting_id": 5626,
+          "vehicle_setting_name": "Default - EV - Dallas+Buzzer",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "19/05/2026 23:48:10"
+        }
+      ],
+      "selected_scheme_id": 5606,
+      "_loaded": true
+    },
+    {
+      "client_id": 218226,
+      "client_descr": "Metropolitana",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5531,
+          "vehicle_setting_name": "Default - Metropolitana FW A79 - FREE MODE",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "14/11/2025 14:15:20"
+        },
+        {
+          "vehicle_setting_id": 5534,
+          "vehicle_setting_name": "Default - Metropolitana FW A79 - LOCAL MODE",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "26/11/2025 19:14:18"
+        },
+        {
+          "vehicle_setting_id": 5558,
+          "vehicle_setting_name": "DMAS TEST",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "07/07/2025 21:11:42"
+        },
+        {
+          "vehicle_setting_id": 5562,
+          "vehicle_setting_name": "Default - Metropolitana - Temporary",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "17/07/2025 11:46:35"
+        },
+        {
+          "vehicle_setting_id": 5564,
+          "vehicle_setting_name": "Metropolitana Test",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "18/07/2025 18:46:29"
+        }
+      ],
+      "selected_scheme_id": 5531,
+      "_loaded": true
+    },
+    {
+      "client_id": 218304,
+      "client_descr": "Tassi Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5542,
+          "vehicle_setting_name": "Tassi - Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "18/05/2026 17:21:28"
+        }
+      ],
+      "selected_scheme_id": 5542,
+      "_loaded": true
+    },
+    {
+      "client_id": 218433,
+      "client_descr": "GERALDO THEODORO TRISTAO",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5553,
+          "vehicle_setting_name": "Default - Tristão",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "27/06/2025 14:58:48"
+        }
+      ],
+      "selected_scheme_id": 5553,
+      "_loaded": true
+    },
+    {
+      "client_id": 218526,
+      "client_descr": "BufferClient",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5563,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "18/09/2025 19:55:45"
+        }
+      ],
+      "selected_scheme_id": 5563,
+      "_loaded": true
+    },
+    {
+      "client_id": 218572,
+      "client_descr": "TransLima",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5573,
+          "vehicle_setting_name": "NAO USAR - Translima",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "29/10/2025 19:43:43"
+        },
+        {
+          "vehicle_setting_id": 5592,
+          "vehicle_setting_name": "Translima - Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "21/01/2026 13:20:07"
+        }
+      ],
+      "selected_scheme_id": 5592,
+      "_loaded": true
+    },
+    {
+      "client_id": 218598,
+      "client_descr": "Fadel Transportes de Logística",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5575,
+          "vehicle_setting_name": "Default - Fadel",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "15/08/2025 18:43:06"
+        }
+      ],
+      "selected_scheme_id": 5575,
+      "_loaded": true
+    },
+    {
+      "client_id": 218599,
+      "client_descr": "GEOCARGO",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5576,
+          "vehicle_setting_name": "Default - Geocargo",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "09/02/2026 12:53:27"
+        },
+        {
+          "vehicle_setting_id": 5628,
+          "vehicle_setting_name": "Geocargo - agregado",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "09/02/2026 17:20:25"
+        }
+      ],
+      "selected_scheme_id": 5576,
+      "_loaded": true
+    },
+    {
+      "client_id": 218726,
+      "client_descr": "SOL CARGAS",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5582,
+          "vehicle_setting_name": "Default - SOL",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "10/12/2025 12:33:00"
+        }
+      ],
+      "selected_scheme_id": 5582,
+      "_loaded": true
+    },
+    {
+      "client_id": 218808,
+      "client_descr": "Taguatur",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5585,
+          "vehicle_setting_name": "Default - Taguatur",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "22/01/2026 18:23:20"
+        },
+        {
+          "vehicle_setting_id": 5601,
+          "vehicle_setting_name": "Taguatur - Mercedes Baud Rate Manual",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "09/01/2026 19:51:07"
+        },
+        {
+          "vehicle_setting_id": 5619,
+          "vehicle_setting_name": "Default - Taguatur - Ibutton",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "22/01/2026 18:23:43"
+        }
+      ],
+      "selected_scheme_id": 5585,
+      "_loaded": true
+    },
+    {
+      "client_id": 218900,
+      "client_descr": "Energisa",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5587,
+          "vehicle_setting_name": "Default Energisa",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/01/2026 19:41:11"
+        },
+        {
+          "vehicle_setting_id": 5615,
+          "vehicle_setting_name": "Energisa LEVES - DMAS",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/01/2026 14:46:18"
+        },
+        {
+          "vehicle_setting_id": 5620,
+          "vehicle_setting_name": "Energisa LEVES - IBUTTON",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/01/2026 14:45:27"
+        }
+      ],
+      "selected_scheme_id": 5587,
+      "_loaded": true
+    },
+    {
+      "client_id": 218905,
+      "client_descr": "Sonda",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5588,
+          "vehicle_setting_name": "Default Sonda",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "20/02/2026 20:29:13"
+        }
+      ],
+      "selected_scheme_id": 5588,
+      "_loaded": true
+    },
+    {
+      "client_id": 218908,
+      "client_descr": "Reiter Log",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5589,
+          "vehicle_setting_name": "Default - Reiter",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "10/02/2026 19:37:57"
+        }
+      ],
+      "selected_scheme_id": 5589,
+      "_loaded": true
+    },
+    {
+      "client_id": 218933,
+      "client_descr": "Reunidas",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5590,
+          "vehicle_setting_name": "Default - Reunidas",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "20/11/2025 02:33:45"
+        }
+      ],
+      "selected_scheme_id": 5590,
+      "_loaded": true
+    },
+    {
+      "client_id": 218969,
+      "client_descr": "Expresso Nordeste",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5595,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "10/11/2025 17:34:32"
+        }
+      ],
+      "selected_scheme_id": 5595,
+      "_loaded": true
+    },
+    {
+      "client_id": 219002,
+      "client_descr": "Viação Cidade do Aço",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5598,
+          "vehicle_setting_name": "Default - Cidade do Aço",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "22/01/2026 14:54:44"
+        }
+      ],
+      "selected_scheme_id": 5598,
+      "_loaded": true
+    },
+    {
+      "client_id": 219004,
+      "client_descr": "Viação Araçatuba",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5599,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "09/04/2026 13:03:27"
+        }
+      ],
+      "selected_scheme_id": 5599,
+      "_loaded": true
+    },
+    {
+      "client_id": 219005,
+      "client_descr": "Viação Pendotiba",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5600,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "19/02/2026 20:30:56"
+        }
+      ],
+      "selected_scheme_id": 5600,
+      "_loaded": true
+    },
+    {
+      "client_id": 219007,
+      "client_descr": "Rápido Araguaia",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5602,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "07/01/2026 12:58:21"
+        },
+        {
+          "vehicle_setting_id": 5611,
+          "vehicle_setting_name": "Default - Dallas",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "07/01/2026 12:58:29"
+        }
+      ],
+      "selected_scheme_id": 5611,
+      "_loaded": true
+    },
+    {
+      "client_id": 219008,
+      "client_descr": "Caribus",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5603,
+          "vehicle_setting_name": "Default - Caribus",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/04/2026 19:28:22"
+        },
+        {
+          "vehicle_setting_id": 5623,
+          "vehicle_setting_name": "Default - Caribus Disable Buzzer",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/04/2026 19:28:37"
+        }
+      ],
+      "selected_scheme_id": 5603,
+      "_loaded": true
+    },
+    {
+      "client_id": 219121,
+      "client_descr": "Positivo",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5609,
+          "vehicle_setting_name": "Positivo - Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "26/01/2026 18:46:43"
+        }
+      ],
+      "selected_scheme_id": 5609,
+      "_loaded": true
+    },
+    {
+      "client_id": 219145,
+      "client_descr": "TSL",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5610,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "23/05/2026 17:29:13"
+        },
+        {
+          "vehicle_setting_id": 5617,
+          "vehicle_setting_name": "Desativa Buzzer Maluco",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "15/01/2026 17:42:47"
+        }
+      ],
+      "selected_scheme_id": 5610,
+      "_loaded": true
+    },
+    {
+      "client_id": 219322,
+      "client_descr": "Francisconi",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5618,
+          "vehicle_setting_name": "Default - Francisconi",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "27/02/2026 14:19:43"
+        },
+        {
+          "vehicle_setting_id": 5630,
+          "vehicle_setting_name": "Default - Buzzer OFF",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "12/02/2026 20:18:35"
+        }
+      ],
+      "selected_scheme_id": 5618,
+      "_loaded": true
+    },
+    {
+      "client_id": 219406,
+      "client_descr": "XCMG",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5622,
+          "vehicle_setting_name": "Default - XCMG",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/03/2026 13:47:14"
+        }
+      ],
+      "selected_scheme_id": 5622,
+      "_loaded": true
+    },
+    {
+      "client_id": 219411,
+      "client_descr": "Transportadora Globo",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5625,
+          "vehicle_setting_name": "Default - Globo",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "09/03/2026 12:52:53"
+        },
+        {
+          "vehicle_setting_id": 5632,
+          "vehicle_setting_name": "Default - Globo buzzer off",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/03/2026 14:30:09"
+        },
+        {
+          "vehicle_setting_id": 5639,
+          "vehicle_setting_name": "Default - Globo Buzzer contínuo",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "23/05/2026 17:32:04"
+        }
+      ],
+      "selected_scheme_id": 5639,
+      "_loaded": true
+    },
+    {
+      "client_id": 219703,
+      "client_descr": "Colitur Transportes",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5636,
+          "vehicle_setting_name": "Colitur [não usar]",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "18/03/2026 19:22:03"
+        },
+        {
+          "vehicle_setting_id": 5641,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "20/04/2026 20:43:35"
+        }
+      ],
+      "selected_scheme_id": 5641,
+      "_loaded": true
+    },
+    {
+      "client_id": 219704,
+      "client_descr": "Viação Elite",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5637,
+          "vehicle_setting_name": "Elite [não usar]",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "18/03/2026 19:31:18"
+        },
+        {
+          "vehicle_setting_id": 5642,
+          "vehicle_setting_name": "Default",
+          "created_by_user_name": "Marcus_Prod",
+          "updated_at": "07/04/2026 11:51:08"
+        }
+      ],
+      "selected_scheme_id": 5642,
+      "_loaded": true
+    },
+    {
+      "client_id": 219752,
+      "client_descr": "Orizon",
+      "schemes": [
+        {
+          "vehicle_setting_id": 5648,
+          "vehicle_setting_name": "Default - Horizon",
+          "created_by_user_name": "Emanuel_Prod",
+          "updated_at": "22/05/2026 19:23:56"
+        }
+      ],
+      "selected_scheme_id": 5648,
+      "_loaded": true
+    }
+  ]
+}

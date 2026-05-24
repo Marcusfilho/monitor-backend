@@ -1,0 +1,124 @@
+{
+  "commands": [
+    {
+      "label": "UP",
+      "harness": "BACK",
+      "command": "(o2w,44,C614FC00000000000000FC0000000000000004000000)"
+    },
+    {
+      "label": "UP",
+      "harness": "FRONT",
+      "command": "(o2w,44,C6140400000000000000040000000000000004000000)"
+    },
+    {
+      "label": "UP",
+      "harness": "RIGHT",
+      "command": "(o2w,44,C6140000FC0000000400000000000000000004000000)"
+    },
+    {
+      "label": "UP",
+      "harness": "LEFT",
+      "command": "(o2w,44,C614000004000000FC00000000000000000004000000)"
+    },
+    {
+      "label": "FRONT",
+      "harness": "RIGHT",
+      "command": "(o2w,44,C61400000000FC000400000000000000FC0000000000)"
+    },
+    {
+      "label": "FRONT",
+      "harness": "DOWN",
+      "command": "(o2w,44,C61400000000FC000000040000000400000000000000)"
+    },
+    {
+      "label": "FRONT",
+      "harness": "LEFT",
+      "command": "(o2w,44,C61400000000FC00FC00000000000000040000000000)"
+    },
+    {
+      "label": "FRONT",
+      "harness": "UP",
+      "command": "(o2w,44,C61400000000FC000000FC000000FC00000000000000)"
+    },
+    {
+      "label": "LEFT",
+      "harness": "BACK",
+      "command": "(o2w,44,C614FC00000000000000000004000000040000000000)"
+    },
+    {
+      "label": "LEFT",
+      "harness": "FRONT",
+      "command": "(o2w,44,C61404000000000000000000FC000000040000000000)"
+    },
+    {
+      "label": "LEFT",
+      "harness": "DOWN",
+      "command": "(o2w,44,C6140000040000000000000004000400000000000000)"
+    },
+    {
+      "label": "LEFT",
+      "harness": "UP",
+      "command": "(o2w,44,C6140000FC000000000000000400FC00000000000000)"
+    },
+    {
+      "label": "RIGHT",
+      "harness": "DOWN",
+      "command": "(o2w,44,C6140000FC00000000000000FC000400000000000000)"
+    },
+    {
+      "label": "RIGHT",
+      "harness": "FRONT",
+      "command": "(o2w,44,C61404000000000000000000FC000000040000000000)"
+    },
+    {
+      "label": "RIGHT",
+      "harness": "BACK",
+      "command": "(o2w,44,C614FC000000000000000000FC000000FC0000000000)"
+    },
+    {
+      "label": "RIGHT",
+      "harness": "UP",
+      "command": "(o2w,44,C61400000400000000000000FC00FC00000000000000)"
+    },
+    {
+      "label": "BACK",
+      "harness": "DOWN",
+      "command": "(o2w,44,C6140000000004000000FC0000000400000000000000)"
+    },
+    {
+      "label": "BACK",
+      "harness": "UP",
+      "command": "(o2w,44,C614000000000400000004000000FC00000000000000)"
+    },
+    {
+      "label": "BACK",
+      "harness": "RIGHT",
+      "command": "(o2w,44,C6140000000004000400000000000000040000000000)"
+    },
+    {
+      "label": "BACK",
+      "harness": "LEFT",
+      "command": "(o2w,44,C614000000000400FC00000000000000FC0000000000)"
+    },
+    {
+      "label": "DOWN",
+      "harness": "FRONT",
+      "command": "(o2w,44,C6140400000000000000FC00000000000000FC000000)"
+    },
+    {
+      "label": "DOWN",
+      "harness": "BACK",
+      "command": "(o2w,44,C614FC000000000000000400000000000000FC000000)"
+    },
+    {
+      "label": "DOWN",
+      "harness": "LEFT",
+      "command": "(o2w,44,C6140000FC000000FC000000000000000000FC000000)"
+    },
+    {
+      "label": "DOWN",
+      "harness": "RIGHT",
+      "command": "(o2w,44,C61400000400000004000000000000000000FC000000)"
+    }
+  ]
+}

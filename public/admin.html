@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Monitor Backend (rewrite)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 20px; font-size: 13px; }
+  h1 { color: #aaa; font-size: 15px; margin-bottom: 4px; letter-spacing: 1px; }
+  .base-url-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 8px 10px;
+    background: #111; border: 1px solid #1e1e1e; border-radius: 3px; }
+  .base-url-bar label { color: #555; font-size: 11px; white-space: nowrap; }
+  .base-url-input { flex: 1; background: #0d0d0d; border: 1px solid #2a2a2a; color: #6da8d4;
+    font-family: monospace; font-size: 12px; padding: 4px 8px; border-radius: 3px; }
+  .base-url-input:focus { outline: none; border-color: #4a7aaa; }
+  .base-url-status { font-size: 11px; color: #555; white-space: nowrap; }
+  .base-url-status.ok  { color: #6dbf6d; }
+  .base-url-status.err { color: #f08080; }
+  button.test-btn { font-size: 11px; padding: 4px 10px; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid #1e1e1e; }
+  .tab-btn { background: transparent; color: #555; border: none; border-bottom: 2px solid transparent;
+    padding: 6px 18px; cursor: pointer; font-family: monospace; font-size: 12px; letter-spacing: 0.5px;
+    text-transform: uppercase; transition: color 0.15s; margin-bottom: -1px; }
+  .tab-btn:hover { color: #999; }
+  .tab-btn.active { color: #ccc; border-bottom-color: #555; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  button { background: #1e1e1e; color: #ccc; border: 1px solid #333; padding: 6px 14px; cursor: pointer;
+    border-radius: 3px; font-family: monospace; font-size: 12px; }
+  button:hover { background: #2a2a2a; border-color: #555; }
+  button.danger  { border-color: #7a2020; color: #f08080; }
+  button.danger:hover  { background: #2a1010; border-color: #c03030; }
+  button.primary { border-color: #2a4a6a; color: #6da8d4; }
+  button.primary:hover { background: #0f2030; border-color: #4a7aaa; }
+  button.success { border-color: #2a4a2a; color: #6dbf6d; }
+  button.success:hover { background: #0a120a; border-color: #4a7a4a; }
+  button:disabled, button.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+  .status-bar { font-size: 11px; color: #666; margin-left: auto; }
+  .section { margin-bottom: 24px; }
+  .section-title { color: #555; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .count-badge { background: #1a1a1a; border: 1px solid #2a2a2a; color: #666;
+    padding: 1px 7px; border-radius: 3px; font-size: 11px; }
+  .count-badge.active { border-color: #2a4a2a; color: #6dbf6d; }
+  .count-badge.info   { border-color: #2a3a4a; color: #6da8d4; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: #555; font-weight: normal; padding: 4px 8px;
+    border-bottom: 1px solid #1e1e1e; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  td { padding: 6px 8px; border-bottom: 1px solid #151515; vertical-align: middle; }
+  tr:hover td { background: #161616; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
+  .badge.queued      { background: #1a2a1a; color: #6dbf6d; border: 1px solid #2a4a2a; }
+  .badge.processing  { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
+  .badge.completed   { background: #1a1a1a; color: #444;    border: 1px solid #222; }
+  .badge.cancelled   { background: #1a1a1a; color: #444;    border: 1px solid #222; }
+  .badge.error       { background: #2a1010; color: #f08080; border: 1px solid #4a2020; }
+  .badge.pending     { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
+  .badge.sb-running,.badge.sb_running   { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
+  .badge.can-running,.badge.can_running { background: #1a2a2a; color: #6dbfbf; border: 1px solid #2a4a4a; }
+  .badge.html5-done,.badge.html5_done   { background: #1a2a1a; color: #6dbf6d; border: 1px solid #2a4a2a; }
+  .badge.html5-queued,.badge.html5_queued   { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
+  .badge.html5-running,.badge.html5_running { background: #1a1a2a; color: #6d9dbf; border: 1px solid #2a2a4a; }
+  .badge.waiting-reboot-can,.badge.waiting_reboot_can { background: #2a2a10; color: #c0b060; border: 1px solid #4a4a20; }
+  .id-cell    { color: #444; font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .plate-cell { color: #c8a96e; font-weight: bold; }
+  .type-cell  { color: #777; }
+  .empty { color: #333; padding: 16px 8px; text-align: center; font-size: 12px; }
+  .progress-bar { width: 70px; height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden;
+    display: inline-block; vertical-align: middle; margin-right: 5px; }
+  .progress-bar span { display: block; height: 100%; background: #3a6a3a; border-radius: 3px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a2a1a; border: 1px solid #2a4a2a;
+    color: #6dbf6d; padding: 8px 16px; border-radius: 3px; font-size: 12px;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 99; }
+  .toast.error { background: #2a1010; border-color: #4a2020; color: #f08080; }
+  .toast.show  { opacity: 1; }
+  .filter-btns { display: flex; gap: 4px; }
+  .filter-btn  { font-size: 11px; padding: 3px 10px; }
+  .filter-btn.active { border-color: #555; color: #ddd; }
+  .divider { border: none; border-top: 1px solid #1a1a1a; margin: 20px 0; }
+  .sync-card { background: #111; border: 1px solid #1e1e1e; border-radius: 4px; padding: 14px 16px;
+    margin-bottom: 14px; display: none; }
+  .sync-card.visible { display: block; }
+  .sync-card .sync-stats { display: flex; gap: 24px; margin-bottom: 12px; flex-wrap: wrap; }
+  .sync-stat .val { font-size: 20px; color: #6da8d4; font-weight: bold; }
+  .sync-stat .lbl { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sync-time { font-size: 10px; color: #444; margin-top: 4px; }
+  .model-search { background: #111; border: 1px solid #222; color: #ccc; font-family: monospace;
+    font-size: 12px; padding: 5px 10px; border-radius: 3px; width: 260px; }
+  .model-search:focus { outline: none; border-color: #444; }
+  .mfg-cell   { color: #9abfdf; }
+  .model-cell { color: #ccc; }
+  .id-num     { color: #444; font-size: 11px; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid #333;
+    border-top-color: #6da8d4; border-radius: 50%; animation: spin 0.7s linear infinite;
+    vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Schemes ── */
+  .schemes-toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  .scheme-search { background: #111; border: 1px solid #222; color: #ccc; font-family: monospace;
+    font-size: 12px; padding: 5px 10px; border-radius: 3px; width: 220px; }
+  .scheme-search:focus { outline: none; border-color: #444; }
+  .schemes-progress { font-size: 11px; color: #555; margin: 8px 0; }
+  .schemes-progress span { color: #6da8d4; }
+  .save-ok { color: #6dbf6d; font-size: 11px; opacity: 0; transition: opacity 0.4s; }
+  .save-ok.show { opacity: 1; }
+
+  .client-block { border: 1px solid #1a1a1a; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
+  .client-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: #111; cursor: pointer; user-select: none; }
+  .client-header:hover { background: #161616; }
+  .client-name   { color: #ccc; font-size: 12px; flex: 1; }
+  .client-id-lbl { color: #444; font-size: 11px; }
+  .client-badge  { font-size: 10px; padding: 1px 7px; border-radius: 3px;
+    border: 1px solid #2a3a4a; color: #6da8d4; background: #0d1a26; white-space: nowrap; }
+  .client-badge.none   { border-color: #3a2a10; color: #c08040; background: #1a1200; }
+  .client-badge.sel    { border-color: #2a4a2a; color: #6dbf6d; background: #0a120a; }
+  .client-badge.loading{ border-color: #2a2a2a; color: #555; background: #111; }
+  .client-chevron { color: #444; font-size: 10px; transition: transform 0.15s; flex-shrink: 0; }
+  .client-block.open .client-chevron { transform: rotate(90deg); }
+  .client-body { display: none; padding: 10px 12px; border-top: 1px solid #1a1a1a; background: #0d0d0d; }
+  .client-block.open .client-body { display: block; }
+  .client-actions { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+  .client-sync-btn { font-size: 11px; padding: 3px 10px; }
+  .client-save-btn { font-size: 11px; padding: 3px 10px; }
+  .client-sync-status { font-size: 11px; color: #555; }
+
+  .scheme-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+    border-radius: 3px; border: 1px solid #1a1a1a; margin-bottom: 4px;
+    background: #111; transition: border-color 0.15s; }
+  .scheme-row:hover { border-color: #2a2a2a; }
+  .scheme-row.selected { border-color: #2a4a2a; background: #0a120a; }
+  .scheme-radio { accent-color: #6dbf6d; width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+  .scheme-info  { flex: 1; min-width: 0; }
+  .scheme-name  { color: #c8c8c8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scheme-meta  { color: #444; font-size: 10px; margin-top: 2px; }
+  .scheme-id    { color: #3a6a9a; font-size: 11px; font-weight: bold; flex-shrink: 0; }
+  .no-schemes   { color: #555; font-size: 11px; padding: 6px 0; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>⚙ ADMIN — MONITOR BACKEND (rewrite)</h1>
+
+<div class="base-url-bar">
+  <label>API BASE URL</label>
+  <input class="base-url-input" id="base-url-input" type="text"
+    placeholder="https://xxx.trycloudflare.com  ou  http://localhost:3000"
+    oninput="saveBase()" />
+  <button class="test-btn primary" onclick="testConnection()">⚡ Testar</button>
+  <span class="base-url-status" id="base-url-status">—</span>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('jobs')">Jobs &amp; Instalações</button>
+  <button class="tab-btn" onclick="switchTab('models')">Modelos de Veículos</button>
+  <button class="tab-btn" onclick="switchTab('schemes')">Schemes por Cliente</button>
+</div>
+
+<!-- ═══════════════════════════════════════ TAB: JOBS -->
+<div class="tab-panel active" id="tab-jobs">
+  <div class="toolbar">
+    <button onclick="loadAll()">↻ Atualizar</button>
+    <button class="danger" onclick="killAll()">✕ Kill All</button>
+    <span class="status-bar" id="status-bar">—</span>
+  </div>
+  <div class="section">
+    <div class="section-title">
+      Jobs <span class="count-badge active" id="jobs-count">—</span>
+      <div class="filter-btns">
+        <button class="filter-btn active" id="fj-active" onclick="setJobFilter('active')">Ativos</button>
+        <button class="filter-btn" id="fj-all" onclick="setJobFilter('all')">Todos</button>
+      </div>
+    </div>
+    <table><thead>
+      <tr><th>ID</th><th>Tipo</th><th>Placa</th><th>Serial</th><th>Status</th><th>Progresso</th><th>Criado</th><th></th></tr>
+    </thead><tbody id="jobs-body"><tr><td colspan="8" class="empty">Carregando...</td></tr></tbody></table>
+  </div>
+  <hr class="divider">
+  <div class="section">
+    <div class="section-title">
+      Instalações <span class="count-badge active" id="inst-count">—</span>
+      <div class="filter-btns">
+        <button class="filter-btn active" id="fi-active" onclick="setInstFilter('active')">Ativas</button>
+        <button class="filter-btn" id="fi-all" onclick="setInstFilter('all')">Todas</button>
+      </div>
+    </div>
+    <table><thead>
+      <tr><th>ID</th><th>Placa</th><th>Serial</th><th>Status</th><th>Atualizado</th><th></th></tr>
+    </thead><tbody id="inst-body"><tr><td colspan="6" class="empty">Carregando...</td></tr></tbody></table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ TAB: MODELOS -->
+<div class="tab-panel" id="tab-models">
+  <div class="toolbar" style="margin-bottom:16px">
+    <button class="primary" id="btn-sync" onclick="syncModels()">⟳ Sincronizar Modelos</button>
+    <button onclick="loadCurrentModels()">↻ Ver Lista Atual</button>
+    <span class="status-bar" id="status-models">—</span>
+  </div>
+  <p style="color:#444;font-size:11px;margin-bottom:14px;line-height:1.6">
+    Faz match entre <strong style="color:#666">catalog_vehicle_type.json</strong> (modelos em uso) e
+    <strong style="color:#666">ASSET_TYPES</strong> (catálogo Traffilog). Salva em
+    <code style="color:#6da8d4">config/asset_types_active.json</code> na VM — persiste entre reinicializações.
+  </p>
+  <div class="sync-card" id="sync-card">
+    <div class="sync-stats">
+      <div class="sync-stat"><div class="val" id="stat-matched">—</div><div class="lbl">Modelos salvos</div></div>
+      <div class="sync-stat"><div class="val" id="stat-vhcls">—</div><div class="lbl">IDs no catálogo local</div></div>
+      <div class="sync-stat"><div class="val" id="stat-catalog">—</div><div class="lbl">Total Traffilog</div></div>
+    </div>
+    <div class="sync-time" id="sync-time"></div>
+  </div>
+  <div class="section">
+    <div class="section-title">
+      Lista de Modelos <span class="count-badge info" id="models-count">—</span>
+      <input class="model-search" id="model-search" type="text"
+        placeholder="Buscar fabricante ou modelo..." oninput="filterModels()" />
+    </div>
+    <table><thead>
+      <tr><th>ID</th><th>Fabricante</th><th>Modelo</th><th>Sub-modelo</th></tr>
+    </thead><tbody id="models-body">
+      <tr><td colspan="4" class="empty">Execute a sincronização ou clique em "Ver Lista Atual".</td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ TAB: SCHEMES -->
+<div class="tab-panel" id="tab-schemes">
+
+  <div class="schemes-toolbar">
+    <button class="primary" id="btn-sync-all" onclick="syncAllClients()">⟳ Sincronizar Todos</button>
+    <button onclick="loadCurrentSchemes()">↻ Ver Lista Salva</button>
+    <button class="success" id="btn-save-all" onclick="saveAllSchemes()" style="display:none">💾 Salvar Tudo</button>
+    <span class="save-ok" id="save-ok">✓ Salvo</span>
+    <input class="scheme-search" id="scheme-search" type="text"
+      placeholder="Buscar cliente..." oninput="filterSchemes()" style="margin-left:auto"/>
+    <span class="status-bar" id="status-schemes">—</span>
+  </div>
+
+  <p style="color:#444;font-size:11px;margin-bottom:12px;line-height:1.6">
+    Seleção salva em <code style="color:#6da8d4">config/schemes_selection.json</code> na VM —
+    <strong style="color:#6dbf6d">persiste entre reinicializações</strong>.
+    Use <strong style="color:#666">⟳</strong> em cada cliente para atualizar apenas aquele e salvar individualmente.
+  </p>
+
+  <div class="schemes-progress" id="schemes-progress" style="display:none">
+    Processando cliente <span id="prog-current">0</span> de <span id="prog-total">0</span>...
+  </div>
+
+  <div id="schemes-list">
+    <div class="empty" style="padding:24px">Execute a sincronização ou clique em "Ver Lista Salva".</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── BASE URL ────────────────────────────────────────────────────────────────
+const LS_KEY = 'monitor_admin_base';
+let BASE = localStorage.getItem(LS_KEY) || 'http://localhost:3000';
+document.getElementById('base-url-input').value = BASE;
+
+function saveBase() {
+  BASE = document.getElementById('base-url-input').value.trim().replace(/\/$/, '');
+  localStorage.setItem(LS_KEY, BASE);
+  document.getElementById('base-url-status').textContent = '—';
+  document.getElementById('base-url-status').className = 'base-url-status';
+}
+
+async function testConnection() {
+  const el = document.getElementById('base-url-status');
+  el.textContent = 'testando...'; el.className = 'base-url-status';
+  const t0 = Date.now();
+  try {
+    const r = await fetch(BASE + '/health', { signal: AbortSignal.timeout(8000) });
+    const d = await r.json();
+    const ms = Date.now() - t0;
+    el.textContent = d.ok ? `✓ conectado (${ms}ms)` : '⚠ resposta inesperada';
+    el.className = 'base-url-status ' + (d.ok ? 'ok' : 'err');
+  } catch(e) {
+    el.textContent = `✗ ${e.message}`; el.className = 'base-url-status err';
+  }
+}
+
+// ── State ───────────────────────────────────────────────────────────────────
+let allJobs = [], allInst = [];
+let jobFilter = 'active', instFilter = 'active';
+let allModels = [], filteredModels = [];
+// allClients: [{client_id, client_descr, schemes:[], selected_scheme_id, _loaded:bool}]
+let allClients = [], filteredClients = [];
+
+const ACTIVE_JOB  = ['queued','processing','pending'];
+const ACTIVE_INST = ['HTML5_QUEUED','HTML5_RUNNING','SB_QUEUED','SB_RUNNING',
+                     'CAN_QUEUED','CAN_RUNNING','WAITING_REBOOT_CAN',
+                     'GS_QUEUED','GS_RUNNING','HTML5_DONE','SB_DONE'];
+
+// ── Tabs ────────────────────────────────────────────────────────────────────
+const TAB_NAMES = ['jobs','models','schemes'];
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) =>
+    b.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── Jobs ────────────────────────────────────────────────────────────────────
+function setJobFilter(f) {
+  jobFilter = f;
+  document.getElementById('fj-active').classList.toggle('active', f==='active');
+  document.getElementById('fj-all').classList.toggle('active', f==='all');
+  renderJobs();
+}
+function setInstFilter(f) {
+  instFilter = f;
+  document.getElementById('fi-active').classList.toggle('active', f==='active');
+  document.getElementById('fi-all').classList.toggle('active', f==='all');
+  renderInst();
+}
+
+async function loadAll() {
+  setStatus('atualizando...');
+  try {
+    const [rj, ri] = await Promise.all([
+      fetch(BASE + '/api/admin/jobs').then(r=>r.json()),
+      fetch(BASE + '/api/admin/installations').then(r=>r.json())
+    ]);
+    allJobs = (rj.jobs || []).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    allInst = (ri.installations || []).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
+    renderJobs(); renderInst();
+    setStatus('atualizado ' + new Date().toLocaleTimeString('pt-BR'));
+  } catch(e) {
+    setStatus('erro: ' + e.message);
+    toast('Erro ao carregar — verifique a BASE URL', true);
+  }
+}
+
+function renderJobs() {
+  const jobs = jobFilter === 'active' ? allJobs.filter(j=>ACTIVE_JOB.includes(j.status)) : allJobs;
+  const active = allJobs.filter(j=>ACTIVE_JOB.includes(j.status));
+  const badge = document.getElementById('jobs-count');
+  badge.textContent = active.length + ' ativo' + (active.length!==1?'s':'');
+  badge.className = 'count-badge' + (active.length?' active':'');
+  const tbody = document.getElementById('jobs-body');
+  if (!jobs.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">${jobFilter==='active'?'Nenhum job ativo.':'Nenhum job.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = jobs.map(j => {
+    const pct = j.progressPercent ?? null;
+    const plate  = j.plate  || j.payload?.plate_real || j.payload?.plate || '—';
+    const serial = j.serial || j.payload?.serial || '—';
+    const progressHtml = pct !== null
+      ? `<div class="progress-bar"><span style="width:${Math.min(100,pct)}%"></span></div>${pct}%`
+      : `<span style="color:#333">—</span>`;
+    const canCancel = ACTIVE_JOB.includes(j.status);
+    const stClass = (j.status||'').replace(/_/g,'-').toLowerCase();
+    return `<tr>
+      <td class="id-cell" title="${j.id}">${j.id}</td>
+      <td class="type-cell">${j.type||'—'}</td>
+      <td class="plate-cell">${plate}</td>
+      <td style="color:#666">${serial}</td>
+      <td><span class="badge ${stClass}">${j.status}</span></td>
+      <td>${progressHtml}</td>
+      <td style="color:#444">${fmtDate(j.createdAt)}</td>
+      <td>${canCancel
+        ? `<button class="danger" style="padding:3px 8px;font-size:11px" onclick="cancelJob('${j.id}')">✕</button>`
+        : `<button disabled style="padding:3px 8px;font-size:11px">✕</button>`}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderInst() {
+  const list = instFilter === 'active'
+    ? allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase())) : allInst;
+  const active = allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+  const badge = document.getElementById('inst-count');
+  badge.textContent = active.length + ' ativa' + (active.length!==1?'s':'');
+  badge.className = 'count-badge' + (active.length?' active':'');
+  const tbody = document.getElementById('inst-body');
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">${instFilter==='active'?'Nenhuma ativa.':'Nenhuma.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(i => {
+    const id = i.installation_id || i.id || '';
+    const plate  = i.payload?.plate_real || i.payload?.plateReal || i.payload?.plate || '—';
+    const serial = i.payload?.serial || i.serial || '—';
+    const stClass = String(i.status||'').toLowerCase().replace(/_/g,'-');
+    const isActive = ACTIVE_INST.includes(String(i.status||'').toUpperCase());
+    return `<tr>
+      <td class="id-cell" title="${id}">${id}</td>
+      <td class="plate-cell">${plate}</td>
+      <td style="color:#666">${serial}</td>
+      <td><span class="badge ${stClass}">${i.status||'—'}</span></td>
+      <td style="color:#444">${fmtDate(i.updated_at)}</td>
+      <td>${isActive
+        ? `<button class="danger" style="padding:3px 8px;font-size:11px" onclick="cancelInst('${id}')">✕</button>`
+        : `<button disabled style="padding:3px 8px;font-size:11px">✕</button>`}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function cancelJob(id) {
+  try {
+    const r = await fetch(`${BASE}/api/admin/jobs/${id}/cancel`, {method:'POST'});
+    const d = await r.json();
+    d.ok ? toast('Job cancelado') : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+    await loadAll();
+  } catch(e) { toast('Erro: '+e.message, true); }
+}
+async function cancelInst(id) {
+  try {
+    const r = await fetch(`${BASE}/api/admin/installations/${id}/cancel`, {method:'POST'});
+    const d = await r.json();
+    d.ok ? toast('Instalação cancelada') : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+    await loadAll();
+  } catch(e) { toast('Erro: '+e.message, true); }
+}
+async function killAll() {
+  const aj = allJobs.filter(j=>ACTIVE_JOB.includes(j.status));
+  const ai = allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+  if (!aj.length && !ai.length) { toast('Nada ativo para cancelar'); return; }
+  if (!confirm(`Cancelar ${aj.length} job(s) e ${ai.length} instalação(ões)?`)) return;
+  let ok=0, fail=0;
+  for (const j of aj) {
+    try { const d=await fetch(`${BASE}/api/admin/jobs/${j.id}/cancel`,{method:'POST'}).then(r=>r.json()); d.ok?ok++:fail++; } catch{fail++;}
+  }
+  for (const i of ai) {
+    const id = i.installation_id||i.id;
+    try { const d=await fetch(`${BASE}/api/admin/installations/${id}/cancel`,{method:'POST'}).then(r=>r.json()); d.ok?ok++:fail++; } catch{fail++;}
+  }
+  toast(`Kill all: ${ok} cancelados${fail?', '+fail+' falha(s)':''}`, fail>0);
+  await loadAll();
+}
+
+// ── Modelos ─────────────────────────────────────────────────────────────────
+async function syncModels() {
+  const btn = document.getElementById('btn-sync');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sincronizando...';
+  setStatusModels('buscando ASSET_TYPES — aguarde ~15-30s...');
+  try {
+    const r = await fetch(`${BASE}/api/admin/asset-types/sync`, {method:'POST'});
+    const d = await r.json();
+    if (!d.ok) { toast('Erro: '+(d.error||JSON.stringify(d)), true); setStatusModels('erro'); return; }
+    showSyncCard(d);
+    allModels = d.asset_types || []; filteredModels = allModels;
+    document.getElementById('model-search').value = '';
+    renderModels(allModels);
+    setStatusModels(`sincronizado ${fmtDate(d.generated_at)}`);
+    toast(`${d.total_matched} modelos salvos`);
+  } catch(e) { toast('Erro: '+e.message,true); setStatusModels('erro: '+e.message); }
+  finally { btn.disabled=false; btn.innerHTML='⟳ Sincronizar Modelos'; }
+}
+async function loadCurrentModels() {
+  setStatusModels('carregando...');
+  try {
+    const r = await fetch(`${BASE}/api/admin/asset-types`);
+    if (r.status===404) { setStatusModels('nenhum JSON salvo'); toast('Execute a sincronização primeiro',true); return; }
+    const d = await r.json();
+    showSyncCard(d);
+    allModels = d.asset_types||[]; filteredModels=allModels;
+    document.getElementById('model-search').value='';
+    renderModels(allModels);
+    setStatusModels(`lista de ${fmtDate(d.generated_at)}`);
+  } catch(e) { toast('Erro: '+e.message,true); setStatusModels('erro'); }
+}
+function showSyncCard(d) {
+  document.getElementById('stat-matched').textContent = d.total_matched??'—';
+  document.getElementById('stat-vhcls').textContent   = d.total_vhcls_ids??'—';
+  document.getElementById('stat-catalog').textContent = d.total_catalog??'—';
+  document.getElementById('sync-time').textContent    = d.generated_at ? 'Gerado em: '+new Date(d.generated_at).toLocaleString('pt-BR') : '';
+  document.getElementById('sync-card').classList.add('visible');
+}
+function filterModels() {
+  const q = document.getElementById('model-search').value.toLowerCase();
+  filteredModels = q ? allModels.filter(m =>
+    (m.manufacturer||'').toLowerCase().includes(q) ||
+    (m.model||'').toLowerCase().includes(q) ||
+    (m.sub_model||'').toLowerCase().includes(q) ||
+    String(m.id).includes(q)) : allModels;
+  renderModels(filteredModels);
+}
+function renderModels(list) {
+  document.getElementById('models-count').textContent = list.length+' modelo'+(list.length!==1?'s':'');
+  const tbody = document.getElementById('models-body');
+  if (!list.length) { tbody.innerHTML=`<tr><td colspan="4" class="empty">Nenhum modelo.</td></tr>`; return; }
+  tbody.innerHTML = list.map(m=>`<tr>
+    <td class="id-num">${m.id}</td>
+    <td class="mfg-cell">${esc(m.manufacturer)}</td>
+    <td class="model-cell">${esc(m.model)}</td>
+    <td style="color:#555">${esc(m.sub_model||'')}</td>
+  </tr>`).join('');
+}
+
+// ── Schemes — lógica por cliente individual ──────────────────────────────────
+
+// Sincronizar TODOS os clientes sequencialmente
+async function syncAllClients() {
+  const btn = document.getElementById('btn-sync-all');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Buscando...';
+  document.getElementById('schemes-progress').style.display='block';
+  document.getElementById('btn-save-all').style.display='none';
+  setStatusSchemes('buscando lista de clientes...');
+
+  // Preservar seleções salvas
+  let saved = {};
+  try {
+    const rs = await fetch(`${BASE}/api/admin/schemes`);
+    if (rs.ok) { const ds=await rs.json(); (ds.clients||[]).forEach(c=>{if(c.selected_scheme_id) saved[c.client_id]=c.selected_scheme_id;}); }
+  } catch(_){}
+
+  try {
+    const rc = await fetch(`${BASE}/api/admin/schemes/clients`);
+    const dc = await rc.json();
+    if (!dc.ok) throw new Error(dc.error||'erro ao buscar clientes');
+
+    const clients = dc.clients;
+    document.getElementById('prog-total').textContent = clients.length;
+    setStatusSchemes(`${clients.length} clientes — buscando schemes...`);
+
+    const result = [];
+    for (let i=0; i<clients.length; i++) {
+      const c = clients[i];
+      document.getElementById('prog-current').textContent = i+1;
+      let schemes = [];
+      try {
+        const rs = await fetch(`${BASE}/api/admin/schemes/client/${c.client_id}`);
+        const ds = await rs.json();
+        if (ds.ok) schemes = ds.schemes||[];
+      } catch(_){}
+      const selected = saved[c.client_id] || (schemes.length===1 ? schemes[0].vehicle_setting_id : null);
+      result.push({ client_id: c.client_id, client_descr: c.client_descr, schemes, selected_scheme_id: selected, _loaded: true });
+    }
+
+    allClients = result; filteredClients = allClients;
+    renderSchemesList(filteredClients);
+    document.getElementById('btn-save-all').style.display='';
+    document.getElementById('scheme-search').value='';
+    const total = allClients.reduce((a,c)=>a+c.schemes.length,0);
+    setStatusSchemes(`${allClients.length} clientes, ${total} schemes — não salvo ainda`);
+    toast(`Sync concluído: ${allClients.length} clientes`);
+  } catch(e) {
+    toast('Erro: '+e.message,true); setStatusSchemes('erro: '+e.message);
+  } finally {
+    btn.disabled=false; btn.innerHTML='⟳ Sincronizar Todos';
+    document.getElementById('schemes-progress').style.display='none';
+  }
+}
+
+// Carregar lista salva do disco
+async function loadCurrentSchemes() {
+  setStatusSchemes('carregando...');
+  try {
+    const r = await fetch(`${BASE}/api/admin/schemes`);
+    if (r.status===404) { setStatusSchemes('nenhum JSON salvo'); toast('Execute a sincronização primeiro',true); return; }
+    const d = await r.json();
+    allClients = (d.clients||[]).map(c=>({...c, _loaded:true}));
+    filteredClients = allClients;
+    renderSchemesList(filteredClients);
+    document.getElementById('btn-save-all').style.display='';
+    document.getElementById('scheme-search').value='';
+    const total = allClients.reduce((a,c)=>a+c.schemes.length,0);
+    setStatusSchemes(`salvo em ${fmtDate(d.generated_at)} — ${allClients.length} clientes, ${total} schemes`);
+  } catch(e) { toast('Erro: '+e.message,true); setStatusSchemes('erro'); }
+}
+
+// Sincronizar schemes de UM cliente e salvar imediatamente
+async function syncOneClient(clientId) {
+  const btn = document.getElementById(`sync-btn-${clientId}`);
+  const statusEl = document.getElementById(`sync-status-${clientId}`);
+  if (btn) { btn.disabled=true; btn.innerHTML='<span class="spin"></span>'; }
+  if (statusEl) statusEl.textContent = 'buscando...';
+
+  try {
+    const rs = await fetch(`${BASE}/api/admin/schemes/client/${clientId}`);
+    const ds = await rs.json();
+    if (!ds.ok) throw new Error(ds.error||'erro');
+
+    const schemes = ds.schemes||[];
+    const client = allClients.find(c=>c.client_id==clientId);
+    if (!client) throw new Error('cliente não encontrado na lista local');
+
+    // Preservar seleção se ainda existe, senão auto-selecionar se único
+    const stillValid = client.selected_scheme_id &&
+      schemes.some(s=>s.vehicle_setting_id==client.selected_scheme_id);
+    client.schemes = schemes;
+    client._loaded = true;
+    if (!stillValid) {
+      client.selected_scheme_id = schemes.length===1 ? schemes[0].vehicle_setting_id : null;
+    }
+
+    // Re-renderizar apenas o corpo deste cliente
+    renderClientBody(clientId);
+
+    // Salvar imediatamente no disco
+    await saveAllSchemes(true);
+
+    if (statusEl) statusEl.textContent = `✓ ${schemes.length} scheme${schemes.length!==1?'s':''} — salvo`;
+    toast(`Cliente ${clientId}: ${schemes.length} schemes atualizados e salvos`);
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '✗ erro: '+e.message;
+    toast('Erro ao sincronizar cliente: '+e.message, true);
+  } finally {
+    if (btn) { btn.disabled=false; btn.innerHTML='⟳'; }
+  }
+}
+
+// Salvar TODOS os schemes no disco
+async function saveAllSchemes(silent=false) {
+  try {
+    const r = await fetch(`${BASE}/api/admin/schemes`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ clients: allClients })
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error||JSON.stringify(d));
+    if (!silent) {
+      const el = document.getElementById('save-ok');
+      el.classList.add('show');
+      setTimeout(()=>el.classList.remove('show'),2500);
+      toast('Seleção salva ✓ (persistida na VM)');
+    }
+    const total = allClients.reduce((a,c)=>a+c.schemes.length,0);
+    setStatusSchemes(`${allClients.length} clientes, ${total} schemes — salvo ${fmtDate(new Date().toISOString())}`);
+  } catch(e) {
+    if (!silent) toast('Erro ao salvar: '+e.message, true);
+    throw e;
+  }
+}
+
+function filterSchemes() {
+  const q = document.getElementById('scheme-search').value.toLowerCase().trim();
+  filteredClients = q
+    ? allClients.filter(c=>c.client_descr.toLowerCase().includes(q)||String(c.client_id).includes(q))
+    : allClients;
+  renderSchemesList(filteredClients);
+}
+
+function renderSchemesList(list) {
+  const container = document.getElementById('schemes-list');
+  if (!list.length) { container.innerHTML='<div class="empty" style="padding:16px">Nenhum cliente.</div>'; return; }
+  container.innerHTML = list.map(c => clientBlockHtml(c)).join('');
+}
+
+function clientBlockHtml(c) {
+  const hasSchemes = c._loaded && c.schemes && c.schemes.length>0;
+  const notLoaded  = !c._loaded;
+  const badgeClass = notLoaded ? ' loading' : (hasSchemes ? '' : ' none');
+  const badgeText  = notLoaded ? 'não carregado' : (hasSchemes ? `${c.schemes.length} scheme${c.schemes.length>1?'s':''}` : 'sem schemes');
+  const selBadge   = c.selected_scheme_id
+    ? `<span class="client-badge sel">✓ #${c.selected_scheme_id}</span>` : '';
+
+  return `<div class="client-block" id="cblock-${c.client_id}">
+    <div class="client-header" onclick="toggleClient(${c.client_id})">
+      <span class="client-chevron">▶</span>
+      <span class="client-name">${esc(c.client_descr)}</span>
+      <span class="client-id-lbl">${c.client_id}</span>
+      <span class="client-badge${badgeClass}">${badgeText}</span>
+      ${selBadge}
+    </div>
+    <div class="client-body" id="cbody-${c.client_id}">
+      ${clientBodyHtml(c)}
+    </div>
+  </div>`;
+}
+
+function clientBodyHtml(c) {
+  const schemesHtml = !c._loaded
+    ? `<div class="no-schemes">Clique em ⟳ para carregar os schemes deste cliente.</div>`
+    : (c.schemes && c.schemes.length>0
+      ? c.schemes.map(s => {
+          const checked = c.selected_scheme_id==s.vehicle_setting_id ? 'checked' : '';
+          const selClass = checked ? ' selected' : '';
+          return `<div class="scheme-row${selClass}" id="row-${c.client_id}-${s.vehicle_setting_id}">
+            <input type="radio" class="scheme-radio"
+              name="scheme-${c.client_id}" value="${s.vehicle_setting_id}" ${checked}
+              onchange="selectScheme(${c.client_id},${s.vehicle_setting_id})" />
+            <div class="scheme-info">
+              <div class="scheme-name">${esc(s.vehicle_setting_name)}</div>
+              <div class="scheme-meta">por ${esc(s.created_by_user_name||'—')} · ${esc(s.updated_at||'—')}</div>
+            </div>
+            <div class="scheme-id">#${s.vehicle_setting_id}</div>
+          </div>`;
+        }).join('')
+      : '<div class="no-schemes">Nenhum scheme disponível para este cliente.</div>');
+
+  return `<div class="client-actions">
+    <button class="client-sync-btn primary" id="sync-btn-${c.client_id}"
+      onclick="event.stopPropagation(); syncOneClient(${c.client_id})">⟳ Atualizar</button>
+    <span class="client-sync-status" id="sync-status-${c.client_id}"></span>
+  </div>
+  ${schemesHtml}`;
+}
+
+// Re-renderizar apenas o corpo de um cliente (sem recriar o bloco inteiro)
+function renderClientBody(clientId) {
+  const client = allClients.find(c=>c.client_id==clientId);
+  if (!client) return;
+
+  // Atualizar body
+  const bodyEl = document.getElementById(`cbody-${clientId}`);
+  if (bodyEl) bodyEl.innerHTML = clientBodyHtml(client);
+
+  // Atualizar badges do header
+  const block = document.getElementById(`cblock-${clientId}`);
+  if (!block) return;
+  const badges = block.querySelectorAll('.client-badge');
+  badges.forEach(b => b.remove());
+  const header = block.querySelector('.client-header');
+  const hasSchemes = client.schemes && client.schemes.length>0;
+  const b1 = document.createElement('span');
+  b1.className = 'client-badge' + (hasSchemes ? '' : ' none');
+  b1.textContent = hasSchemes ? `${client.schemes.length} scheme${client.schemes.length>1?'s':''}` : 'sem schemes';
+  header.appendChild(b1);
+  if (client.selected_scheme_id) {
+    const b2 = document.createElement('span');
+    b2.className = 'client-badge sel';
+    b2.textContent = `✓ #${client.selected_scheme_id}`;
+    header.appendChild(b2);
+  }
+}
+
+function toggleClient(clientId) {
+  const block = document.getElementById('cblock-' + clientId);
+  if (block) block.classList.toggle('open');
+}
+
+function selectScheme(clientId, schemeId) {
+  const client = allClients.find(c=>c.client_id==clientId);
+  if (client) client.selected_scheme_id = schemeId;
+
+  const block = document.getElementById('cblock-'+clientId);
+  if (!block) return;
+  block.querySelectorAll('.scheme-row').forEach(r=>r.classList.remove('selected'));
+  const sel = document.getElementById(`row-${clientId}-${schemeId}`);
+  if (sel) sel.classList.add('selected');
+  block.querySelectorAll('.client-badge.sel').forEach(b=>b.remove());
+  const badge = document.createElement('span');
+  badge.className = 'client-badge sel';
+  badge.textContent = `✓ #${schemeId}`;
+  block.querySelector('.client-header').appendChild(badge);
+}
+
+// ── Utils ───────────────────────────────────────────────────────────────────
+function setStatus(msg)        { document.getElementById('status-bar').textContent     = msg; }
+function setStatusModels(msg)  { document.getElementById('status-models').textContent  = msg; }
+function setStatusSchemes(msg) { document.getElementById('status-schemes').textContent = msg; }
+
+let toastTimer;
+function toast(msg, isError=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast'+(isError?' error':'')+' show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 3500);
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})
+    + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Auto-refresh jobs a cada 8s quando há ativos
+setInterval(() => {
+  const hasActive = allJobs.some(j=>ACTIVE_JOB.includes(j.status))
+                 || allInst.some(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+  if (hasActive && document.getElementById('tab-jobs').classList.contains('active')) loadAll();
+}, 8000);
+
+loadAll();
+</script>
+</body>
+</html>

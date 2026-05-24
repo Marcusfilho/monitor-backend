@@ -1,0 +1,1299 @@
+{
+  "ok": true,
+  "generated_at": "2026-05-24T17:30:47.918Z",
+  "total_matched": 215,
+  "total_vhcls_ids": 215,
+  "total_catalog": 9463,
+  "asset_types": [
+    {
+      "id": 23765,
+      "manufacturer": "ANKAI",
+      "model": "G9 OE10",
+      "sub_model": "G9 OE10"
+    },
+    {
+      "id": 23766,
+      "manufacturer": "ANKAI",
+      "model": "G9 OE12",
+      "sub_model": "G9 OE12"
+    },
+    {
+      "id": 23764,
+      "manufacturer": "ANKAI",
+      "model": "G9 OE6",
+      "sub_model": "G9 OE6"
+    },
+    {
+      "id": 23778,
+      "manufacturer": "ANKAI",
+      "model": "G9 OE8",
+      "sub_model": "G9 OE8"
+    },
+    {
+      "id": 24307,
+      "manufacturer": "BYD",
+      "model": "EVBUS-D11A41.820-8x2",
+      "sub_model": "EVBUS-D11A41.820-8x2"
+    },
+    {
+      "id": 24333,
+      "manufacturer": "BYD",
+      "model": "Mini Dolphin",
+      "sub_model": "QBR Mini Dolphin"
+    },
+    {
+      "id": 1155,
+      "manufacturer": "Caterpillar",
+      "model": "320GC",
+      "sub_model": "320GC"
+    },
+    {
+      "id": 24329,
+      "manufacturer": "Caterpillar",
+      "model": "950L",
+      "sub_model": "950L"
+    },
+    {
+      "id": 3363,
+      "manufacturer": "Caterpillar",
+      "model": "980",
+      "sub_model": "980"
+    },
+    {
+      "id": 23565,
+      "manufacturer": "DAF",
+      "model": "CF-290-M-6x2",
+      "sub_model": "CF-290-M-6x2"
+    },
+    {
+      "id": 306,
+      "manufacturer": "DAF",
+      "model": "CF-290-R-6x2",
+      "sub_model": "CF-290-R-6x2"
+    },
+    {
+      "id": 23852,
+      "manufacturer": "DAF",
+      "model": "CF-FAS-310-M-6x2",
+      "sub_model": "CF-FAS-310-M-6x2"
+    },
+    {
+      "id": 2239,
+      "manufacturer": "DAF",
+      "model": "CF-FAS-R-300-6x2",
+      "sub_model": "CF-FAS-R-300-6x2"
+    },
+    {
+      "id": 21616,
+      "manufacturer": "DAF",
+      "model": "DAF-XF530-R-FTT-6x4",
+      "sub_model": "DAF-XF530-R-FTT-6x4-BRF"
+    },
+    {
+      "id": 21257,
+      "manufacturer": "DAF",
+      "model": "FAD-CF480-MX355-R-PTO2-8X4T",
+      "sub_model": "FAD-CF480-MX355-R-PTO2-8X4T"
+    },
+    {
+      "id": 21256,
+      "manufacturer": "DAF",
+      "model": "FTP-CF85.430-MX315-R-PTO2-6X2P",
+      "sub_model": "FTP-CF85.430-MX315-R-PTO2-6X2P"
+    },
+    {
+      "id": 4332,
+      "manufacturer": "DAF",
+      "model": "XF-FT-480-MX355-R-4x2",
+      "sub_model": "XF-FT-480-MX355-R-4x2"
+    },
+    {
+      "id": 311,
+      "manufacturer": "DAF",
+      "model": "XF-FTS-480-MX355-R-6X2",
+      "sub_model": "XF-FTS-480-MX355-R-6X2"
+    },
+    {
+      "id": 8610,
+      "manufacturer": "DAF",
+      "model": "XF105.460.FTS-MX13-R-6x4",
+      "sub_model": "XF105.460.FTS-MX13-R-6x4"
+    },
+    {
+      "id": 23683,
+      "manufacturer": "DAF",
+      "model": "XF105.480.FTS-MX13-R 6x2",
+      "sub_model": "XF105.480.FTS-MX13-R 6x2"
+    },
+    {
+      "id": 23139,
+      "manufacturer": "DAF",
+      "model": "XF450FT-MX13.355-R-UP-4x2T",
+      "sub_model": "XF450FT-MX13.355-R-UP-4x2T"
+    },
+    {
+      "id": 24306,
+      "manufacturer": "Eletra",
+      "model": "Scania-Induscar-Caio-Millenium",
+      "sub_model": "Scania-Induscar-Caio-Millenium"
+    },
+    {
+      "id": 24324,
+      "manufacturer": "Farizon",
+      "model": "V6E",
+      "sub_model": "V6E"
+    },
+    {
+      "id": 24326,
+      "manufacturer": "Fiat",
+      "model": "Strada Worker HD",
+      "sub_model": "Strada Worker HD"
+    },
+    {
+      "id": 8580,
+      "manufacturer": "Ford",
+      "model": "Cargo-2422E-M-6x2",
+      "sub_model": "Cargo-2422E-M-6x2"
+    },
+    {
+      "id": 6461,
+      "manufacturer": "Ford",
+      "model": "CARGO-2842-A-6X2",
+      "sub_model": "CARGO-2842-A-6X2"
+    },
+    {
+      "id": 5806,
+      "manufacturer": "Ford",
+      "model": "Cargo-815e-M-PTO2-6x2",
+      "sub_model": "Cargo-815e-M-PTO2-6x2"
+    },
+    {
+      "id": 24285,
+      "manufacturer": "Foton",
+      "model": "Ewonder Chassi SZX",
+      "sub_model": "Ewonder Chassi SZX"
+    },
+    {
+      "id": 24284,
+      "manufacturer": "Foton",
+      "model": "Iblue EV 6T",
+      "sub_model": "Iblue EV 6T"
+    },
+    {
+      "id": 8807,
+      "manufacturer": "Iveco",
+      "model": "BUS-170S28-M-4x2-E5",
+      "sub_model": "BUS-170S28-M-4x2-E5"
+    },
+    {
+      "id": 4490,
+      "manufacturer": "Iveco",
+      "model": "Daily 35S14HDCS - M",
+      "sub_model": "Daily 35S14HDCS - M"
+    },
+    {
+      "id": 24289,
+      "manufacturer": "Iveco",
+      "model": "Daily-30VAN-M-4x2-E6",
+      "sub_model": "Daily-30VAN-M-4x2-E6"
+    },
+    {
+      "id": 24291,
+      "manufacturer": "Iveco",
+      "model": "Iveco Tector 170E30-M-4x2",
+      "sub_model": "Iveco Tector 170E30-M-4x2"
+    },
+    {
+      "id": 23385,
+      "manufacturer": "Iveco",
+      "model": "S-WAY-480-C11-6x2-R-UP",
+      "sub_model": "S-WAY-480-C11-6x2-R-UP"
+    },
+    {
+      "id": 23382,
+      "manufacturer": "Iveco",
+      "model": "S-WAY-540-C13-6x2-R-UP",
+      "sub_model": "S-WAY-540-C13-6x2-R-UP"
+    },
+    {
+      "id": 23860,
+      "manufacturer": "Iveco",
+      "model": "Stralis-460S-36T-M",
+      "sub_model": "Stralis-460S-36T-M"
+    },
+    {
+      "id": 7547,
+      "manufacturer": "Iveco",
+      "model": "Stralis-480-800S48TZ-M-6x4",
+      "sub_model": "Stralis-480-800S48TZ-M-6x4"
+    },
+    {
+      "id": 6463,
+      "manufacturer": "Iveco",
+      "model": "Stralis-490S41T-C13-M-UP-6x2",
+      "sub_model": "Stralis-490S41T-C13-M-UP-6x2"
+    },
+    {
+      "id": 23807,
+      "manufacturer": "Iveco",
+      "model": "Stralis-570s41T-M-6x2",
+      "sub_model": "Stralis-570s41T-M-6x2"
+    },
+    {
+      "id": 24286,
+      "manufacturer": "Iveco",
+      "model": "Stralis-740S-46TZ-R-6x2",
+      "sub_model": "Stralis-740S-46TZ-R-6x2"
+    },
+    {
+      "id": 24296,
+      "manufacturer": "Iveco",
+      "model": "Tector 170E21-M-4x2-E5",
+      "sub_model": "Tector 170E21-M-4x2-E5"
+    },
+    {
+      "id": 24290,
+      "manufacturer": "Iveco",
+      "model": "Tector 24.280-M-6x2-E5",
+      "sub_model": "Tector 24.280-M-6x2-E5"
+    },
+    {
+      "id": 23841,
+      "manufacturer": "JAC",
+      "model": "EJ-9.5T",
+      "sub_model": "EJ-9.5T"
+    },
+    {
+      "id": 24295,
+      "manufacturer": "JAC",
+      "model": "EJV 5.5",
+      "sub_model": "EJV 5.5"
+    },
+    {
+      "id": 23779,
+      "manufacturer": "JAC",
+      "model": "EJV12",
+      "sub_model": "EJV12"
+    },
+    {
+      "id": 21610,
+      "manufacturer": "JAC",
+      "model": "IEV1200T",
+      "sub_model": "IEV1200T"
+    },
+    {
+      "id": 23879,
+      "manufacturer": "JAC",
+      "model": "JAC EJVCC 3.5",
+      "sub_model": "JAC EJVCC 3.5"
+    },
+    {
+      "id": 2462,
+      "manufacturer": "Liebherr",
+      "model": "580",
+      "sub_model": "580"
+    },
+    {
+      "id": 6323,
+      "manufacturer": "MAN",
+      "model": "TGX-28.440-D2676-R-PTO1-6X2",
+      "sub_model": "TGX-28.440-D2676-R-PTO1-6X2"
+    },
+    {
+      "id": 8788,
+      "manufacturer": "Mercedes",
+      "model": "Accelo-815-OM924LA-M-4x2",
+      "sub_model": "Accelo-815-OM924LA-M-4x2"
+    },
+    {
+      "id": 23863,
+      "manufacturer": "Mercedes",
+      "model": "Actros-2546-OM460-R-6x4-E6",
+      "sub_model": "Actros-2546-OM460-R-6x4-E6"
+    },
+    {
+      "id": 8791,
+      "manufacturer": "Mercedes",
+      "model": "Actros-2546LS-OM460LA-R-6X4-E5",
+      "sub_model": "Actros-2546LS-OM460LA-R-6X4-E5"
+    },
+    {
+      "id": 23148,
+      "manufacturer": "Mercedes",
+      "model": "ACTROS-2548S-OM460LA-R-6x2-UP",
+      "sub_model": "ACTROS-2548S-OM460LA-R-6x2-UP"
+    },
+    {
+      "id": 8975,
+      "manufacturer": "Mercedes",
+      "model": "ACTROS-2651-OM460LA-R-6x4",
+      "sub_model": "ACTROS-2651-OM460LA-R-6x4"
+    },
+    {
+      "id": 19204,
+      "manufacturer": "Mercedes",
+      "model": "ATEGO-1719-M-OM924-4X2",
+      "sub_model": "ATEGO-M-1719-OM924-4X2"
+    },
+    {
+      "id": 1129,
+      "manufacturer": "Mercedes",
+      "model": "Atego-1726-M-4x2-E6",
+      "sub_model": "Atego-1726-M-4x2-E6"
+    },
+    {
+      "id": 23877,
+      "manufacturer": "Mercedes",
+      "model": "Atego-1933SCE-OM926LA-M-4x2-E6",
+      "sub_model": "Atego-1933SCE-OM926LA-M-4x2-E6"
+    },
+    {
+      "id": 6475,
+      "manufacturer": "Mercedes",
+      "model": "ATEGO-2425-M-4x2",
+      "sub_model": "ATEGO-2425-M-4x2"
+    },
+    {
+      "id": 23422,
+      "manufacturer": "Mercedes",
+      "model": "ATEGO-2426-M-2018-6X2-E5",
+      "sub_model": "ATEGO-2426-M-2018-6X2-E5"
+    },
+    {
+      "id": 8243,
+      "manufacturer": "Mercedes",
+      "model": "Atego-2429-OM926-M-4X2-E6",
+      "sub_model": "Atego-2429-OM926-M-4X2E6"
+    },
+    {
+      "id": 8401,
+      "manufacturer": "Mercedes",
+      "model": "ATEGO-2429-OM926LA-M-4X2-E5",
+      "sub_model": "ATEGO-2429-OM926LA-M-4X2-E5"
+    },
+    {
+      "id": 20469,
+      "manufacturer": "Mercedes",
+      "model": "ATEGO-2430-OM926-R-6X2",
+      "sub_model": "2018+"
+    },
+    {
+      "id": 8690,
+      "manufacturer": "Mercedes",
+      "model": "Atron-1635-OM457LA-M-4X2",
+      "sub_model": "Atron-1635-OM457LA-M-4X2"
+    },
+    {
+      "id": 8402,
+      "manufacturer": "Mercedes",
+      "model": "ATRON-1719-OM924LA-M-6X2",
+      "sub_model": "ATRON-1719-OM924LA-M-6X2"
+    },
+    {
+      "id": 23109,
+      "manufacturer": "Mercedes",
+      "model": "AXOR-1933-OM926LA-M-UP-4x2",
+      "sub_model": "AXOR-1933-OM926LA-M-UP-4x2"
+    },
+    {
+      "id": 8469,
+      "manufacturer": "Mercedes",
+      "model": "Axor-2540-OM926LA-M-6X4",
+      "sub_model": "Axor-2540-OM926LA-M-6X4"
+    },
+    {
+      "id": 8691,
+      "manufacturer": "Mercedes",
+      "model": "AXOR-2544LS-OM457-R-E5",
+      "sub_model": "AXOR-2544LS-OM457-R-E5"
+    },
+    {
+      "id": 5753,
+      "manufacturer": "Mercedes",
+      "model": "AXOR-2644-OM457-M-6X4",
+      "sub_model": "AXOR-2644-OM457-M-6X4"
+    },
+    {
+      "id": 8418,
+      "manufacturer": "Mercedes",
+      "model": "ETT-OF-1418-904LA-M-4x2-E3",
+      "sub_model": "ETT-OF-1418-904LA-M-4x2-E3"
+    },
+    {
+      "id": 8504,
+      "manufacturer": "Mercedes",
+      "model": "ETT-OF-1519-OM924LA-M-E5",
+      "sub_model": "ETT-OF-1519-OM924LA-M-E5"
+    },
+    {
+      "id": 4016,
+      "manufacturer": "Mercedes",
+      "model": "ETT-OF-1721-OM924LA-M-E5",
+      "sub_model": "ETT-OF-1721-OM924LA-M-E5"
+    },
+    {
+      "id": 8881,
+      "manufacturer": "Mercedes",
+      "model": "ETT-OF1722-OM924LA-4x2-M-E3",
+      "sub_model": "ETT-OF1722-OM924LA-4x2-M-E3"
+    },
+    {
+      "id": 3323,
+      "manufacturer": "Mercedes",
+      "model": "L1318-M-4X2",
+      "sub_model": "L1318-M-4X2"
+    },
+    {
+      "id": 8406,
+      "manufacturer": "Mercedes",
+      "model": "L1620-M-6X2-E3",
+      "sub_model": "L1620-M-6X2-E3"
+    },
+    {
+      "id": 6638,
+      "manufacturer": "Mercedes",
+      "model": "LS1938-M-4x2",
+      "sub_model": "LS1938-M-4x2"
+    },
+    {
+      "id": 9053,
+      "manufacturer": "Mercedes",
+      "model": "New Sprinter 2019 Activation",
+      "sub_model": "New Sprinter 2019 Activation"
+    },
+    {
+      "id": 19125,
+      "manufacturer": "Mercedes",
+      "model": "O500R-OM926LA-M-4x2-E6",
+      "sub_model": "O500R-OM926LA-M-4x2-E6"
+    },
+    {
+      "id": 24292,
+      "manufacturer": "Mercedes",
+      "model": "O500RSD-2441-M-6x2-E5",
+      "sub_model": "O500RSD-2441-M-6x2-E5"
+    },
+    {
+      "id": 8712,
+      "manufacturer": "Mercedes",
+      "model": "O500UA-2836-R-6x2-E5",
+      "sub_model": "O500UA-2836-R-6x2-E5"
+    },
+    {
+      "id": 3997,
+      "manufacturer": "Mercedes",
+      "model": "OF-1519-OM924LA-M-E5",
+      "sub_model": "OF-1519-OM924LA-M-E5"
+    },
+    {
+      "id": 24303,
+      "manufacturer": "Mercedes",
+      "model": "OF-1619-M-4x2-E6",
+      "sub_model": "OF-1619-M-4x2-E6"
+    },
+    {
+      "id": 23782,
+      "manufacturer": "Mercedes",
+      "model": "OF-1721-OM924-M-4x2-B2E",
+      "sub_model": "OF-1721-OM924-M-4x2-B2E"
+    },
+    {
+      "id": 8237,
+      "manufacturer": "Mercedes",
+      "model": "OF-1721-OM924-M-4x2-E5",
+      "sub_model": "OF-1721-OM924-M-4x2-E5"
+    },
+    {
+      "id": 24325,
+      "manufacturer": "Mercedes",
+      "model": "Sprinter 320 VIPK AMB EV",
+      "sub_model": "Sprinter 320 VIPK AMB EV"
+    },
+    {
+      "id": 24273,
+      "manufacturer": "Mercedes",
+      "model": "Tag-OF-1721-OM924-M-4x2-E5",
+      "sub_model": "Tag-OF-1721-OM924-M-4x2-E5"
+    },
+    {
+      "id": 24272,
+      "manufacturer": "Mercedes",
+      "model": "Tag-OF-1722-OM926lA-M4x2-E3",
+      "sub_model": "Tag-OF-1722-OM926lA-M4x2-E3"
+    },
+    {
+      "id": 23392,
+      "manufacturer": "Questar",
+      "model": "Activation - J1939",
+      "sub_model": "[QBR]-Activation - J1939"
+    },
+    {
+      "id": 23508,
+      "manufacturer": "Questar",
+      "model": "Activation - MBZ",
+      "sub_model": "Activation - MBZ"
+    },
+    {
+      "id": 24353,
+      "manufacturer": "Questar",
+      "model": "DEMO-J1939",
+      "sub_model": "[QBR]-DEMO-J1939"
+    },
+    {
+      "id": 4362,
+      "manufacturer": "Renault",
+      "model": "Master-L2-M-VAN",
+      "sub_model": "Master-L2-M-VAN"
+    },
+    {
+      "id": 23858,
+      "manufacturer": "Riddara",
+      "model": "Tangjun RD6 Luxury",
+      "sub_model": "Tangjun RD6 Luxury"
+    },
+    {
+      "id": 9071,
+      "manufacturer": "Scania",
+      "model": "P320DB-DC9.133-R-PTO.EG-6X2 E6",
+      "sub_model": "P320DB-DC9.133-R-PTO.EG-6X2 E6"
+    },
+    {
+      "id": 4445,
+      "manufacturer": "Scania",
+      "model": "P360LB-DC13.06-M-EG-6X2P",
+      "sub_model": "P360LB-DC13.06-M-EG-6X2P"
+    },
+    {
+      "id": 4059,
+      "manufacturer": "Scania",
+      "model": "P360LB-DC13.06-R-EG-6X2P",
+      "sub_model": "P360LB-DC13.06-R-G-6X2P"
+    },
+    {
+      "id": 2941,
+      "manufacturer": "Scania",
+      "model": "R114GA4X2NZ",
+      "sub_model": "R114GA4X2NZ"
+    },
+    {
+      "id": 7274,
+      "manufacturer": "Scania",
+      "model": "R124GA-4x2NZ-M-420",
+      "sub_model": "R124GA-4x2NZ-M-420"
+    },
+    {
+      "id": 7266,
+      "manufacturer": "Scania",
+      "model": "R124LA-4x2NA-M-420",
+      "sub_model": "R124LA-4x2NA-M-420"
+    },
+    {
+      "id": 4035,
+      "manufacturer": "Scania",
+      "model": "R420LA-DC13.10-R-EG-6x4TP",
+      "sub_model": "R420LA-DC13.10-R-EG-6x4TP"
+    },
+    {
+      "id": 23871,
+      "manufacturer": "Scania ",
+      "model": "G370A-DC13.116-R-4x2",
+      "sub_model": "G370A-DC13.116-R-4x2"
+    },
+    {
+      "id": 8404,
+      "manufacturer": "Scania ",
+      "model": "G380LA-DC12.17-M-EG-4x2",
+      "sub_model": "G380LA-DC12.17-M-EG-4x2"
+    },
+    {
+      "id": 8549,
+      "manufacturer": "Scania ",
+      "model": "G400LA-DC12.113-R-PTO.EG-6x2",
+      "sub_model": "G400LA-DC12.113-R-PTO.EG-6x2"
+    },
+    {
+      "id": 8391,
+      "manufacturer": "Scania ",
+      "model": "G420LA-DC12.06-M-EG-4x2",
+      "sub_model": "G420LA-DC12.06-M-EG-4x2"
+    },
+    {
+      "id": 8403,
+      "manufacturer": "Scania ",
+      "model": "G420LA-DC13-M-EG-6x2",
+      "sub_model": "G420LA-DC13-M-EG-6x2"
+    },
+    {
+      "id": 21159,
+      "manufacturer": "Scania ",
+      "model": "G450JA-DC13.164-R-PTO.EG-6X2",
+      "sub_model": "G450JA-DC13.164-R-PTO.EG-6X2"
+    },
+    {
+      "id": 19078,
+      "manufacturer": "Scania ",
+      "model": "G450LA-DC13.148-R-PTO.EG-6X2",
+      "sub_model": "G450LA-DC13.148-R-PTO.EG-6X2"
+    },
+    {
+      "id": 23697,
+      "manufacturer": "Scania ",
+      "model": "G460-DC9GNL-R-UP-6x2-E6",
+      "sub_model": "G460-DC9GNL-R-UP-6x2-E6"
+    },
+    {
+      "id": 23698,
+      "manufacturer": "Scania ",
+      "model": "G460-DC9GNV-R-UP-6X2-E6",
+      "sub_model": "G460-DC9GNV-R-UP-6X2-E6"
+    },
+    {
+      "id": 23692,
+      "manufacturer": "Scania ",
+      "model": "G460-R-6x2",
+      "sub_model": "G460-R-6x2"
+    },
+    {
+      "id": 24328,
+      "manufacturer": "Scania ",
+      "model": "G500-B8X4-XT-CS-R-E6",
+      "sub_model": "G500-B8X4-XT-CS-R-E6"
+    },
+    {
+      "id": 8718,
+      "manufacturer": "Scania ",
+      "model": "K-440-DC13.112-A-8x2-E5",
+      "sub_model": "K-440-DC13.112-A-8x2-E5"
+    },
+    {
+      "id": 19124,
+      "manufacturer": "Scania ",
+      "model": "K360-DC13114-M-4x2-E6",
+      "sub_model": "K360-DC13114-M-4x2-E6"
+    },
+    {
+      "id": 24304,
+      "manufacturer": "Scania ",
+      "model": "K360B-M-4x2-E5",
+      "sub_model": "K360B-M-4x2-E5"
+    },
+    {
+      "id": 24293,
+      "manufacturer": "Scania ",
+      "model": "K370C-DC13-R-4x2-E6",
+      "sub_model": "K370C-DC13-R-4x2-E6"
+    },
+    {
+      "id": 24294,
+      "manufacturer": "Scania ",
+      "model": "K400-DC13-R-6x2-E6",
+      "sub_model": "K400-DC13-R-6x2-E6"
+    },
+    {
+      "id": 22885,
+      "manufacturer": "Scania ",
+      "model": "K410-DC13.115-R-4x2-E6",
+      "sub_model": "K410-DC13.115-R-4x2-E6"
+    },
+    {
+      "id": 8688,
+      "manufacturer": "Scania ",
+      "model": "K440-DC13.112-R-6X2-E6",
+      "sub_model": "K440-DC13.112-R-6X2-E6"
+    },
+    {
+      "id": 20475,
+      "manufacturer": "Scania ",
+      "model": "P280LA-DC07.280-R-6X2",
+      "sub_model": "P280LA-DC07.280-R-6X2"
+    },
+    {
+      "id": 6117,
+      "manufacturer": "Scania ",
+      "model": "P340LB-DC13-M-4x2",
+      "sub_model": "P340LB-DC13-M-4x2"
+    },
+    {
+      "id": 8386,
+      "manufacturer": "Scania ",
+      "model": "P340LB-DC13-M-EG-6x2",
+      "sub_model": "P340LB-DC13-M-EG-6x2"
+    },
+    {
+      "id": 8322,
+      "manufacturer": "Scania ",
+      "model": "P360LA-DC13.114-R-6X2",
+      "sub_model": "P360LA-DC13.114-R-6X2"
+    },
+    {
+      "id": 8456,
+      "manufacturer": "Scania ",
+      "model": "P360LA-DC13.114-R-PTO.EG-4X2",
+      "sub_model": "P360LA-DC13.114-R-PTO.EG-4X2"
+    },
+    {
+      "id": 748,
+      "manufacturer": "Scania ",
+      "model": "P370-R-6x2",
+      "sub_model": "P370-R-6x2"
+    },
+    {
+      "id": 929,
+      "manufacturer": "Scania ",
+      "model": "R340",
+      "sub_model": "R340"
+    },
+    {
+      "id": 23103,
+      "manufacturer": "Scania ",
+      "model": "R410-DC9GNL-R-UP-6x2-E6",
+      "sub_model": "R410-DC9GNL-R-UP-6x2-E6"
+    },
+    {
+      "id": 22537,
+      "manufacturer": "Scania ",
+      "model": "R410-DC9GNV-R-UP-6x2-E6",
+      "sub_model": "R410-DC9GNV-R-UP-6x2-E6"
+    },
+    {
+      "id": 21231,
+      "manufacturer": "Scania ",
+      "model": "R410B-DC13.141-R-EG-6X2",
+      "sub_model": "R410B-DC13.141-R-EG-6X2"
+    },
+    {
+      "id": 6510,
+      "manufacturer": "Scania ",
+      "model": "R410CB-DC13.115-R-PTO.EG-6X2",
+      "sub_model": "R410CB-DC13.115-R-PTO.EG-6X2"
+    },
+    {
+      "id": 23561,
+      "manufacturer": "Scania ",
+      "model": "R420LA-DC13.10-M-EG-6x4TP",
+      "sub_model": "R420LA-DC13.10-M-EG-6x4TP"
+    },
+    {
+      "id": 6464,
+      "manufacturer": "Scania ",
+      "model": "R440LA-DC13.112-R-6x4",
+      "sub_model": "R440LA-DC13.112-R-6x4"
+    },
+    {
+      "id": 21153,
+      "manufacturer": "Scania ",
+      "model": "R450JA-DC13.164-R-EG-6X4",
+      "sub_model": "R450JA-DC13.164-R-EG-6X4"
+    },
+    {
+      "id": 21154,
+      "manufacturer": "Scania ",
+      "model": "R450JB-DC13.164-R-6X2",
+      "sub_model": "R450JB-DC13.164-R-6X2"
+    },
+    {
+      "id": 23682,
+      "manufacturer": "Scania ",
+      "model": "R460-R-6x2",
+      "sub_model": "R460-R-6x2"
+    },
+    {
+      "id": 23159,
+      "manufacturer": "Scania ",
+      "model": "R540LA-DC13.166-AT-6x2",
+      "sub_model": "R540LA-DC13.166-AT-6x2"
+    },
+    {
+      "id": 23680,
+      "manufacturer": "Scania ",
+      "model": "R560-R-6x4",
+      "sub_model": "R560-R-6x4"
+    },
+    {
+      "id": 24279,
+      "manufacturer": "Toyota",
+      "model": "Hilux CHLSTM M 4FD",
+      "sub_model": "Hilux CHLSTM M 4FD"
+    },
+    {
+      "id": 5851,
+      "manufacturer": "Volkswagen",
+      "model": "15.180-CNM-M-4x2",
+      "sub_model": "15.180-CNM-M-4x2"
+    },
+    {
+      "id": 23386,
+      "manufacturer": "Volkswagen",
+      "model": "23.220-M-6x2",
+      "sub_model": "23.220-M-6x2"
+    },
+    {
+      "id": 20463,
+      "manufacturer": "Volkswagen",
+      "model": "8.160-DRC-M-4x2",
+      "sub_model": "8.160-DRC-M-4x2"
+    },
+    {
+      "id": 8782,
+      "manufacturer": "Volkswagen",
+      "model": "9.150E-M-4X2",
+      "sub_model": "9.150E-M-4X2"
+    },
+    {
+      "id": 6178,
+      "manufacturer": "Volkswagen",
+      "model": "Amarok 4x4 CS",
+      "sub_model": "Amarok 4x4 CS"
+    },
+    {
+      "id": 8546,
+      "manufacturer": "Volkswagen",
+      "model": "Const-25.390-ISL.400-M-PTO1-6X",
+      "sub_model": "Const-25.390-ISL.400-M-PTO1-6X"
+    },
+    {
+      "id": 6344,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 17.190-M-4X2",
+      "sub_model": "Constellation 17.190-M-4X2"
+    },
+    {
+      "id": 23481,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 24.250-M-6x2",
+      "sub_model": "Constellation 24.250-M-6x2"
+    },
+    {
+      "id": 23861,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 25.460 R 6x2",
+      "sub_model": "Constellation 25.460 R 6x2"
+    },
+    {
+      "id": 23793,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 25.480 R 6x2",
+      "sub_model": "Constellation 25.480 R 6x2"
+    },
+    {
+      "id": 23658,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 26.320 Prime - M",
+      "sub_model": "Constellation 26.320 Prime - M"
+    },
+    {
+      "id": 23670,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 30.320 R 8x2",
+      "sub_model": "Constellation 30.320 R 8x2"
+    },
+    {
+      "id": 23366,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 30.330 R-6x2",
+      "sub_model": "Constellation 30.330 R-6x2"
+    },
+    {
+      "id": 8627,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-13.190-M-4x2",
+      "sub_model": "Constellation-13.190-M-4x2"
+    },
+    {
+      "id": 24287,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-17.230-M-PTO2-E6",
+      "sub_model": "Constellation-17.230-M-PTO2-E6"
+    },
+    {
+      "id": 6011,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-17.280-M-PTO2-6x",
+      "sub_model": "Constellation-17.280-M-PTO2-6x"
+    },
+    {
+      "id": 24299,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-18.260-M-4x2-E6",
+      "sub_model": "Constellation-18.260-M-4x2-E6"
+    },
+    {
+      "id": 8457,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-19.320-M-4x2",
+      "sub_model": "Constellation-19.320-M-4x2"
+    },
+    {
+      "id": 23389,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-19.360-R-4x2-E5",
+      "sub_model": "Constellation-19.360-R-4x2-E5"
+    },
+    {
+      "id": 23393,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-19.380-CTC-4x2-R",
+      "sub_model": "Constellation-19.380-CTC-4x2-R"
+    },
+    {
+      "id": 24298,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-20.480-R-4x2-E6",
+      "sub_model": "Constellation-20.480-R-4x2-E6"
+    },
+    {
+      "id": 8486,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.250-M-4x2",
+      "sub_model": "Constellation-24.250-M-4x2"
+    },
+    {
+      "id": 23480,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.260-M-6x2",
+      "sub_model": "Constellation-24.260-M-6x2"
+    },
+    {
+      "id": 23158,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.280-AT-4x2",
+      "sub_model": "Constellation-24.280-AT-4x2"
+    },
+    {
+      "id": 8962,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.280-M-4x2",
+      "sub_model": "Constellation-24.280-M-4x2"
+    },
+    {
+      "id": 23353,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.280-M-6x2",
+      "sub_model": "Constellation-24.280-M-6x2"
+    },
+    {
+      "id": 23354,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.280-R-6x2",
+      "sub_model": "Constellation-24.280-R-6x2"
+    },
+    {
+      "id": 20483,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-24.330-M-6X2",
+      "sub_model": "Constellation-24.330-M-6X2"
+    },
+    {
+      "id": 9048,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-25.360-R-6x2",
+      "sub_model": "Constellation-25.360-R-6x2"
+    },
+    {
+      "id": 8547,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-25.420-D26-R-6X2",
+      "sub_model": "Constellation-25.420-D26-R-6X2"
+    },
+    {
+      "id": 19131,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation-26.260-Robust-M",
+      "sub_model": "Constellation-26.260-Robust-M"
+    },
+    {
+      "id": 23479,
+      "manufacturer": "Volkswagen",
+      "model": "Delivery 11.180 Prime-M-4x2",
+      "sub_model": "Delivery 11.180 Prime-M-4x2"
+    },
+    {
+      "id": 22540,
+      "manufacturer": "Volkswagen",
+      "model": "Delivery Express 2020 - Cummin",
+      "sub_model": "Delivery Express 2020 - Cummin"
+    },
+    {
+      "id": 21697,
+      "manufacturer": "Volkswagen",
+      "model": "Delivery-11.160-MT-4x2",
+      "sub_model": "Delivery-11.160-MT-4x2"
+    },
+    {
+      "id": 6225,
+      "manufacturer": "Volkswagen",
+      "model": "Delivery-8.150E-M-4X2",
+      "sub_model": "Delivery-8.150E-M-4X2"
+    },
+    {
+      "id": 20464,
+      "manufacturer": "Volkswagen",
+      "model": "Delivery-9.170-4x2",
+      "sub_model": "Delivery-9.170-4x2"
+    },
+    {
+      "id": 8837,
+      "manufacturer": "Volkswagen",
+      "model": "ETT-VW-15.190-D0834-M-E3",
+      "sub_model": "ETT-VW-15.190-D0834-M-E3"
+    },
+    {
+      "id": 8417,
+      "manufacturer": "Volkswagen",
+      "model": "ETT-VW-17.230-D08-4x2-M-E5",
+      "sub_model": "ETT-VW-17.230-D08-4x2-M-E5"
+    },
+    {
+      "id": 8873,
+      "manufacturer": "Volkswagen",
+      "model": "ETT-VW-17.260-M-4x2",
+      "sub_model": "ETT-VW-17.260-M-4x2"
+    },
+    {
+      "id": 23414,
+      "manufacturer": "Volkswagen",
+      "model": "Express-Trend-DRC-M-4x2",
+      "sub_model": "Express-Trend-DRC-M-4x2"
+    },
+    {
+      "id": 6182,
+      "manufacturer": "Volkswagen",
+      "model": "Gol TL M",
+      "sub_model": "Gol TL M"
+    },
+    {
+      "id": 23726,
+      "manufacturer": "Volkswagen",
+      "model": "Meteor 29.520 R 6x4",
+      "sub_model": "Meteor 29.520 R 6x4"
+    },
+    {
+      "id": 23564,
+      "manufacturer": "Volkswagen",
+      "model": "Meteor-28.460-R-6x2",
+      "sub_model": "Meteor-28.460-R-6x2"
+    },
+    {
+      "id": 21253,
+      "manufacturer": "Volkswagen",
+      "model": "Meteor-28.480-D2676-R-6x2",
+      "sub_model": "Meteor-28.480-D2676-R-6x2"
+    },
+    {
+      "id": 21336,
+      "manufacturer": "Volkswagen",
+      "model": "Meteor-29.530-R-6x4-D2676",
+      "sub_model": "Meteor-29.530-R-6x4-D2676"
+    },
+    {
+      "id": 4975,
+      "manufacturer": "Volkswagen",
+      "model": "Polo Track M",
+      "sub_model": "Polo Track M"
+    },
+    {
+      "id": 20472,
+      "manufacturer": "Volkswagen",
+      "model": "Robust-17.230-D0834-M-4x2",
+      "sub_model": "Robust-17.230-D0834-M-4x2"
+    },
+    {
+      "id": 2829,
+      "manufacturer": "Volkswagen",
+      "model": "Saveiro",
+      "sub_model": "Saveiro"
+    },
+    {
+      "id": 6444,
+      "manufacturer": "Volkswagen",
+      "model": "Saveiro-CS-ST-M",
+      "sub_model": "Saveiro-CS-ST-M"
+    },
+    {
+      "id": 24300,
+      "manufacturer": "Volkswagen",
+      "model": "Titan-18.310-M-4x2",
+      "sub_model": "Titan-18.310-M-4x2"
+    },
+    {
+      "id": 8687,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus-11.180-M-4x2-E6",
+      "sub_model": "Volksbus-11.180-M-4x2-E6"
+    },
+    {
+      "id": 5848,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus-15.190-D08-M-4x2",
+      "sub_model": "Volksbus-15.190-D08-M-4x2"
+    },
+    {
+      "id": 3998,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus-17.230-D08-M-4x2-E5",
+      "sub_model": "Volksbus-17.230-D08-M-4x2-E5"
+    },
+    {
+      "id": 8939,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus-17.230-MWM-M-4x2-E3",
+      "sub_model": "Volksbus-17.230-MWM-M-4x2-E3"
+    },
+    {
+      "id": 24308,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus-22.260-M-4x2-E6",
+      "sub_model": "Volksbus-22.260-M-4x2-E6"
+    },
+    {
+      "id": 8957,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus-9.160-ISF3.8-M-4x2-E5",
+      "sub_model": "Volksbus-9.160-ISF3.8-M-4x2-E5"
+    },
+    {
+      "id": 6452,
+      "manufacturer": "Volkswagen",
+      "model": "VWBus-9.160-M-EOD(E5)",
+      "sub_model": "VWBus-9.160-M-EOD(E5)"
+    },
+    {
+      "id": 20459,
+      "manufacturer": "Volkswagen",
+      "model": "Worker-13.180-M-PTO-6x2",
+      "sub_model": "Worker-13.180-M-PTO-6x2"
+    },
+    {
+      "id": 8931,
+      "manufacturer": "Volkswagen",
+      "model": "Worker-15.170-M-4X2 E3",
+      "sub_model": "Worker-15.170-M-4X2 E3"
+    },
+    {
+      "id": 8608,
+      "manufacturer": "Volkswagen",
+      "model": "Worker-17.190-M-6x2",
+      "sub_model": "Worker-17.190-M-6x2"
+    },
+    {
+      "id": 6057,
+      "manufacturer": "Volvo",
+      "model": "B270F-MWM7B-M-4X2",
+      "sub_model": "B270F-MWM7B-M-4X2"
+    },
+    {
+      "id": 23695,
+      "manufacturer": "Volvo",
+      "model": "FH 460-6x2-D13KE-R-UP-T",
+      "sub_model": "FH 460-6x2-D13KE-R-UP-T"
+    },
+    {
+      "id": 23794,
+      "manufacturer": "Volvo",
+      "model": "FH 460-D13KE-R-6x2-EE",
+      "sub_model": "FH 460-D13KE-R-6x2-EE"
+    },
+    {
+      "id": 23177,
+      "manufacturer": "Volvo",
+      "model": "FH 500-6X2-D13KE-R-UP-T",
+      "sub_model": "FH 500-6X2-D13KE-R-UP-T"
+    },
+    {
+      "id": 23167,
+      "manufacturer": "Volvo",
+      "model": "FH 540-6X4-D13KE-R-UP-T",
+      "sub_model": "FH 540-6X4-D13KE-R-UP-T"
+    },
+    {
+      "id": 23667,
+      "manufacturer": "Volvo",
+      "model": "FH-420-R-6x2T",
+      "sub_model": "FH-420-R-6x2T"
+    },
+    {
+      "id": 8914,
+      "manufacturer": "Volvo",
+      "model": "FH-440-D13A-M-6x4-E3",
+      "sub_model": "FH-440-D13A-M-6x4-E3"
+    },
+    {
+      "id": 23383,
+      "manufacturer": "Volvo",
+      "model": "FH-520-DC13C-6x4-M-UP",
+      "sub_model": "FH-520-DC13C-6x4-M-UP"
+    },
+    {
+      "id": 7158,
+      "manufacturer": "Volvo",
+      "model": "FH12-380-M-6x2",
+      "sub_model": "FH12-380-M-6x2"
+    },
+    {
+      "id": 23862,
+      "manufacturer": "Volvo",
+      "model": "FM-370-R-4x2T",
+      "sub_model": "FM-370-R-4x2T"
+    },
+    {
+      "id": 24327,
+      "manufacturer": "Volvo",
+      "model": "FMX-8x4-D13K-R-E5",
+      "sub_model": "FMX-8x4-D13K-R-E5"
+    },
+    {
+      "id": 7164,
+      "manufacturer": "Volvo",
+      "model": "NH 12380-M-4x2T",
+      "sub_model": "NH 12380-M-4x2T"
+    },
+    {
+      "id": 23859,
+      "manufacturer": "Volvo",
+      "model": "NL-12360-M",
+      "sub_model": "NL-12360-M"
+    },
+    {
+      "id": 8824,
+      "manufacturer": "Volvo",
+      "model": "VM-220-MWM7A-M-PTO2-4X2E5",
+      "sub_model": "VM-260-MWM7A-M-PTO2-4X2E5"
+    },
+    {
+      "id": 8482,
+      "manufacturer": "Volvo",
+      "model": "VM-260-MWM7A-M-PTO2-4X2",
+      "sub_model": "VM-260-MWM7A-M-PTO2-4X2"
+    },
+    {
+      "id": 23842,
+      "manufacturer": "Volvo",
+      "model": "VM-290-R-6x2",
+      "sub_model": "VM-290-R-6x2"
+    },
+    {
+      "id": 8072,
+      "manufacturer": "Volvo",
+      "model": "VM270-M-6x2-E6",
+      "sub_model": "VM270-M-6x2-E6"
+    },
+    {
+      "id": 8064,
+      "manufacturer": "Volvo",
+      "model": "VM330-MWM7B-R-4x2",
+      "sub_model": "2016-2022"
+    },
+    {
+      "id": 23534,
+      "manufacturer": "Volvo",
+      "model": "VM330-R-D8K-8x2",
+      "sub_model": "VM330-R-D8K-8x2"
+    },
+    {
+      "id": 24301,
+      "manufacturer": "Volvo",
+      "model": "VM360-R-6x2-E6",
+      "sub_model": "VM360-R-6x2-E6"
+    }
+  ]
+}
