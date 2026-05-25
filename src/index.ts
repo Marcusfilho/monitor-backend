@@ -22,7 +22,7 @@ app.get("/health", (_req, res) => {
 
 // ─── Rotas ────────────────────────────────────────────────────────────────────
 app.use("/api/auth",          authRoutes);
-app.use("/api/jobs",          requireSession, jobRoutes);
+app.use("/api/jobs", jobRoutes);
 app.use("/api/installations", requireSession, installationsRoutes);
 app.use("/events",            eventsRoutes);
 app.use("/api/admin",         adminRoutes);
