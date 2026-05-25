@@ -475,9 +475,14 @@ async function processJob(job: any): Promise<void> {
 
   // 7. Postcheck
   let dial = "";
+  let vehicleSettingIdFromPostcheck = "";
   try {
     const pc = await mwsPostcheck(cfg, vehicleId, saveFields.DIAL_NUMBER, jobId);
     dial = pc.dial;
+    try {
+      const attrs: any = mwsExtractActivationAttrs(pc.rawText) || {};
+      vehicleSettingIdFromPostcheck = String(attrs.VEHICLE_SETTING_ID || attrs.vehicle_setting_id || "").trim();
+    } catch { /* ignora */ }
     if (!pc.applied) {
       await failJob(jobId, "mws_save_not_applied", {
         dial_expected: saveFields.DIAL_NUMBER,
@@ -492,7 +497,7 @@ async function processJob(job: any): Promise<void> {
 
   // 8. Sucesso
   // vehicle_setting_id é repassado ao resultado para o jobRoutes.ts usar no scheme_builder
-  const vehicleSettingId = String(payload.vehicle_setting_id || payload.ASSIGNED_VEHICLE_SETTING_ID || "");
+  const vehicleSettingId = String(payload.vehicle_setting_id || payload.ASSIGNED_VEHICLE_SETTING_ID || vehicleSettingIdFromPostcheck || "");
 
   await completeJob(jobId, {
     ok                : true,
