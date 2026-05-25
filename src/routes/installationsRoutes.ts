@@ -116,6 +116,16 @@ router.get("/vhcls-lookup", async (req: Request, res: Response) => {
   }
 });
 
+
+// ---------------------------------------------------------------------------
+// GET /api/installations/:id  — poll de status
+// ---------------------------------------------------------------------------
+router.get("/:id", (req: Request, res: Response) => {
+  const job = getJob(String(req.params.id));
+  if (!job) { res.status(404).json({ ok: false, error: "job_not_found" }); return; }
+  res.json({ ...job, ok: true });
+});
+
 // ---------------------------------------------------------------------------
 // POST /api/installations/:jobId/actions/complete-maint
 // ---------------------------------------------------------------------------
