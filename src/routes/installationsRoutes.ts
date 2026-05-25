@@ -126,6 +126,42 @@ router.get("/:id", (req: Request, res: Response) => {
   res.json({ ...job, ok: true });
 });
 
+
+// ---------------------------------------------------------------------------
+// POST /api/installations/:id/approve-can  — técnico valida CAN e dispara próxima etapa
+// ---------------------------------------------------------------------------
+router.post("/:id/approve-can", (req: Request, res: Response) => {
+  const { getJob, updateJob, createJob } = require("../jobs/jobStore");
+  const { getGsCommand } = require("../core/gsCommandMap");
+
+  const job = getJob(String(req.params.id));
+  if (!job) { res.status(404).json({ ok: false, error: "job_not_found" }); return; }
+
+  const service = String(job.payload?.service ?? "").toUpperCase();
+  const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
+  const plate   = job.payload?.plate ?? "";
+  const result  = job.result ?? {};
+
+  if (needsGs) {
+    const label   = String(job.payload?.gsensor?.label_pos   ?? job.payload?.label_position   ?? "").toUpperCase();
+    const harness = String(job.payload?.gsensor?.harness_pos ?? job.payload?.harness_position ?? "").toUpperCase();
+    const gsCmd   = getGsCommand(label, harness);
+    if (gsCmd) {
+      createJob("gs_calibration", {
+        ...job.payload, ...result, plate, _from: job.id,
+        GS_ACTION_ID: gsCmd.action_id, GS_COMMAND_SYNTAX: gsCmd.command_syntax,
+      });
+    } else {
+      createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+    }
+  } else {
+    createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+  }
+
+  updateJob(job.id, { status: "approved" as any });
+  res.json({ ok: true, job_id: job.id, status: "approved" });
+});
+
 // ---------------------------------------------------------------------------
 // POST /api/installations/:jobId/actions/complete-maint
 // ---------------------------------------------------------------------------

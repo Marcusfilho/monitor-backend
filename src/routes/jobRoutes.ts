@@ -58,7 +58,14 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
       const service = String(job.payload?.service ?? job.payload?.flow ?? "").toUpperCase();
       const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
 
+      // INSTALL e MAINT_WITH_SWAP aguardam aprovação manual do técnico (approve-can)
       if (needsGs) {
+        updateJob(job.id, { status: "waiting_approval" as any });
+        console.log(`[pipeline] monitor_can_snapshot → waiting_approval plate=${plate}`);
+        break;
+      }
+
+      if (false && needsGs) {
         const label   = String(job.payload?.label_position   ?? job.payload?.labelPosition   ?? "").toUpperCase();
         const harness = String(job.payload?.harness_position ?? job.payload?.harnessPosition ?? "").toUpperCase();
         const gsCmd   = getGsCommand(label, harness);
