@@ -885,7 +885,7 @@ $("btnCreate").addEventListener("click",async()=>{
       headers:token?{"X-Session-Token":token}:{}});
     if(!r.ok||!r.data)throw new Error(r.data?.error||"Falha ao criar");
     const inst=r.data;
-    const id=inst.installation_id||inst.id||"";
+    const id=inst.job_id||inst.installation_id||inst.id||"";
     const tok=inst.installation_token||inst.token||"";
     saveLs(id,tok);
     $("cardForm").classList.add("hidden");
