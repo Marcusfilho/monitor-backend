@@ -23,7 +23,7 @@ import fs from "fs";
 import { configFromEnv }                    from "../../core/html5Session";
 import { ensureVehicleId }                  from "../../core/vhclsService";
 import { checkAndFreeSerial }               from "../../core/cmdtService";
-import { mwsLoadBaseline, mwsSave, mwsPostcheck } from "../../core/mwsService";
+import { mwsLoadBaseline, mwsSave, mwsPostcheck, mwsExtractActivationAttrs } from "../../core/mwsService";
 import { executeChangeCompany }             from "../../core/changeCompanyService";
 
 // ---------------------------------------------------------------------------
