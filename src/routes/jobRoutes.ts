@@ -65,37 +65,8 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
         break;
       }
 
-      if (false && needsGs) {
-        const label   = String(job.payload?.label_position   ?? job.payload?.labelPosition   ?? "").toUpperCase();
-        const harness = String(job.payload?.harness_position ?? job.payload?.harnessPosition ?? "").toUpperCase();
-        const gsCmd   = getGsCommand(label, harness);
-
-        if (gsCmd) {
-          createJob("gs_calibration", {
-            ...job.payload,
-            ...result,
-            plate,
-            _from             : job.id,
-            GS_ACTION_ID      : gsCmd.action_id,
-            GS_COMMAND_SYNTAX : gsCmd.command_syntax,
-          });
-          console.log(
-            `[pipeline] gs_calibration enfileirado` +
-            ` label=${label} harness=${harness}` +
-            ` action=${gsCmd.action_id}` +
-            ` plate=${plate}`
-          );
-        } else {
-          console.warn(
-            `[pipeline] GS: combinação não encontrada` +
-            ` label=${label} harness=${harness}` +
-            ` service=${service} — pulando GS`
-          );
-          createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
-        }
-      } else {
-        createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
-      }
+      // Serviços sem GS (UNINSTALL, MAINT_NO_SWAP) → save_snapshot direto
+      createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
       break;
     }
 
