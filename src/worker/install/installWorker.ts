@@ -481,7 +481,7 @@ async function processJob(job: any): Promise<void> {
     dial = pc.dial;
     try {
       const attrs: any = mwsExtractActivationAttrs(pc.rawText) || {};
-      vehicleSettingIdFromPostcheck = String(attrs.VEHICLE_SETTING_ID || attrs.vehicle_setting_id || "").trim();
+      vehicleSettingIdFromPostcheck = String(attrs.ASSIGNED_VEHICLE_SETTING_ID || attrs.VEHICLE_SETTING_ID || attrs.vehicle_setting_id || "").trim();
     } catch { /* ignora */ }
     if (!pc.applied) {
       await failJob(jobId, "mws_save_not_applied", {
