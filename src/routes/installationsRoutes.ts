@@ -118,12 +118,89 @@ router.get("/vhcls-lookup", async (req: Request, res: Response) => {
 
 
 // ---------------------------------------------------------------------------
-// GET /api/installations/:id  — poll de status
+// GET /api/installations/:id  — poll de status (pipeline unificado)
 // ---------------------------------------------------------------------------
 router.get("/:id", (req: Request, res: Response) => {
-  const job = getJob(String(req.params.id));
-  if (!job) { res.status(404).json({ ok: false, error: "job_not_found" }); return; }
-  res.json({ ...job, ok: true });
+  const { listJobs } = require("../jobs/jobStore");
+
+  const rootId = String(req.params.id);
+  const allJobs: any[] = listJobs();
+
+  // job raiz (html5_install)
+  const root = allJobs.find((j: any) => j.id === rootId);
+  if (!root) { res.status(404).json({ ok: false, error: "job_not_found" }); return; }
+
+  // coleta toda a cadeia _from → rootId (em qualquer profundidade)
+  function collectChain(fromId: string): any[] {
+    const direct = allJobs.filter((j: any) => j.payload?._from === fromId);
+    return direct.flatMap((j: any) => [j, ...collectChain(j.id)]);
+  }
+  const chain = [root, ...collectChain(rootId)];
+
+  // job mais recente por tipo
+  function latest(type: string) {
+    return chain.filter((j: any) => j.type === type).sort((a: any, b: any) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )[0] ?? null;
+  }
+
+  const sbJob    = latest("scheme_builder");
+  const canJob   = latest("monitor_can_snapshot");
+  const gsJob    = latest("gs_calibration");
+  const saveJob  = latest("save_snapshot");
+
+  // status unificado
+  let status = "HTML5_DONE";
+
+  if (root.status === "processing" || root.status === "pending") {
+    status = "HTML5_RUNNING";
+  } else if (root.status === "error") {
+    status = "HTML5_ERROR";
+  } else if (saveJob) {
+    if (saveJob.status === "completed")                           status = "COMPLETED";
+    else if (saveJob.status === "error")                          status = "SAVE_ERROR";
+    else                                                          status = "GS_RUNNING";
+  } else if (gsJob) {
+    if (gsJob.status === "error")                                 status = "GS_ERROR";
+    else                                                          status = "GS_RUNNING";
+  } else if (canJob) {
+    if (canJob.status === "waiting_approval" as any)              status = "WAITING_APPROVAL";
+    else if (canJob.status === "error")                           status = "CAN_ERROR";
+    else                                                          status = "CAN_RUNNING";
+  } else if (sbJob) {
+    if (sbJob.status === "error")                                 status = "SB_ERROR";
+    else                                                          status = "SB_RUNNING";
+  }
+
+  // último erro da cadeia
+  const errJob = [...chain].reverse().find((j: any) => j.status === "error");
+  const lastError = errJob
+    ? { job_type: errJob.type, ...(errJob.result ?? {}) }
+    : null;
+
+  // token para approve-can: vem do payload do canJob
+  const canToken    = canJob?.payload?.installation_token ?? canJob?.result?.token ?? root.payload?.installation_token ?? null;
+  const canJobId    = canJob?.id ?? null;
+
+  res.json({
+    ok: true,
+    id: root.id,
+    installation_id: root.id,
+    installation_token: canToken,
+    status,
+    payload: root.payload,
+    result: root.result,
+    jobs: {
+      html5_install:       root,
+      scheme_builder:      sbJob,
+      monitor_can_snapshot: canJob,
+      gs_calibration:      gsJob,
+      save_snapshot:       saveJob,
+    },
+    last_error: lastError,
+    updatedAt: chain.reduce((acc: string, j: any) =>
+      new Date(j.updatedAt) > new Date(acc) ? j.updatedAt : acc, root.updatedAt),
+  });
 });
 
 
