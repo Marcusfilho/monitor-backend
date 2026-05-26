@@ -392,11 +392,12 @@ async function runSbFlow(params: {
     sendFrame("review_process_attributes", {
       client_id: String(clientId),
     });
-    await sleep(200);
+    await sleep(3000); // aguarda Traffilog processar o associate antes do get_vcls
 
     // 5. get_vcls_action_review_opr → process_id (retry até 3x se 404)
     let reviewRow: any = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
+      if (attempt > 1) await sleep(3000); // backoff entre tentativas
       const mtReview = sendFrame("get_vcls_action_review_opr", {
         client_id    : String(clientId),
         client_name  : String(clientName),
@@ -408,8 +409,7 @@ async function runSbFlow(params: {
       } catch (e: any) {
         const is404 = String(e?.message || "").includes("action_value=404");
         if (is404 && attempt < 3) {
-          console.log(`[sb-rw] job=${jobId} get_vcls 404 tentativa ${attempt}/3 — aguardando 2s`);
-          await sleep(2000);
+          console.log(`[sb-rw] job=${jobId} get_vcls 404 tentativa ${attempt}/3 — retry em 3s`);
           continue;
         }
         throw e;
