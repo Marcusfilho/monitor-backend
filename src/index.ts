@@ -39,3 +39,5 @@ if (!process.env.API_BASE_URL) process.env.API_BASE_URL = "http://localhost:" + 
 if (!process.env.WORKER_KEY)   process.env.WORKER_KEY   = "inline";
 import("./worker/install/installWorker.js").catch(e => console.error("[index] installWorker falhou:", e));
 import("./worker/gs/gsWorker.js").catch(e => console.error("[index] gsWorker falhou:", e));
+import("./worker/sb/schemeBuilderWorker.js").catch(e => console.error("[index] schemeBuilderWorker falhou:", e));
+import("./worker/can/canWorker.js").catch(e => console.error("[index] canWorker falhou:", e));
