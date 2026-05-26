@@ -191,7 +191,8 @@ function classifyVehicle(
   vid         : number,
   licenseNmbr : string | null,
   serial      : string,
-  tag         : string
+  tag         : string,
+  innerId     : string | null = null
 ): { status: VehicleStatus; vid: number; licenseNmbr: string } | null {
   if (!vid) return null;
 
@@ -206,6 +207,12 @@ function classifyVehicle(
   // LICENSE_NMBR contém "CMDT" → placeholder de cobrança
   if (/CMDT/i.test(lic)) {
     console.log(`[cmdtService] [${tag}] serial=${serial} vid=${vid} LICENSE_NMBR="${lic}" -> CMDT placeholder, will DEACTIVATE`);
+    return { status: "cmdt", vid, licenseNmbr: lic };
+  }
+
+  // inner_id == license_nmbr → serial usado como placa de bancada
+  if (innerId && lic && innerIdMatch(innerId, lic)) {
+    console.log(`[cmdtService] [${tag}] serial=${serial} vid=${vid} INNER_ID="${innerId}" == LICENSE_NMBR="${lic}" -> bancada (inner_id==license_nmbr), will DEACTIVATE`);
     return { status: "cmdt", vid, licenseNmbr: lic };
   }
 
@@ -315,7 +322,7 @@ export async function checkAndFreeSerial(
     }
 
     // 4) Classifica
-    const classification = classifyVehicle(found.vid, found.licenseNmbr, serial, TAG);
+    const classification = classifyVehicle(found.vid, found.licenseNmbr, serial, TAG, found.innerId ?? null);
     if (!classification) return { freed: false, blocked: false };
 
     if (classification.status === "free") {
