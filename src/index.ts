@@ -38,3 +38,4 @@ export default app;
 if (!process.env.API_BASE_URL) process.env.API_BASE_URL = "http://localhost:" + (process.env.PORT || "3000");
 if (!process.env.WORKER_KEY)   process.env.WORKER_KEY   = "inline";
 import("./worker/install/installWorker.js").catch(e => console.error("[index] installWorker falhou:", e));
+import("./worker/gs/gsWorker.js").catch(e => console.error("[index] gsWorker falhou:", e));
