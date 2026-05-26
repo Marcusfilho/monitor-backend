@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { getSelectedSchemeId } from "../services/schemeSelectionService";
 import {
   createJob,
   getNextJob,
@@ -33,7 +34,8 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
 
   switch (job.type) {
     case "html5_install":
-      createJob("scheme_builder", { ...job.payload, ...result, plate, _from: job.id });
+      const schemeId = getSelectedSchemeId(job.payload?.client_id) ?? result.vehicle_setting_id ?? "";
+      createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
       break;
 
     case "html5_uninstall":
@@ -46,7 +48,8 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
       break;
 
     case "html5_maint_with_swap":
-      createJob("scheme_builder", { ...job.payload, ...result, plate, _from: job.id });
+      const schemeId = getSelectedSchemeId(job.payload?.client_id) ?? result.vehicle_setting_id ?? "";
+      createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
       break;
 
     case "scheme_builder":
