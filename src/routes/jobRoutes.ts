@@ -33,10 +33,11 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
   const plate: string = job.payload?.plate ?? job.payload?.installation_id ?? "";
 
   switch (job.type) {
-    case "html5_install":
+    case "html5_install": {
       const schemeId = getSelectedSchemeId(job.payload?.client_id) ?? result.vehicle_setting_id ?? "";
       createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
       break;
+    }
 
     case "html5_uninstall":
       createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
@@ -47,10 +48,11 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
       createJob("monitor_can_snapshot", { ...job.payload, ...result, plate, _from: job.id });
       break;
 
-    case "html5_maint_with_swap":
+    case "html5_maint_with_swap": {
       const schemeId = getSelectedSchemeId(job.payload?.client_id) ?? result.vehicle_setting_id ?? "";
       createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
       break;
+    }
 
     case "scheme_builder":
       createJob("monitor_can_snapshot", { ...job.payload, ...result, plate, _from: job.id });
