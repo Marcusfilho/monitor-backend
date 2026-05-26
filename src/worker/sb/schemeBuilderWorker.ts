@@ -221,7 +221,11 @@ async function runSbFlow(params: {
           const obj = JSON.parse(text);
           if (!obj) return;
 
-          // Rejeita imediatamente se action_value != 0 (sem response)
+          // 1. Correlaciona por mtkn PRIMEIRO — ignora mensagens de outras operações
+          const mt = obj?.mtkn ?? obj?.response?.properties?.mtkn ?? obj?.response?.mtkn ?? obj?.action?.mtkn;
+          if (mt != null && String(mt) !== want && String(mt) !== "") return;
+
+          // 2. Só agora verifica action_value — garante que é a resposta correta
           const av  = String(obj?.action_value ?? obj?.response?.properties?.action_value ?? "");
           const err = String(obj?.error_description ?? obj?.response?.properties?.error_description ?? "");
 
@@ -231,9 +235,6 @@ async function runSbFlow(params: {
             reject(new Error(`action_value=${av}${err ? ` err=${err}` : ""}`));
             return;
           }
-
-          const mt = obj?.mtkn ?? obj?.response?.properties?.mtkn ?? obj?.response?.mtkn ?? obj?.action?.mtkn;
-          if (mt != null && String(mt) !== want && String(mt) !== "") return;
 
           if (obj.process_id || !obj.response || obj?.response?.properties) {
             clearTimeout(t);
