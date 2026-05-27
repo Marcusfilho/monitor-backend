@@ -387,33 +387,40 @@ async function runSbFlow(params: {
     });
     await sleep(500);
 
-    // 2. associate (único, com vehicle_setting_id — igual ao monolito)
-    const baseParams = {
-      client_id         : Number(clientId),
-      client_name       : String(clientName),
-      vehicle_id        : Number(vehicleId),
-      vehicle_setting_id: Number(vehicleSettingId),
-      action_source     : "0",
-    };
-    const mt1 = sendFrame("associate_vehicles_actions_opr", baseParams);
-    const r1  = await waitRowByMtkn(mt1, 20000);
-    const av1 = String(findFirstKey(r1, ["action_value"]) ?? "");
-    console.log(`[sb-rw] job=${jobId} associate RAW=${JSON.stringify(r1).slice(0,400)}`);
-    if (av1 === "403") throw new Error("403 action forbidden (associate)");
-    if (av1 === "400") throw new Error("400 associate_vehicles_actions_opr");
-    console.log(`[sb-rw] job=${jobId} associate OK av=${av1}`);
+    // 2. associate — dois fire-and-forget (igual monolito)
+    // call_num=0: prepara assign setting (sem vehicle_id, sem vehicle_setting_id)
+    sendFrame("associate_vehicles_actions_opr", {
+      tag          : "loading_screen",
+      client_id    : String(clientId),
+      client_name  : String(clientName),
+      action_source: "0",
+      action_id    : "1",
+      call_num     : "0",
+    });
+    await sleep(300);
+    // call_num=1: define vehicle_setting_id (sem vehicle_id)
+    sendFrame("associate_vehicles_actions_opr", {
+      client_id          : String(clientId),
+      client_name        : String(clientName),
+      vehicle_setting_id : String(vehicleSettingId),
+      action_source      : "0",
+      action_id          : "1",
+      call_num           : "1",
+    });
+    await sleep(500);
+    console.log(`[sb-rw] job=${jobId} associate fire-and-forget OK`);
 
-    // 3. review_process_attributes — aguarda resposta para extrair process_id
-    let processId = String(findFirstKey(r1, ["process_id", "processId"]) ?? "");
+    // 3. review_process_attributes — igual monolito: só client_id
+    await sleep(200);
+    let processId = "";
     const mt2 = sendFrame("review_process_attributes", {
-      ...baseParams,
-      ...(processId ? { process_id: processId } : {}),
+      client_id: String(clientId),
     });
     const r2  = await waitRowByMtkn(mt2, 20000);
     const av2 = String(findFirstKey(r2, ["action_value"]) ?? "");
     console.log(`[sb-rw] job=${jobId} review RAW=${JSON.stringify(r2).slice(0,400)}`);
     if (av2 === "403") throw new Error("403 action forbidden (review_process_attributes)");
-    processId = processId || String(findFirstKey(r2, ["process_id", "processId"]) ?? "");
+    processId = String(findFirstKey(r2, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
     const mt3 = sendFrame("get_vcls_action_review_opr", {
