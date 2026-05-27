@@ -398,8 +398,8 @@ async function runSbFlow(params: {
       call_num     : "0",
     });
     await sleep(11000); // sniffer: ~11s gap
-    // call_num=1: define vehicle_setting_id (sem vehicle_id)
-    sendFrame("associate_vehicles_actions_opr", {
+    // call_num=1: aguardar resposta antes de ir pro review
+    const mtAssoc1 = sendFrame("associate_vehicles_actions_opr", {
       client_id          : String(clientId),
       client_name        : String(clientName),
       vehicle_setting_id : String(vehicleSettingId),
@@ -407,8 +407,10 @@ async function runSbFlow(params: {
       action_id          : "1",
       call_num           : "1",
     });
-    await sleep(500);
-    console.log(`[sb-rw] job=${jobId} associate fire-and-forget OK`);
+    const assoc1Row = await waitRowByMtkn(mtAssoc1, 20000);
+    const avAssoc1 = String(findFirstKey(assoc1Row, ["action_value"]) ?? "");
+    console.log(`[sb-rw] job=${jobId} associate call_num=1 av=${avAssoc1}`);
+    await sleep(1000);
 
     // 3. review_process_attributes — igual monolito: só client_id
     await sleep(200);
