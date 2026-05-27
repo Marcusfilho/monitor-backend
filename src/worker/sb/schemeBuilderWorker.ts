@@ -385,7 +385,7 @@ async function runSbFlow(params: {
       client_name: String(clientName),
       is_checked : "1",
     });
-    await sleep(500);
+    await sleep(5000); // sniffer: ~5s gap
 
     // 2. associate — dois fire-and-forget (igual monolito)
     // call_num=0: prepara assign setting (sem vehicle_id, sem vehicle_setting_id)
@@ -397,7 +397,7 @@ async function runSbFlow(params: {
       action_id    : "1",
       call_num     : "0",
     });
-    await sleep(300);
+    await sleep(11000); // sniffer: ~11s gap
     // call_num=1: define vehicle_setting_id (sem vehicle_id)
     sendFrame("associate_vehicles_actions_opr", {
       client_id          : String(clientId),
@@ -424,7 +424,7 @@ async function runSbFlow(params: {
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
     const mt3 = sendFrame("get_vcls_action_review_opr", {
-      client_id    : Number(clientId),
+      client_id    : String(clientId),
       client_name  : String(clientName),
       action_source: "0",
     });
@@ -461,12 +461,10 @@ async function runSbFlow(params: {
 
     // 7. execute_action_opr
     const mtExec = sendFrame("execute_action_opr", {
-      client_id    : String(clientId),
-      client_name  : String(clientName),
-      vehicle_id   : String(vehicleId),
-      process_id   : Number(processId),
-      action_source: "0",
       tag          : "loading_screen",
+      client_id    : String(clientId),
+      action_source: "0",
+      process_id   : String(processId),
       comment      : String(comment),
       toggle_check : "1",
     });
