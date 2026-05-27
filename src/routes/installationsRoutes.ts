@@ -281,7 +281,7 @@ router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
   const jobPayload       = job.payload || {};
   const vehicleId        = String(body.vehicle_id         ?? jobPayload.vehicle_id         ?? jobPayload.vehicleId         ?? "").trim();
   const clientId         = String(body.client_id          ?? jobPayload.client_id          ?? jobPayload.clientId          ?? "").trim();
-  const clientName       = String(body.client_name        ?? jobPayload.client_name        ?? jobPayload.clientName        ?? "").trim();
+  const clientName       = String(body.client_name        ?? jobPayload.client_name        ?? jobPayload.clientName        ?? jobPayload.client_descr  ?? jobPayload.clientDescr  ?? "").trim();
   const vehicleSettingId = String(body.vehicle_setting_id ?? jobPayload.vehicle_setting_id ?? jobPayload.vehicleSettingId  ?? "").trim();
   const comment          = String(body.comment ?? "MAINT_NO_SWAP_SKIP").trim();
 
