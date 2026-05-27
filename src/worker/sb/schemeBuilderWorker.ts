@@ -367,71 +367,47 @@ async function runSbFlow(params: {
     });
     await sleep(500);
 
-    // 2. associate call_num=0
-    sendFrame("associate_vehicles_actions_opr", {
-      client_id    : String(clientId),
-      client_name  : String(clientName),
-      action_source: "0",
-      action_id    : "1",
-      call_num     : "0",
-      tag          : "loading_screen",
-    });
-    await sleep(500);
-
-    // 3. associate call_num=1 (com vehicle_setting_id)
-    sendFrame("associate_vehicles_actions_opr", {
-      client_id         : String(clientId),
+    // 2. associate (único, com vehicle_setting_id — igual ao monolito)
+    const baseParams = {
+      client_id         : Number(clientId),
       client_name       : String(clientName),
-      vehicle_setting_id: String(vehicleSettingId),
+      vehicle_id        : Number(vehicleId),
+      vehicle_setting_id: Number(vehicleSettingId),
       action_source     : "0",
-      action_id         : "1",
-      call_num          : "1",
+    };
+    const mt1 = sendFrame("associate_vehicles_actions_opr", baseParams);
+    const r1  = await waitRowByMtkn(mt1, 20000);
+    const av1 = String(r1?.action_value ?? r1?.response?.properties?.action_value ?? "");
+    if (av1 === "403") throw new Error("403 action forbidden (associate)");
+    if (av1 === "400") throw new Error("400 associate_vehicles_actions_opr");
+    console.log(`[sb-rw] job=${jobId} associate OK av=${av1}`);
+
+    // 3. review_process_attributes — aguarda resposta para extrair process_id
+    let processId = String(r1?.process_id ?? r1?.response?.properties?.process_id ?? "");
+    const mt2 = sendFrame("review_process_attributes", {
+      ...baseParams,
+      ...(processId ? { process_id: processId } : {}),
     });
-    await sleep(500);
+    const r2  = await waitRowByMtkn(mt2, 20000);
+    const av2 = String(r2?.action_value ?? r2?.response?.properties?.action_value ?? "");
+    if (av2 === "403") throw new Error("403 action forbidden (review_process_attributes)");
+    processId = processId || String(r2?.process_id ?? r2?.response?.properties?.process_id ?? "");
+    console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
-    // 4. review_process_attributes
-    sendFrame("review_process_attributes", {
-      client_id: String(clientId),
+    // 4. get_vcls_action_review_opr — com process_id
+    const mt3 = sendFrame("get_vcls_action_review_opr", {
+      ...baseParams,
+      ...(processId ? { process_id: processId } : {}),
     });
-    await sleep(3000); // aguarda Traffilog processar o associate antes do get_vcls
+    const reviewRow = await waitRowByMtkn(mt3, 20000);
+    const av3 = String(reviewRow?.action_value ?? reviewRow?.response?.properties?.action_value ?? "");
+    if (av3 === "403") throw new Error("403 action forbidden (get_vcls)");
+    if (av3 === "404") throw new Error("404 get_vcls — process_id não encontrado no Traffilog");
+    processId = processId || String(reviewRow?.process_id ?? "");
+    console.log(`[sb-rw] job=${jobId} get_vcls OK av=${av3} processId=${processId}`);
 
-    // 5. get_vcls_action_review_opr → process_id (retry até 3x se 404)
-    let reviewRow: any = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      if (attempt > 1) await sleep(3000); // backoff entre tentativas
-      const mtReview = sendFrame("get_vcls_action_review_opr", {
-        client_id    : String(clientId),
-        client_name  : String(clientName),
-        action_source: "0",
-      });
-      try {
-        reviewRow = await waitRowByMtkn(mtReview, 20000);
-        break;
-      } catch (e: any) {
-        const is404 = String(e?.message || "").includes("action_value=404");
-        if (is404 && attempt < 3) {
-          console.log(`[sb-rw] job=${jobId} get_vcls 404 tentativa ${attempt}/3 — retry em 3s`);
-          continue;
-        }
-        throw e;
-      }
-    }
-
-    let processId = String(reviewRow?.process_id ?? "");
     if (!processId) {
-      const d = reviewRow?.response?.properties?.data;
-      if (Array.isArray(d)) {
-        for (const it of d) {
-          const pid = it?.process_id ?? it?.processId ?? it?.processID ?? it?.properties?.process_id;
-          if (pid) { processId = String(pid); break; }
-        }
-      }
-    }
-    if (!processId) {
-      // Não falha — SB pode já estar rodando, waitSbCompleted detecta via UNIT_CONFIG_STATUS
-      console.log(`[sb-rw] job=${jobId} WARN: process_id não veio — reviewRow RAW=` +
-        JSON.stringify(reviewRow).slice(0, 400));
-      console.log(`[sb-rw] job=${jobId} continuando sem process_id — waitSbCompleted detecta via push`);
+      console.log(`[sb-rw] job=${jobId} WARN: process_id não veio — continuando via waitSbCompleted`);
     } else {
       console.log(`[sb-rw] job=${jobId} process_id=${processId}`);
     }
