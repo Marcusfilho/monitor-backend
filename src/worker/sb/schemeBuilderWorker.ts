@@ -229,7 +229,7 @@ async function runSbFlow(params: {
           const av  = String(obj?.action_value ?? obj?.response?.properties?.action_value ?? "");
           const err = String(obj?.error_description ?? obj?.response?.properties?.error_description ?? "");
 
-          if (av && av !== "0" && !obj?.response) {
+          if (av && av !== "0") {
             clearTimeout(t);
             ws.removeListener("message", onMsg);
             reject(new Error(`action_value=${av}${err ? ` err=${err}` : ""}`));
