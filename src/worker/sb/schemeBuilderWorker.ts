@@ -397,6 +397,7 @@ async function runSbFlow(params: {
     const mt1 = sendFrame("associate_vehicles_actions_opr", baseParams);
     const r1  = await waitRowByMtkn(mt1, 20000);
     const av1 = String(findFirstKey(r1, ["action_value"]) ?? "");
+    console.log(`[sb-rw] job=${jobId} associate RAW=${JSON.stringify(r1).slice(0,400)}`);
     if (av1 === "403") throw new Error("403 action forbidden (associate)");
     if (av1 === "400") throw new Error("400 associate_vehicles_actions_opr");
     console.log(`[sb-rw] job=${jobId} associate OK av=${av1}`);
@@ -409,6 +410,7 @@ async function runSbFlow(params: {
     });
     const r2  = await waitRowByMtkn(mt2, 20000);
     const av2 = String(findFirstKey(r2, ["action_value"]) ?? "");
+    console.log(`[sb-rw] job=${jobId} review RAW=${JSON.stringify(r2).slice(0,400)}`);
     if (av2 === "403") throw new Error("403 action forbidden (review_process_attributes)");
     processId = processId || String(findFirstKey(r2, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
