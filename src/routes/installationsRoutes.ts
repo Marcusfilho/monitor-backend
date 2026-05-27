@@ -61,6 +61,10 @@ router.post("/", (req: Request, res: Response) => {
     return;
   }
 
+  // Garantir que plate usa plate_real quando disponível (não o serial)
+  if (body.plate_real && body.plate_real !== body.plate) {
+    body.plate = body.plate_real;
+  }
   let job;
   try {
     job = createJob(jobType, body);
