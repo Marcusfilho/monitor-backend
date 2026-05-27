@@ -416,10 +416,10 @@ async function runSbFlow(params: {
     processId = processId || String(findFirstKey(r2, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
-    // 4. get_vcls_action_review_opr — com process_id
     const mt3 = sendFrame("get_vcls_action_review_opr", {
-      ...baseParams,
-      ...(processId ? { process_id: processId } : {}),
+      client_id    : Number(clientId),
+      client_name  : String(clientName),
+      action_source: "0",
     });
     const reviewRow = await waitRowByMtkn(mt3, 20000);
     const av3 = String(findFirstKey(reviewRow, ["action_value"]) ?? "");
@@ -427,11 +427,8 @@ async function runSbFlow(params: {
     if (av3 === "404") throw new Error("404 get_vcls — process_id não encontrado no Traffilog");
     processId = processId || String(findFirstKey(reviewRow, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} get_vcls OK av=${av3} processId=${processId}`);
-
     if (!processId) {
-      console.log(`[sb-rw] job=${jobId} WARN: process_id não veio — continuando via waitSbCompleted`);
-    } else {
-      console.log(`[sb-rw] job=${jobId} process_id=${processId}`);
+      throw new Error("process_id nao retornado pelo Traffilog — abortando SB");
     }
 
     // 6a. get_vehicle_info — registra contexto no servidor (necessário para receber pushes)
