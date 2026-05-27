@@ -183,6 +183,24 @@ function buildSendFrame(
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+function findFirstKey(obj: any, keys: string[]): any {
+  const seen = new Set();
+  function walk(x: any): any {
+    if (!x || typeof x !== "object") return null;
+    if (seen.has(x)) return null;
+    seen.add(x);
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(x, k) && x[k] != null) return x[k];
+    }
+    for (const v of Object.values(x)) {
+      const r = walk(v);
+      if (r != null) return r;
+    }
+    return null;
+  }
+  return walk(obj);
+}
+
 async function runSbFlow(params: {
   clientId       : string;
   clientName     : string;
@@ -378,21 +396,21 @@ async function runSbFlow(params: {
     };
     const mt1 = sendFrame("associate_vehicles_actions_opr", baseParams);
     const r1  = await waitRowByMtkn(mt1, 20000);
-    const av1 = String(r1?.action_value ?? r1?.response?.properties?.action_value ?? "");
+    const av1 = String(findFirstKey(r1, ["action_value"]) ?? "");
     if (av1 === "403") throw new Error("403 action forbidden (associate)");
     if (av1 === "400") throw new Error("400 associate_vehicles_actions_opr");
     console.log(`[sb-rw] job=${jobId} associate OK av=${av1}`);
 
     // 3. review_process_attributes — aguarda resposta para extrair process_id
-    let processId = String(r1?.process_id ?? r1?.response?.properties?.process_id ?? "");
+    let processId = String(findFirstKey(r1, ["process_id", "processId"]) ?? "");
     const mt2 = sendFrame("review_process_attributes", {
       ...baseParams,
       ...(processId ? { process_id: processId } : {}),
     });
     const r2  = await waitRowByMtkn(mt2, 20000);
-    const av2 = String(r2?.action_value ?? r2?.response?.properties?.action_value ?? "");
+    const av2 = String(findFirstKey(r2, ["action_value"]) ?? "");
     if (av2 === "403") throw new Error("403 action forbidden (review_process_attributes)");
-    processId = processId || String(r2?.process_id ?? r2?.response?.properties?.process_id ?? "");
+    processId = processId || String(findFirstKey(r2, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
     // 4. get_vcls_action_review_opr — com process_id
@@ -401,10 +419,10 @@ async function runSbFlow(params: {
       ...(processId ? { process_id: processId } : {}),
     });
     const reviewRow = await waitRowByMtkn(mt3, 20000);
-    const av3 = String(reviewRow?.action_value ?? reviewRow?.response?.properties?.action_value ?? "");
+    const av3 = String(findFirstKey(reviewRow, ["action_value"]) ?? "");
     if (av3 === "403") throw new Error("403 action forbidden (get_vcls)");
     if (av3 === "404") throw new Error("404 get_vcls — process_id não encontrado no Traffilog");
-    processId = processId || String(reviewRow?.process_id ?? "");
+    processId = processId || String(findFirstKey(reviewRow, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} get_vcls OK av=${av3} processId=${processId}`);
 
     if (!processId) {
