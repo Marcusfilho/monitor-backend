@@ -521,7 +521,7 @@ async function processJob(job: any): Promise<void> {
   const vehicleId         = String(payload.vehicleId        ?? payload.vehicle_id         ?? "");
   const vehicleSettingId  = String(payload.vehicleSettingId ?? payload.vehicle_setting_id ?? "");
   const clientId          = String(payload.clientId         ?? payload.client_id          ?? "");
-  const clientName        = String(payload.clientName       ?? payload.client_name        ?? "");
+  const clientName        = String(payload.clientName       ?? payload.client_name        ?? payload.client_descr       ?? "");
   const comment           = String(payload.comment          ?? "");
 
   console.log(`[sb-rw] job=${jobId} vehicleId=${vehicleId} clientId=${clientId} settingId=${vehicleSettingId}`);
