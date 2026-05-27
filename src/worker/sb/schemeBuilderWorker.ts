@@ -251,6 +251,7 @@ async function runSbFlow(params: {
           if (av && ERROR_AV.includes(av)) {
             clearTimeout(t);
             ws.removeListener("message", onMsg);
+            console.log(`[sb-rw] waitRowByMtkn REJECT RAW=${JSON.stringify(obj).slice(0,600)}`);
             reject(new Error(`action_value=${av}${err ? ` err=${err}` : ""}`));
             return;
           }
