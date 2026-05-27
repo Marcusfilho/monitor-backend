@@ -566,9 +566,9 @@ async function processJob(job: any): Promise<void> {
         detail : msg,
       });
     } else if (isTimeout) {
-      await failJob(jobId, "sb_timeout", { detail: msg });
+      await failJob(jobId, "sb_timeout", msg);
     } else {
-      await failJob(jobId, "sb_flow_error", { detail: msg });
+      await failJob(jobId, "sb_flow_error", msg);
     }
   }
 }

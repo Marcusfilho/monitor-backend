@@ -1233,7 +1233,7 @@ const ERROR_MESSAGES=[
   {match:"timeout",friendly:"Tempo esgotado. Verifique a conexão VPN e tente novamente."},
 ];
 function friendlyError(msg){if(!msg)return"Erro desconhecido";const l=String(msg).toLowerCase();for(const e of ERROR_MESSAGES)if(l.includes(e.match.toLowerCase()))return e.friendly;return String(msg).slice(0,240)}
-function extractLastError(inst){const e=inst?.last_error||inst?.lastError||inst?.html5?.last_error||null;if(!e)return null;if(typeof e==="string")return{title:"ERRO",message:friendlyError(e)};if(typeof e==="object"){const msg=e.message||e.error||e.detail||"";return{title:e.job_type?String(e.job_type).toUpperCase():"ERRO",message:friendlyError(msg||"job_failed")}}return{title:"ERRO",message:friendlyError(String(e))}}
+function extractLastError(inst){const e=inst?.last_error||inst?.lastError||inst?.html5?.last_error||null;if(!e)return null;if(typeof e==="string")return{title:"ERRO",message:friendlyError(e)};if(typeof e==="object"){const rawDetail=e.detail??e.error??e.message??e.head??e.reason??"";const msg=typeof rawDetail==="object"?JSON.stringify(rawDetail):String(rawDetail||"");return{title:e.job_type?String(e.job_type).toUpperCase():"ERRO",message:friendlyError(msg||e.reason||"job_failed")}}return{title:"ERRO",message:friendlyError(String(e))}}
 
 // ─── RENDER ALL ───────────────────────────────────────────────────────────────
 function renderAll(inst){

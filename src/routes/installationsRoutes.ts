@@ -1,3 +1,4 @@
+import { getSelectedSchemeId } from "../services/schemeSelectionService";
 /**
  * installationsRoutes.ts — Rotas de instalações (REWRITE)
  *
@@ -292,13 +293,15 @@ router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
   //    Sem await: retorna ao app imediatamente, SB corre em paralelo no worker
   const sbQueued = !!(vehicleId && vehicleSettingId && clientId);
   if (sbQueued) {
+    const schemeId = getSelectedSchemeId(clientId) ?? vehicleSettingId ?? "";
     const sbJob = createJob("scheme_builder", {
       vehicle_id         : vehicleId,
-      vehicle_setting_id : vehicleSettingId,
+      vehicle_setting_id : schemeId,
       client_id          : clientId,
       client_name        : clientName,
       comment,
       origin             : `maint_no_swap_skip:${jobId}`,
+      _from              : jobId,
     });
     console.log(`[installations] SB enfileirado job=${sbJob.id} vehicle_id=${vehicleId} (paralelo)`);
   } else {
