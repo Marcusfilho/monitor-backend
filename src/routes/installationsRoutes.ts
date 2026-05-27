@@ -170,6 +170,7 @@ router.get("/:id", (req: Request, res: Response) => {
     else                                                          status = "CAN_RUNNING";
   } else if (sbJob) {
     if (sbJob.status === "error")                                 status = "SB_ERROR";
+    else if (sbJob.status === "completed")                        status = "SB_DONE";
     else                                                          status = "SB_RUNNING";
   }
 
@@ -183,6 +184,9 @@ router.get("/:id", (req: Request, res: Response) => {
   const canToken    = canJob?.payload?.installation_token ?? canJob?.result?.token ?? root.payload?.installation_token ?? null;
   const canJobId    = canJob?.id ?? null;
 
+  // progresso SB para o frontend (inst.sb.last_progress)
+  const sbProgress = sbJob?.result?.progress ?? sbJob?.result?.last_progress ?? null;
+
   res.json({
     ok: true,
     id: root.id,
@@ -191,6 +195,7 @@ router.get("/:id", (req: Request, res: Response) => {
     status,
     payload: root.payload,
     result: root.result,
+    sb: sbProgress != null ? { last_progress: sbProgress } : undefined,
     jobs: {
       html5_install:       root,
       scheme_builder:      sbJob,
