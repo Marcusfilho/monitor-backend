@@ -251,7 +251,7 @@ async function runSbFlow(params: {
   function waitSbCompleted(): Promise<{ status: string; progress: string }> {
     const SB_MAX_WAIT_MS         = 720000; // 12min
     const SB_SILENCE_TIMEOUT_MS  = 30000;  // 30s sem frame → silence
-    const SB_SILENCE_MAX_WAIT_MS = 120000; // espera até 2min pelo retorno
+    const SB_SILENCE_MAX_WAIT_MS = 300000; // espera até 5min pelo retorno
     const SB_DISCONNECTED = ["Disconnected Unit", "Disconnected", "Retry", "Batch Timeout", "Internal Timeout"];
 
     return new Promise((resolve, reject) => {
@@ -560,11 +560,7 @@ async function processJob(job: any): Promise<void> {
     const isTimeout      = msg.includes("timeout") && !isDisconnected;
 
     if (isDisconnected) {
-      await completeJob(jobId, {
-        status : "sb_disconnected",
-        message: "Equipamento perdeu comunicação durante o SB.",
-        detail : msg,
-      });
+      await failJob(jobId, "sb_disconnected", msg);
     } else if (isTimeout) {
       await failJob(jobId, "sb_timeout", msg);
     } else {
