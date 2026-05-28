@@ -1195,8 +1195,8 @@ function parseSbProgress(inst,snapshot){
 // ─── STEPPER ─────────────────────────────────────────────────────────────────
 function statusToStepIndex(status){
   const s=String(status||"").toUpperCase();
-  const h5Done=s.includes("SB")||s.includes("CAN")||s.includes("GS")||s==="COMPLETED"||s==="HTML5_DONE"||s==="WAITING_REBOOT";
-  const sbDone=s==="SB_DONE"||s==="SB_DISCONNECTED"||s.startsWith("CAN")||s.startsWith("GS")||s==="COMPLETED"||s.includes("WAITING_REBOOT");
+  const h5Done=s.includes("SB")||s.includes("CAN")||s.includes("GS")||s==="COMPLETED"||s==="HTML5_DONE"||s==="WAITING_REBOOT"||s==="WAITING_APPROVAL";
+  const sbDone=s==="SB_DONE"||s==="SB_DISCONNECTED"||s==="SB_ERROR"||s==="WAITING_APPROVAL"||s.startsWith("CAN")||s.startsWith("GS")||s==="COMPLETED"||s.includes("WAITING_REBOOT");
   const canDone=s==="CAN_APPROVED"||s.startsWith("GS")||s==="COMPLETED";
   const fimDone=s==="GS_DONE"||s==="COMPLETED";
   if(fimDone)return 4;if(canDone)return 3;if(sbDone)return 2;if(h5Done)return 1;return 0;
@@ -1219,7 +1219,7 @@ function renderStepper(status){
 // ─── STATUS LABEL ─────────────────────────────────────────────────────────────
 function statusToLabel(s){
   const x=String(s||"").trim().toUpperCase();if(!x)return"criada";
-  const MAP={CREATED:"criada",HTML5_QUEUED:"aguardando cadastro…",HTML5_RUNNING:"cadastrando no sistema…",HTML5_DONE:"cadastrado",SB_QUEUED:"aguardando config.",SB_RUNNING:"configurando...",SB_DONE:"configurado",SB_DISCONNECTED:"⚠ comunicação perdida",CAN_RUNNING:"coletando CAN...",CAN_APPROVED:"CAN aprovado",GS_QUEUED:"aguardando envio GS",GS_RUNNING:"enviando GS...",GS_DONE:"GS enviado",COMPLETED:"concluído ✓",WAITING_REBOOT:"aguardando reboot"};
+  const MAP={CREATED:"criada",HTML5_QUEUED:"aguardando cadastro…",HTML5_RUNNING:"cadastrando no sistema…",HTML5_DONE:"cadastrado",SB_QUEUED:"aguardando config.",SB_RUNNING:"configurando...",SB_DONE:"configurado",SB_DISCONNECTED:"⚠ comunicação perdida",CAN_RUNNING:"coletando CAN...",CAN_APPROVED:"CAN aprovado",GS_QUEUED:"aguardando envio GS",GS_RUNNING:"enviando GS...",GS_DONE:"GS enviado",COMPLETED:"concluído ✓",WAITING_REBOOT:"aguardando reboot",WAITING_APPROVAL:"aguardando aprovação CAN"};
   return MAP[x]||x.toLowerCase();
 }
 
