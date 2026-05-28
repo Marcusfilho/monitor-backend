@@ -10,6 +10,7 @@ import {
   BaseJob,
 } from "../jobs/jobStore";
 import { getGsCommand } from "../core/gsCommandMap";
+import { randomUUID } from "crypto";
 
 const router = Router();
 
@@ -45,7 +46,10 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
 
     case "html5_maint_no_swap":
       // monitor_skip=1 já está no payload (definido pelo worker)
-      createJob("monitor_can_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      createJob("monitor_can_snapshot", {
+        ...job.payload, ...result, plate, _from: job.id,
+        installation_token: randomUUID(),
+      });
       break;
 
     case "html5_maint_with_swap": {
@@ -55,7 +59,10 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
     }
 
     case "scheme_builder":
-      createJob("monitor_can_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      createJob("monitor_can_snapshot", {
+        ...job.payload, ...result, plate, _from: job.id,
+        installation_token: randomUUID(),
+      });
       break;
 
     // GS_PIPELINE_V1: CAN decide se enfileira gs_calibration ou save_snapshot
