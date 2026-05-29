@@ -181,11 +181,11 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
 router.post("/:id/progress", (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { progress, message } = req.body ?? {};
+    const { progress, message, partial } = req.body ?? {};
 
     const existing = getJob(id);
     const job = updateJob(id, {
-      result: { ...(existing?.result ?? {}), progress, message },
+      result: { ...(existing?.result ?? {}), progress, message, ...(partial != null ? { partial } : {}) },
     });
     if (!job) {
       res.status(404).json({ error: "job_not_found" });
