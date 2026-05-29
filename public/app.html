@@ -1021,7 +1021,13 @@ function canUnwrapSnapshot(x){
 
 function extractSnapshot(inst){
   const raw=inst?.can_snapshot_latest||inst?.canSnapshotLatest||inst?.can_snapshot_best||inst?.canSnapshotBest||inst?.can_snapshot||inst?.canSnapshot||inst?.can?.snapshot_latest||inst?.can?.snapshot||(Array.isArray(inst?.can?.snapshots)?inst.can.snapshots[0]:null)||null;
-  const snap=canUnwrapSnapshot(raw);return snap&&typeof snap==="object"?snap:null;
+  const snap=canUnwrapSnapshot(raw);
+  if(snap&&typeof snap==="object")return snap;
+  // FIX_CAN_PARTIAL_READ_V1 — lê parcial do job CAN durante CAN_RUNNING
+  const canJob=inst?.jobs?.monitor_can_snapshot||inst?.jobs?.can_snapshot||null;
+  const partial=canJob?.result?.partial||null;
+  if(partial&&typeof partial==="object")return partial;
+  return null;
 }
 
 function canExtractRows(snap){

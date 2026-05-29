@@ -192,6 +192,19 @@ async function pollOnce(): Promise<void> {
         windowMs       : Number(process.env.VM_WINDOW_MS         || "5000"),
         waitAfterCmdMs : Number(process.env.VM_WAIT_AFTER_CMD_MS || "800"),
         urlEncode      : true,
+        onPartialParams: (params, counts, header, moduleState) => {
+          // FIX_CAN_PARTIAL_PUSH_V1 — envia parcial ao backend durante CAN_RUNNING
+          fetch(`${BASE}/api/jobs/${jobId}/progress`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+              worker_key: KEY,
+              progress:   Math.round((counts.withValue / Math.max(counts.total, 1)) * 100),
+              message:    `params=${counts.total} withValue=${counts.withValue} events=${counts.events}`,
+              partial: { params, header, moduleState },
+            }),
+          }).catch(() => { /* best-effort */ });
+        },
       });
 
       try { ws.close(); } catch {}
