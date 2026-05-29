@@ -193,7 +193,11 @@ class TraffilogWsMux {
     this.urlEncode = urlEncode;
 
     this.ws.on("message", (data: any) => {
-      const text = Buffer.isBuffer(data) ? data.toString("utf8") : String(data ?? "");
+      const raw  = Buffer.isBuffer(data) ? data.toString("utf8") : String(data ?? "");
+      // FIX_VM_URLDECODE_V1: decodifica URL-encoding igual ao wsMux.ts
+      const text = raw.trimStart().startsWith("%7B")
+        ? (() => { try { return decodeURIComponent(raw); } catch { return raw; } })()
+        : raw;
       let msg: WsResponse | null = null;
       try { msg = JSON.parse(text); } catch { return; }
 
