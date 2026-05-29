@@ -15,11 +15,6 @@
  *   7. execute_action_opr (toggle_check=1)
  *   8. waitSbCompleted: pushes UNIT_CONFIG_STATUS + resubscrição a cada 15s
  *      + silence watchdog + timeout 12min
- *
- * FIX_SB_PIPELINE_V1: silence timeout agora completa o job (em vez de falhar)
- *   para avançar o pipeline para monitor_can_snapshot.
- * FIX_SB_RAW_LOG_V1: log raw de todos os pushes recebidos após execute
- *   para diagnosticar UNIT_CONFIG_STATUS.
  */
 
 import WebSocket from "ws";
@@ -238,6 +233,8 @@ async function runSbFlow(params: {
 
       function onMsg(data: any) {
         const text = decodeMaybe(String(data));
+        // LOG DIAGNÓSTICO — remover após confirmar funcionamento
+
         try {
           const obj = JSON.parse(text);
           if (!obj) return;
@@ -330,17 +327,6 @@ async function runSbFlow(params: {
 
       function onMsg(data: any) {
         const text = decodeMaybe(String(data));
-
-        // FIX_SB_RAW_LOG_V1: loga TUDO que chega após o execute para diagnóstico
-        // Remove este bloco após confirmar que os pushes chegam corretamente
-        try {
-          const obj = JSON.parse(text);
-          const rp  = obj?.response?.properties;
-          if (rp) {
-            console.log(`[sb-rw] job=${jobId} SB_RAW action_name="${rp.action_name ?? ""}" data_source="${rp.data_source ?? ""}" data=${JSON.stringify(rp.data ?? []).slice(0, 300)}`);
-          }
-        } catch {}
-
         try {
           const obj = JSON.parse(text);
           const rp  = obj?.response?.properties;
@@ -367,19 +353,6 @@ async function runSbFlow(params: {
             lastStatus   = status;
             lastProgress = progress;
             console.log(`[sb-rw] job=${jobId} SB_WAIT status="${status}" progress="${progress}%" type="${type}" error="${error}"`);
-
-            // FIX_SB_PROGRESS_RT_V1: reporta progresso ao backend para o frontend atualizar a barra em tempo real.
-            // Fire-and-forget de propósito: sem await e com .catch vazio, para NÃO bloquear o processamento dos pushes.
-            fetch(`${BASE}/api/jobs/${jobId}/progress`, {
-              method : "POST",
-              headers: { "Content-Type": "application/json" },
-              body   : JSON.stringify({
-                worker_key: KEY,
-                progress  : parseFloat(progress) || 0,
-                status,
-                message   : status,
-              }),
-            }).catch(() => {});
           }
 
           const pct            = parseFloat(progress) || 0;
@@ -412,7 +385,7 @@ async function runSbFlow(params: {
       client_name: String(clientName),
       is_checked : "1",
     });
-    await sleep(5000); // sniffer: ~5s gap
+    await sleep(500);
 
     // 2. associate — dois fire-and-forget (igual monolito)
     // call_num=0: prepara assign setting (sem vehicle_id, sem vehicle_setting_id)
@@ -424,9 +397,9 @@ async function runSbFlow(params: {
       action_id    : "1",
       call_num     : "0",
     });
-    await sleep(11000); // sniffer: ~11s gap
-    // call_num=1: aguardar resposta antes de ir pro review
-    const mtAssoc1 = sendFrame("associate_vehicles_actions_opr", {
+    await sleep(300);
+    // call_num=1: define vehicle_setting_id (sem vehicle_id)
+    sendFrame("associate_vehicles_actions_opr", {
       client_id          : String(clientId),
       client_name        : String(clientName),
       vehicle_setting_id : String(vehicleSettingId),
@@ -434,10 +407,8 @@ async function runSbFlow(params: {
       action_id          : "1",
       call_num           : "1",
     });
-    const assoc1Row = await waitRowByMtkn(mtAssoc1, 20000);
-    const avAssoc1 = String(findFirstKey(assoc1Row, ["action_value"]) ?? "");
-    console.log(`[sb-rw] job=${jobId} associate call_num=1 av=${avAssoc1}`);
-    await sleep(1000);
+    await sleep(500);
+    console.log(`[sb-rw] job=${jobId} associate fire-and-forget OK`);
 
     // 3. review_process_attributes — igual monolito: só client_id
     await sleep(200);
@@ -453,7 +424,7 @@ async function runSbFlow(params: {
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
     const mt3 = sendFrame("get_vcls_action_review_opr", {
-      client_id    : String(clientId),
+      client_id    : Number(clientId),
       client_name  : String(clientName),
       action_source: "0",
     });
@@ -490,10 +461,12 @@ async function runSbFlow(params: {
 
     // 7. execute_action_opr
     const mtExec = sendFrame("execute_action_opr", {
-      tag          : "loading_screen",
       client_id    : String(clientId),
+      client_name  : String(clientName),
+      vehicle_id   : String(vehicleId),
+      process_id   : Number(processId),
       action_source: "0",
-      process_id   : String(processId),
+      tag          : "loading_screen",
       comment      : String(comment),
       toggle_check : "1",
     });
@@ -589,10 +562,7 @@ async function processJob(job: any): Promise<void> {
     const isTimeout      = msg.includes("timeout") && !isDisconnected;
 
     if (isDisconnected) {
-      // FIX_SB_PIPELINE_V1: execute chegou OK mas pushes UNIT_CONFIG_STATUS não recebidos.
-      // SB provavelmente rodou no equipamento — completa o job para avançar pipeline para CAN.
-      console.log(`[sb-rw] job=${jobId} SB_DISCONNECTED → completando como ok (avança para CAN)`);
-      await completeJob(jobId, { ok: true, status: "completed_no_push", detail: msg });
+      await failJob(jobId, "sb_disconnected", msg);
     } else if (isTimeout) {
       await failJob(jobId, "sb_timeout", msg);
     } else {
