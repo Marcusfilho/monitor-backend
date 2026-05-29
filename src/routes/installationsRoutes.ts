@@ -199,7 +199,7 @@ router.get("/:id", (req: Request, res: Response) => {
     status,
     payload: root.payload,
     result: root.result,
-    sb: sbProgress != null ? { last_progress: sbProgress } : undefined,
+    sb: sbProgress != null ? { progress: sbProgress, last_progress: sbProgress } : undefined,
     jobs: {
       html5_install:       root,
       scheme_builder:      sbJob,

@@ -412,7 +412,7 @@ async function runSbFlow(params: {
       client_name: String(clientName),
       is_checked : "1",
     });
-    await sleep(5000); // sniffer: ~5s gap
+    await sleep(800);  // reduzido: gap necessário para o servidor registrar vcls_check
 
     // 2. associate — dois fire-and-forget (igual monolito)
     // call_num=0: prepara assign setting (sem vehicle_id, sem vehicle_setting_id)
@@ -424,7 +424,7 @@ async function runSbFlow(params: {
       action_id    : "1",
       call_num     : "0",
     });
-    await sleep(11000); // sniffer: ~11s gap
+    await sleep(1500);  // reduzido: gap necessário entre associate call_num=0 e call_num=1
     // call_num=1: aguardar resposta antes de ir pro review
     const mtAssoc1 = sendFrame("associate_vehicles_actions_opr", {
       client_id          : String(clientId),

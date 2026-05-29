@@ -183,8 +183,9 @@ router.post("/:id/progress", (req: Request, res: Response) => {
     const id = String(req.params.id);
     const { progress, message } = req.body ?? {};
 
+    const existing = getJob(id);
     const job = updateJob(id, {
-      result: { progress, message },
+      result: { ...(existing?.result ?? {}), progress, message },
     });
     if (!job) {
       res.status(404).json({ error: "job_not_found" });

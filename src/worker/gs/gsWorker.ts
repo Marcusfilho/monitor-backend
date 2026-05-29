@@ -65,10 +65,42 @@ function readTokenIfFresh(): string | null {
   }
 }
 
+async function userLoginAndGetToken(): Promise<string> {
+  const loginName = (process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN_NAME || "").trim();
+  const password  = (process.env.WS_PASSWORD   || process.env.MONITOR_PASSWORD   || "").trim();
+  const apiBase   = TRAFFILOG_API_BASE_URL.replace(/\/+$/, "");
+  if (!loginName || !password) throw new Error("[gs-rw] faltam envs: WS_LOGIN_NAME / WS_PASSWORD");
+  if (!apiBase)                throw new Error("[gs-rw] falta env: TRAFFILOG_API_BASE_URL");
+  const res = await fetch(apiBase, {
+    method : "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body   : JSON.stringify({
+      action: { name: "user_login", parameters: { login_name: loginName, password } },
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const data: any = await res.json();
+  const tok =
+    data?.response?.properties?.session_token ||
+    data?.response?.properties?.data?.[0]?.session_token;
+  if (!tok || String(tok).trim().length < 20)
+    throw new Error("[gs-rw] user_login não retornou session_token");
+  return String(tok).trim();
+}
+
 async function getSessionToken(): Promise<string> {
+  // FIX_GS_OWN_LOGIN_V1: tenta cache; se ausente/expirado faz login próprio
   const cached = readTokenIfFresh();
   if (cached) return cached;
-  throw new Error("[gs-rw] session token ausente ou expirado — aguardando sb-rw renovar");
+  console.log("[gs-rw] token ausente/expirado — fazendo login próprio");
+  const tok = await userLoginAndGetToken();
+  try {
+    const fs = await import("fs");
+    const path = (process.env.MONITOR_SESSION_TOKEN_PATH || "/tmp/.session_token");
+    fs.writeFileSync(path, `${Date.now()}:${tok}
+`, { mode: 0o600 });
+  } catch {}
+  return tok;
 }
 
 // ---------------------------------------------------------------------------
