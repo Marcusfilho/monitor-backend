@@ -30,7 +30,13 @@ const TRAFFILOG_API_BASE_URL = (
 
 const WS_LOGIN_NAME = (process.env.WS_LOGIN_NAME || "").trim();
 const WS_PASSWORD   = (process.env.WS_PASSWORD   || "").trim();
-const WS_GUID       = (process.env.MONITOR_WS_GUID || "7E65FBE2-993A-489E-A445-13E9E5CBFF02").trim();
+const WS_GUID_BASE  = (process.env.MONITOR_WS_GUID || "").trim();
+function makeGuid(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16).toUpperCase();
+  });
+}
 
 const TOKEN_CACHE_PATH = "/tmp/.session_token_can";
 
@@ -90,12 +96,13 @@ async function renewSessionToken(): Promise<string> {
 
 // ─── WS (padrão do schemeBuilderWorker) ──────────────────────────────────────
 
-function buildWsUrl(sessionToken: string): string {
-  return `wss://websocket.traffilog.com:8182/${WS_GUID}/${sessionToken}/json?defragment=1`;
+function buildWsUrl(sessionToken: string, guid?: string): string {
+  const g = guid || WS_GUID_BASE || makeGuid();
+  return `wss://websocket.traffilog.com:8182/${g}/${sessionToken}/json?defragment=1`;
 }
 
 async function openWs(sessionToken: string): Promise<WebSocket> {
-  const url = buildWsUrl(sessionToken);
+  const url = buildWsUrl(sessionToken, makeGuid()); // FIX_CAN_FRESH_GUID_V1: GUID único por sessão
   const ws  = new WebSocket(url, {
     headers: {
       "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
