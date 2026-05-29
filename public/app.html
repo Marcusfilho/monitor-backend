@@ -1271,7 +1271,7 @@ function renderAll(inst){
 
   // botões — decidir qual barra mostrar
   const id=inst?.installation_id||inst?.id||"",tok=inst?.installation_token||inst?.token||"";
-  const canApprove=!!(id&&tok)&&(st.includes("CAN")&&!isMns||st.includes("WAITING_REBOOT")||st.includes("GS"));
+  const canApprove=!!(id&&tok)&&(st==="SB_DONE"||st.includes("WAITING")||(st.includes("CAN")&&!isMns)||st.includes("GS")); // FIX_APPROVE_AFTER_SB_V1
   $("btnApprove").disabled=!canApprove;
   const canRefresh=!!(id&&tok)&&(st==="SB_DONE"||st.includes("CAN")||st.includes("WAITING_REBOOT")||st.includes("GS"))&&!(st.includes("CAN_RUNNING")||st.includes("SB_RUNNING"));
   $("btnRefresh").disabled=!canRefresh;
