@@ -54,6 +54,8 @@ function saveCachedToken(token: string): void {
 }
 
 let _sessionToken = loadCachedToken();
+let _tokenFetchedAt = 0; // FIX_CAN_TOKEN_TTL_V1: 0 força renovação no boot (ver ensureSessionToken)
+const TOKEN_TTL_MS = 3 * 60 * 1000; // 3 minutos
 
 async function fetchSessionToken(): Promise<string> {
   if (!WS_LOGIN_NAME || !WS_PASSWORD) {
@@ -78,11 +80,14 @@ async function fetchSessionToken(): Promise<string> {
 
   console.log(`[can-rw] user_login OK (token len=${token.length})`);
   saveCachedToken(token);
+  _tokenFetchedAt = Date.now();
   return token;
 }
 
 async function ensureSessionToken(): Promise<string> {
-  if (_sessionToken) return _sessionToken;
+  const expired = _tokenFetchedAt === 0 || (Date.now() - _tokenFetchedAt) > TOKEN_TTL_MS; // FIX_CAN_TOKEN_TTL_V1
+  if (_sessionToken && !expired) return _sessionToken;
+  if (expired) console.log("[can-rw] token expirado (TTL) — renovando");
   _sessionToken = await fetchSessionToken();
   return _sessionToken;
 }
@@ -102,7 +107,7 @@ function buildWsUrl(sessionToken: string, guid?: string): string {
 }
 
 async function openWs(sessionToken: string): Promise<WebSocket> {
-  const url = buildWsUrl(sessionToken, makeGuid()); // FIX_CAN_FRESH_GUID_V1: GUID único por sessão
+  const url = buildWsUrl(sessionToken, WS_GUID_BASE || makeGuid()); // FIX_CAN_GUID_V2: usa GUID fixo do env igual ao SB
   const ws  = new WebSocket(url, {
     headers: {
       "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
@@ -246,7 +251,7 @@ async function pollOnce(): Promise<void> {
       try { ws?.close(); } catch {}
 
       const msg = err?.message || String(err);
-      const isAuthError = /401|unauthorized|session|expired|invalid.*token/i.test(msg);
+      const isAuthError = /401|unauthorized|session|expired|invalid.*token|404/i.test(msg);
 
       if (isAuthError && attempts === 1) {
         console.log(`[can-rw] job=${jobId} erro de auth — renovando token e retentando`);
