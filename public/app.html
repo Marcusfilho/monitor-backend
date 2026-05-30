@@ -1023,10 +1023,20 @@ function extractSnapshot(inst){
   const raw=inst?.can_snapshot_latest||inst?.canSnapshotLatest||inst?.can_snapshot_best||inst?.canSnapshotBest||inst?.can_snapshot||inst?.canSnapshot||inst?.can?.snapshot_latest||inst?.can?.snapshot||(Array.isArray(inst?.can?.snapshots)?inst.can.snapshots[0]:null)||null;
   const snap=canUnwrapSnapshot(raw);
   if(snap&&typeof snap==="object")return snap;
-  // FIX_CAN_PARTIAL_READ_V1 — lê parcial do job CAN durante CAN_RUNNING
+  // FIX_CAN_JOB_RESULT_V1 — lê resultado completo do job CAN (snapshot, partial ou result direto)
   const canJob=inst?.jobs?.monitor_can_snapshot||inst?.jobs?.can_snapshot||null;
-  const partial=canJob?.result?.partial||null;
-  if(partial&&typeof partial==="object")return partial;
+  if(canJob?.result){
+    const r=canJob.result;
+    // tenta snapshot > partial > result direto (que pode ser o próprio snapshot)
+    const fromResult=r?.snapshot||r?.can_snapshot||r?.canSnapshot||r?.partial||null;
+    if(fromResult&&typeof fromResult==="object"){
+      const unwrapped=canUnwrapSnapshot(fromResult);
+      if(unwrapped&&typeof unwrapped==="object")return unwrapped;
+    }
+    // result direto pode já ser o snapshot
+    const direct=canUnwrapSnapshot(r);
+    if(direct&&typeof direct==="object"&&(direct.parameters||direct.params||direct.moduleState||direct.header))return direct;
+  }
   return null;
 }
 
