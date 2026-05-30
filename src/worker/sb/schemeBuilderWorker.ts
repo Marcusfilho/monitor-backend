@@ -412,7 +412,7 @@ async function runSbFlow(params: {
       client_name: String(clientName),
       is_checked : "1",
     });
-    await sleep(800);  // reduzido: gap necessário para o servidor registrar vcls_check
+    await sleep(300);  // reduzido: gap necessário para o servidor registrar vcls_check
 
     // 2. associate — dois fire-and-forget (igual monolito)
     // call_num=0: prepara assign setting (sem vehicle_id, sem vehicle_setting_id)
@@ -424,7 +424,7 @@ async function runSbFlow(params: {
       action_id    : "1",
       call_num     : "0",
     });
-    await sleep(1500);  // reduzido: gap necessário entre associate call_num=0 e call_num=1
+    await sleep(500);  // reduzido: gap necessário entre associate call_num=0 e call_num=1
     // call_num=1: aguardar resposta antes de ir pro review
     const mtAssoc1 = sendFrame("associate_vehicles_actions_opr", {
       client_id          : String(clientId),
@@ -437,10 +437,10 @@ async function runSbFlow(params: {
     const assoc1Row = await waitRowByMtkn(mtAssoc1, 20000);
     const avAssoc1 = String(findFirstKey(assoc1Row, ["action_value"]) ?? "");
     console.log(`[sb-rw] job=${jobId} associate call_num=1 av=${avAssoc1}`);
-    await sleep(1000);
+    await sleep(300);
 
     // 3. review_process_attributes — igual monolito: só client_id
-    await sleep(200);
+    await sleep(100);
     let processId = "";
     const mt2 = sendFrame("review_process_attributes", {
       client_id: String(clientId),
@@ -472,21 +472,21 @@ async function runSbFlow(params: {
       vehicle_id: String(vehicleId),
       client_id : String(clientId),
     });
-    await sleep(800);
+    await sleep(300);
 
     // 6b. vehicle_subscribe UNIT_MESSAGES — servidor exige para liberar UNIT_CONFIG_STATUS
     sendFrame("vehicle_subscribe", {
       vehicle_id : String(vehicleId),
       object_type: "UNIT_MESSAGES",
     });
-    await sleep(500);
+    await sleep(200);
 
     // 6c. vehicle_subscribe UNIT_CONFIG_STATUS — CRÍTICO: ANTES do execute
     sendFrame("vehicle_subscribe", {
       vehicle_id : String(vehicleId),
       object_type: "UNIT_CONFIG_STATUS",
     });
-    await sleep(500);
+    await sleep(200);
 
     // 7. execute_action_opr
     const mtExec = sendFrame("execute_action_opr", {
