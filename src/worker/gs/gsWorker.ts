@@ -16,6 +16,7 @@
 
 import WebSocket from "ws";
 import * as fs from "fs";
+import { getTrafflogToken } from "../../core/traffilogAuth.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -36,72 +37,13 @@ const TRAFFILOG_API_BASE_URL = (
 
 const WS_ORIGIN = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
 
-const MONITOR_SESSION_TOKEN_PATH = (
-  process.env.SESSION_TOKEN_PATH         ||
-  process.env.MONITOR_SESSION_TOKEN_PATH ||
-  "/tmp/.session_token"
-);
-const TOKEN_TTL_MS = Number(process.env.MONITOR_SESSION_TOKEN_TTL_MS || "21600000"); // 6h
 
 if (!BASE) throw new Error("[gs-rw] API_BASE_URL não definido");
 if (!KEY)  throw new Error("[gs-rw] WORKER_KEY não definido");
 
 // ---------------------------------------------------------------------------
-// Session token (mesmo padrão do sbWorker)
+// Session token — obtido via HTTP por job (getTrafflogToken)
 // ---------------------------------------------------------------------------
-
-function readTokenIfFresh(): string | null {
-  try {
-    const raw = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
-    if (!raw) return null;
-    const colonIdx = raw.indexOf(":");
-    if (colonIdx < 1) return null;
-    const ts    = Number(raw.slice(0, colonIdx));
-    const token = raw.slice(colonIdx + 1);
-    if (!token || Date.now() - ts > TOKEN_TTL_MS) return null;
-    return token;
-  } catch {
-    return null;
-  }
-}
-
-async function userLoginAndGetToken(): Promise<string> {
-  const loginName = (process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN_NAME || "").trim();
-  const password  = (process.env.WS_PASSWORD   || process.env.MONITOR_PASSWORD   || "").trim();
-  const apiBase   = TRAFFILOG_API_BASE_URL.replace(/\/+$/, "");
-  if (!loginName || !password) throw new Error("[gs-rw] faltam envs: WS_LOGIN_NAME / WS_PASSWORD");
-  if (!apiBase)                throw new Error("[gs-rw] falta env: TRAFFILOG_API_BASE_URL");
-  const res = await fetch(apiBase, {
-    method : "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body   : JSON.stringify({
-      action: { name: "user_login", parameters: { login_name: loginName, password } },
-    }),
-    signal: AbortSignal.timeout(20000),
-  });
-  const data: any = await res.json();
-  const tok =
-    data?.response?.properties?.session_token ||
-    data?.response?.properties?.data?.[0]?.session_token;
-  if (!tok || String(tok).trim().length < 20)
-    throw new Error("[gs-rw] user_login não retornou session_token");
-  return String(tok).trim();
-}
-
-async function getSessionToken(): Promise<string> {
-  // FIX_GS_OWN_LOGIN_V1: tenta cache; se ausente/expirado faz login próprio
-  const cached = readTokenIfFresh();
-  if (cached) return cached;
-  console.log("[gs-rw] token ausente/expirado — fazendo login próprio");
-  const tok = await userLoginAndGetToken();
-  try {
-    const fs = await import("fs");
-    const path = (process.env.MONITOR_SESSION_TOKEN_PATH || "/tmp/.session_token");
-    fs.writeFileSync(path, `${Date.now()}:${tok}
-`, { mode: 0o600 });
-  } catch {}
-  return tok;
-}
 
 // ---------------------------------------------------------------------------
 // WebSocket helpers (mesmo padrão do sbWorker)
@@ -217,7 +159,7 @@ async function runGsFlow(params: {
           if (!obj) return;
           const av0  = String(obj?.action_value ?? obj?.response?.properties?.action_value ?? "");
           const err0 = String(obj?.error_description ?? obj?.response?.properties?.error_description ?? "");
-          if (av0 && av0 !== "0" && !obj?.response) {
+          if (av0 && av0 !== "0" && av0 !== "403" && !obj?.response) { // FIX_GS_403_IGNORE_V1
             clearTimeout(t);
             ws.removeListener("message", onMsg);
             reject(new Error(`action_value=${av0}${err0 ? ` err=${err0}` : ""}`));
@@ -398,7 +340,7 @@ async function processJob(job: any): Promise<void> {
   }
 
   try {
-    const sessionToken = await getSessionToken();
+    const sessionToken = await getTrafflogToken();
     await runGsFlow({ clientId, clientName, vehicleId, commandSyntax, actionId, comment, sessionToken, jobId });
     await completeJob(jobId, { ok: true, action_id: actionId });
   } catch (e: any) {

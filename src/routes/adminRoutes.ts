@@ -498,4 +498,89 @@ router.get("/schemes/client/:clientId", async (req, res) => {
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// GET /api/admin/asset-types/by-client?clientId=X&clientName=Y
+// Cruza asset_types_active.json com VHCLS filtrado por cliente
+// Retorna Set de pares "manufacturer|model" que o cliente usa
+// ---------------------------------------------------------------------------
+function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_descr: string; model: string }> {
+  const results: Array<{ client_id: string; manufacturer_descr: string; model: string }> = [];
+  const re = /<DATA\s([^>]*?)\/>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const attr = (name: string): string => {
+      const hit = attrs.match(new RegExp(name + '\\s*=\\s*"([^"]*)"', 'i'));
+      return hit ? hit[1].trim() : '';
+    };
+    const vehicle_id = attr('VEHICLE_ID');
+    if (!vehicle_id) continue;
+    results.push({
+      client_id:          attr('CLIENT_ID'),
+      manufacturer_descr: attr('MANUFACTURER_DESCR'),
+      model:              attr('MODEL'),
+    });
+  }
+  return results;
+}
+
+router.get("/asset-types/by-client", async (req, res) => {
+  const clientId   = String(req.query.clientId   || "").trim();
+  const clientName = String(req.query.clientName || "").trim();
+  if (!clientId) {
+    return res.status(400).json({ ok: false, error: "clientId é obrigatório" });
+  }
+  // 1. Ler lista salva em disco (gerada pelo sync) — zero latência
+  if (!fs.existsSync(ASSET_TYPES_PATH)) {
+    return res.status(404).json({ ok: false, error: "Lista não encontrada. Execute o sync primeiro." });
+  }
+  let assetTypes: Array<{ id: number; manufacturer: string; model: string }> = [];
+  try {
+    const saved = JSON.parse(fs.readFileSync(ASSET_TYPES_PATH, "utf8"));
+    assetTypes = saved.asset_types || [];
+  } catch (e: any) {
+    return res.status(500).json({ ok: false, error: "Erro ao ler asset_types_active.json: " + e.message });
+  }
+  // 2. Buscar VHCLS filtrado pelo cliente via HTML5
+  const loginName = (process.env.HTML5_LOGIN_NAME || "").trim();
+  const loginPass = (process.env.HTML5_PASSWORD   || "").trim();
+  if (!loginName || !loginPass) {
+    return res.status(500).json({ ok: false, error: "HTML5_LOGIN_NAME/HTML5_PASSWORD não configurados" });
+  }
+  try {
+    const cookie = await loginHtml5(loginName, loginPass);
+    if (!cookie) return res.status(502).json({ ok: false, error: "Falha no login HTML5" });
+    const r = await httpPost(
+      HTML5_ACTION_URL,
+      "action=VHCLS&VERSION_ID=2&REFRESH_FLG=1&LICENSE_NMBR=&CLIENT_DESCR=" + encodeURIComponent(clientName) + "&OWNER_DESCR=&DIAL_NMBR=&INNER_ID=",
+      { cookie }
+    );
+    const vhcls = parseVhclsXml(r.body);
+    // 3. Filtrar só veículos do clientId solicitado
+    const clientVehicles = vhcls.filter(v => v.client_id === clientId);
+    // 4. Montar Set de pares "manufacturer|model" que o cliente usa
+    const clientPairs = new Set<string>();
+    for (const v of clientVehicles) {
+      if (v.manufacturer_descr && v.model) {
+        clientPairs.add(v.manufacturer_descr + "|" + v.model);
+      }
+    }
+    // 5. Cruzar com asset_types_active para retornar os IDs correspondentes
+    const matchedIds = assetTypes
+      .filter(t => clientPairs.has(t.manufacturer + "|" + t.model))
+      .map(t => t.id);
+    console.log(`[admin] by-client clientId=${clientId} clientName=${clientName}: ${clientVehicles.length} veículos, ${matchedIds.length} modelos`);
+    res.json({
+      ok:             true,
+      client_id:      clientId,
+      client_name:    clientName,
+      asset_type_ids: matchedIds,
+      pairs:          [...clientPairs],
+    });
+  } catch (e: any) {
+    console.error("[admin] asset-types/by-client error:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 export default router;

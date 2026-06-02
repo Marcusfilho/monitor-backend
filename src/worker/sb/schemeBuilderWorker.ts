@@ -44,73 +44,14 @@ const WS_LOGIN_NAME = (process.env.WS_LOGIN_NAME || process.env.MONITOR_LOGIN_NA
 const WS_PASSWORD   = (process.env.WS_PASSWORD   || process.env.MONITOR_PASSWORD   || "").trim();
 const WS_ORIGIN     = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
 
-const MONITOR_SESSION_TOKEN_PATH = (
-  process.env.SESSION_TOKEN_PATH         ||
-  process.env.MONITOR_SESSION_TOKEN_PATH ||
-  "/tmp/.session_token"
-);
-const TOKEN_TTL_MS = Number(process.env.MONITOR_SESSION_TOKEN_TTL_MS || "21600000"); // 6h
 
 if (!BASE) throw new Error("[sb-rw] API_BASE_URL não definido");
 if (!KEY)  throw new Error("[sb-rw] WORKER_KEY não definido");
+import { getTrafflogToken } from "../../core/traffilogAuth.js";
 
 // ---------------------------------------------------------------------------
-// Session token (mesmo padrão do monolito: timestamp:token)
+// Session token — obtido via HTTP por job (getTrafflogToken)
 // ---------------------------------------------------------------------------
-
-function readTokenIfFresh(): string | null {
-  try {
-    const raw = String(fs.readFileSync(MONITOR_SESSION_TOKEN_PATH, "utf8") || "").trim();
-    if (!raw) return null;
-    const colonIdx = raw.indexOf(":");
-    if (colonIdx > 0) {
-      const ts  = Number(raw.slice(0, colonIdx));
-      const tok = raw.slice(colonIdx + 1).trim();
-      if (!isNaN(ts) && tok.length >= 20) {
-        if (Date.now() - ts > TOKEN_TTL_MS) {
-          console.log(`[sb-rw] session_token expirado — renovando`);
-          return null;
-        }
-        return tok;
-      }
-    }
-    return null;
-  } catch { return null; }
-}
-
-async function userLoginAndGetToken(): Promise<string> {
-  if (!WS_LOGIN_NAME || !WS_PASSWORD)
-    throw new Error("[sb-rw] faltam envs: WS_LOGIN_NAME / WS_PASSWORD");
-  const base = TRAFFILOG_API_BASE_URL.replace(/\/+$/, "");
-  if (!base) throw new Error("[sb-rw] falta env: TRAFFILOG_API_BASE_URL");
-
-  const res = await fetch(base, {
-    method : "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body   : JSON.stringify({
-      action: { name: "user_login", parameters: { login_name: WS_LOGIN_NAME, password: WS_PASSWORD } },
-    }),
-    signal: AbortSignal.timeout(20000),
-  });
-
-  const data: any = await res.json();
-  const tok =
-    data?.response?.properties?.session_token ||
-    data?.response?.properties?.data?.[0]?.session_token;
-
-  if (!tok || String(tok).trim().length < 20)
-    throw new Error("[sb-rw] user_login não retornou session_token");
-  return String(tok).trim();
-}
-
-async function ensureSessionToken(): Promise<string> {
-  const cached = readTokenIfFresh();
-  if (cached) { process.env.MONITOR_SESSION_TOKEN = cached; return cached; }
-  const tok = await userLoginAndGetToken();
-  try { fs.writeFileSync(MONITOR_SESSION_TOKEN_PATH, `${Date.now()}:${tok}\n`, { mode: 0o600 }); } catch {}
-  process.env.MONITOR_SESSION_TOKEN = tok;
-  return tok;
-}
 
 // ---------------------------------------------------------------------------
 // WS helpers (padrão openRawWs do wsClient.ts)
@@ -571,7 +512,7 @@ async function processJob(job: any): Promise<void> {
   }
 
   if (!sessionToken) {
-    try { sessionToken = await ensureSessionToken(); }
+    try { sessionToken = await getTrafflogToken(); }
     catch (e: any) { console.log(`[sb-rw] falha ao obter session_token: ${e?.message || e}`); }
   }
 
@@ -607,12 +548,7 @@ async function processJob(job: any): Promise<void> {
 
 async function loop(): Promise<void> {
   console.log(`[sb-rw] iniciando poll BASE=${BASE} POLL_MS=${POLL_MS} (REWRITE_SB_NATIVE_V1)`);
-  try {
-    const tok = await ensureSessionToken();
-    console.log(`[sb-rw] session_token pronto no boot (len=${tok.length})`);
-  } catch (e: any) {
-    console.error("[sb-rw] AVISO: falha ao renovar token no boot:", e?.message || e);
-  }
+  // [MIGRADO] warm-up removido — token obtido por job via getTrafflogToken()
 
   while (true) {
     try {
@@ -635,5 +571,6 @@ async function runForever(): Promise<void> {
     catch (e) { console.error("[sb-rw] loop caiu:", e); await new Promise(r => setTimeout(r, 15000)); }
   }
 }
+
 
 runForever().catch(e => console.error("[sb-rw] fatal:", e));

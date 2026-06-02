@@ -62,7 +62,8 @@ router.post("/", (req: Request, res: Response) => {
   }
 
   // Garantir que plate usa plate_real quando disponível (não o serial)
-  if (body.plate_real && body.plate_real !== body.plate) {
+  // INSTALL usa plate=serial intencionalmente (Caminho B) — não sobrescrever
+  if (body.plate_real && body.plate_real !== body.plate && service !== "INSTALL") {
     body.plate = body.plate_real;
   }
   let job;

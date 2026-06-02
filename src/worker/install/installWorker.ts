@@ -325,6 +325,7 @@ async function processJob(job: any): Promise<void> {
   // 1. Resolve VEHICLE_ID — detecta Caminho A ou B
   let vehicleId = Number(payload.vehicle_id || 0);
   let resolvedBy: "plate" | "serial" | "payload" = "payload";
+  let clientIdFound: number | null = null;
 
   if (!vehicleId) {
     const resolved = await resolveVehicleIdWithPath(payload, jobId).catch((e: any) => {
@@ -342,6 +343,7 @@ async function processJob(job: any): Promise<void> {
 
     vehicleId   = resolved.vehicleId;
     resolvedBy  = resolved.resolvedBy;
+    clientIdFound = resolved.clientIdFound ?? null;
 
     // 2. CHANGE_COMPANY — somente Caminho B com client_mismatch
     if (resolved.resolvedBy === "serial" && resolved.clientMismatch) {
@@ -509,6 +511,7 @@ async function processJob(job: any): Promise<void> {
     dial              : dial,
     http              : saveResult.status,
     vehicle_setting_id: vehicleSettingId,  // para Scheme Check no scheme_builder
+    client_id_found   : clientIdFound,           // para CHANGE_COMPANY no dispatchPipeline
   });
 
   console.log(`[install-rw] job=${jobId} INSTALL OK vehicle_id=${vehicleId} serial=${dial} resolved_by=${resolvedBy}`);

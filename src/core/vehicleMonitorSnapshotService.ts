@@ -6,6 +6,12 @@
  *   - Conversão hex→decimal com multiplier/offset/min/max para params conhecidos
  *   - moduleState filtra CAN/J1708/KEYPAD (resumo canSummary tipado)
  *   - Coleta ALL params (sem TARGET filter) — snapshot completo para o banco
+ *
+ * FIX 2026-05-31 — Lógica REATIVA (substitui sleep fixo):
+ *   - Em vez de await sleep(windowMs) fixo após send_quick_command,
+ *     aguarda até silêncio de VM_WAIT_AFTER_LAST_PARAM_MS desde último UNIT_PARAMETERS
+ *   - Timeout total VM_WINDOW_MS como fallback (default 300s)
+ *   - Cobre caso de reboot pós-instalação (~60s sem dados antes dos params chegarem)
  */
 
 import crypto from "crypto";
@@ -44,7 +50,6 @@ function asBool01(v: any): boolean {
 }
 
 // ─── PARAM_META (portado do Internal Tools) ──────────────────────────────────
-// Usado para: deduplicação por nome (preferência SYS 000027xx) + conversão hex→decimal
 
 const SYS_PREFIX = "000027";
 
@@ -79,10 +84,6 @@ const PARAM_META: Record<string, ParamMeta> = {
   "0000003A": { name: "rpm",                         multiplier: 0.125,   offset: 0,    min: 0,    max: 8031.88,  unit: "RPM" },
 };
 
-/**
- * Converte raw_value hex→decimal para params conhecidos.
- * Para params desconhecidos, retorna null (valor bruto já fica em raw_value).
- */
 function convertParamValue(paramId: string, rawHex: string): number | null {
   const meta = PARAM_META[paramId.toUpperCase()];
   if (!meta || !rawHex) return null;
@@ -114,9 +115,7 @@ export type VmParam = {
   name: string | null;
   raw_value: string | null;
   value?: string | null;
-  /** Valor convertido (hex→decimal) para parâmetros com PARAM_META. Null se desconhecido ou fora do range. */
   converted_value?: number | null;
-  /** Unidade de medida (ex: "L/h", "%", "RPM"). Null para params sem meta. */
   unit?: string | null;
   source: string | null;
   orig_time: string | null;
@@ -136,7 +135,6 @@ export type VmModuleStateRow = {
   error_descr: string | null;
 };
 
-/** Resumo CAN tipado — portado do Internal Tools summarizeCanFromModuleState */
 export type CanSummary = {
   can0:     VmModuleStateRow | null;
   can1:     VmModuleStateRow | null;
@@ -153,7 +151,6 @@ export type VmSnapshot = {
   header: VmHeader;
   parameters: VmParam[];
   moduleState: VmModuleStateRow[];
-  /** Resumo dos módulos CAN/J1708 — derivado de moduleState */
   canSummary: CanSummary;
   rawCounts: {
     unitParametersEvents: number;
@@ -163,7 +160,6 @@ export type VmSnapshot = {
 };
 
 // ─── TraffilogWsMux ───────────────────────────────────────────────────────────
-// (sem alterações — apenas copiado do original para manter o arquivo auto-contido)
 
 type WsResponse = {
   response?: { properties?: { action_name?: string; mtkn?: string; data_source?: string; data?: any[]; [k: string]: any } };
@@ -194,13 +190,23 @@ class TraffilogWsMux {
 
     this.ws.on("message", (data: any) => {
       const raw  = Buffer.isBuffer(data) ? data.toString("utf8") : String(data ?? "");
-      // FIX_VM_URLDECODE_V1: decodifica URL-encoding igual ao wsMux.ts
       const text = raw.trimStart().startsWith("%7B")
         ? (() => { try { return decodeURIComponent(raw); } catch { return raw; } })()
         : raw;
       let msg: WsResponse | null = null;
       try { msg = JSON.parse(text); } catch { return; }
 
+      // FIX_MUX_ACTION_VALUE_V1: {action_value,error_description} sem response.properties → rejeita pending
+      if (!msg?.response && (msg as any)?.action_value && String((msg as any).action_value) !== "0") {
+        const av = String((msg as any).action_value);
+        const desc = String((msg as any).error_description ?? "");
+        for (const [token, p] of this.pending) {
+          clearTimeout(p.t);
+          this.pending.delete(token);
+          p.reject(new Error("[vm] action_value=" + av + (desc ? " " + desc : "")));
+        }
+        return;
+      }
       const props = msg?.response?.properties;
       if (!props) return;
 
@@ -253,6 +259,27 @@ class TraffilogWsMux {
       this.ws.send(payload);
     });
   }
+
+  /**
+   * Envia frame sem aguardar resposta (fire-and-forget).
+   * Usado para vehicle_subscribe / vehicle_unsubscribe cujas respostas
+   * chegam sem mtkn correlacionável — igual ao comportamento do Monitor.
+   */
+  fireAndForget(name: string, parameters: Record<string, any>): void {
+    const frame: WsActionFrame = {
+      action: {
+        flow_id: makeFlowId(),
+        name,
+        parameters: { ...parameters, _action_name: name, mtkn: "0" },
+        session_token: this.sessionToken,
+        mtkn: "0",
+      },
+    };
+    const payload = this.urlEncode
+      ? encodeURIComponent(JSON.stringify(frame))
+      : JSON.stringify(frame);
+    this.ws.send(payload);
+  }
 }
 
 // ─── collectVehicleMonitorSnapshot ───────────────────────────────────────────
@@ -261,6 +288,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
   ws: WsLike;
   sessionToken: string;
   vehicleId: number;
+  clientId?: number | string | null;
   windowMs?: number;
   waitAfterCmdMs?: number;
   urlEncode?: boolean;
@@ -271,29 +299,34 @@ export async function collectVehicleMonitorSnapshot(opts: {
     moduleState: VmModuleStateRow[]
   ) => void;
 }): Promise<VmSnapshot> {
-  const windowMs       = opts.windowMs       ?? 5000;
-  const waitAfterCmdMs = opts.waitAfterCmdMs ?? 800;
+  // FIX: windowMs agora é o TIMEOUT TOTAL (default 300s), não a janela fixa
+  const windowMs            = opts.windowMs       ?? Number(process.env.VM_WINDOW_MS              ?? 300_000);
+  const waitAfterCmdMs      = opts.waitAfterCmdMs ?? Number(process.env.VM_WAIT_AFTER_CMD_MS      ?? 2_000);
+  // Tempo de silêncio após último UNIT_PARAMETERS para encerrar (default 5s)
+  const waitAfterLastParamMs = Number(process.env.VM_WAIT_AFTER_LAST_PARAM_MS ?? 5_000);
+
   const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
 
   // ── 1. get_vehicle_info ───────────────────────────────────────────────────
   const vehicleInfo = await mux.sendAction<any>("get_vehicle_info", {
     tag: "loading_screen",
     vehicle_id: String(opts.vehicleId),
-  });
+    ...(opts.clientId != null ? { client_id: String(opts.clientId) } : {}),
+  }); // FIX_VM_CLIENT_ID_V1
 
   const vi      = (vehicleInfo?.data?.[0] ?? {}) as JsonObj;
   const unitKey = safeDecodeURIComponent(String(vi.unit_key ?? ""));
 
   const header: VmHeader = {
-    vehicle_id:            Number(vi.vehicle_id ?? opts.vehicleId),
-    client_id:             vi.client_id         != null ? Number(vi.client_id)                            : null,
-    inner_id:              vi.inner_id           != null ? String(vi.inner_id)                             : null,
-    unit_key:              unitKey               || null,
-    license_nmbr:          vi.license_nmbr       != null ? String(vi.license_nmbr)                        : null,
-    unit_type:             vi.unit_type          != null ? String(vi.unit_type)                            : null,
-    unit_version:          vi.unit_version       != null ? String(vi.unit_version)                        : null,
-    configuration_key_db:  vi.configuration_key_db  != null ? String(vi.configuration_key_db)             : null,
-    configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit)         : null,
+    vehicle_id:             Number(vi.vehicle_id ?? opts.vehicleId),
+    client_id:              vi.client_id              != null ? Number(vi.client_id)                   : null,
+    inner_id:               vi.inner_id               != null ? String(vi.inner_id)                    : null,
+    unit_key:               unitKey                   || null,
+    license_nmbr:           vi.license_nmbr           != null ? String(vi.license_nmbr)                : null,
+    unit_type:              vi.unit_type              != null ? String(vi.unit_type)                   : null,
+    unit_version:           vi.unit_version           != null ? String(vi.unit_version)                : null,
+    configuration_key_db:   vi.configuration_key_db   != null ? String(vi.configuration_key_db)        : null,
+    configuration_key_unit: vi.configuration_key_unit != null ? String(vi.configuration_key_unit)      : null,
     raw: vi,
   };
 
@@ -305,11 +338,12 @@ export async function collectVehicleMonitorSnapshot(opts: {
   const isConnected    = isConnectedRaw == null ? null : Number(isConnectedRaw);
 
   // ── 3. Subscribes ─────────────────────────────────────────────────────────
-  await mux.sendAction("vehicle_unsubscribe",  { vehicle_id: String(opts.vehicleId), object_type: "" });
-  await mux.sendAction("vehicle_subscribe",    { vehicle_id: String(opts.vehicleId), object_type: "UNIT_MESSAGES" });
-  await mux.sendAction("vehicle_subscribe",    { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
-  // UNIT_PARAMETERS subscribe ANTES do opr — ordem crítica (igual Internal Tools)
-  await mux.sendAction("vehicle_subscribe",    { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
+  // FIX: subscribe/unsubscribe são fire-and-forget — o Traffilog não retorna
+  // mtkn correlacionável nessas respostas. Sem delays, igual ao Monitor.
+  mux.fireAndForget("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" });
+  mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_MESSAGES" });
+  mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
+  mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
 
   // ── 4. opr + metadata ─────────────────────────────────────────────────────
   const opr = await mux.sendAction<any>("get_unit_parameters_opr", {
@@ -331,7 +365,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
 
   if (!header.unit_key) throw new Error("[vm] unit_key ausente no get_vehicle_info");
 
-  // ── 5. Module State (antes da janela — disponível desde o 1º partial) ─────
+  // ── 5. Module State ───────────────────────────────────────────────────────
   const ms = await mux.sendAction<any>("get_monitor_module_state", {
     tag: "loading_screen",
     filter: "",
@@ -351,18 +385,16 @@ export async function collectVehicleMonitorSnapshot(opts: {
   }));
 
   // ── 6. Handler de pushes ──────────────────────────────────────────────────
-  //
-  // REFACTOR_CAN_V2: deduplicação por nome com preferência SYS (000027xx)
-  //   - nameToId rastreia qual paramId está "vencendo" para cada nome canônico
-  //   - Se chegar um SYS param para o mesmo nome → substitui o não-SYS
-  //   - Se já tiver SYS, só atualiza valor se for o mesmo ID
-  //
-  const latest    = new Map<string, VmParam>();  // paramId → param mais recente
-  const nameToId  = new Map<string, string>();   // nome canônico → paramId vencedor
+  const latest   = new Map<string, VmParam>();
+  const nameToId = new Map<string, string>();
 
   let unitParametersEvents = 0;
   let unitMessagesEvents   = 0;
   let unitConnEvents       = 0;
+
+  // FIX: variáveis de controle reativo
+  let lastParamAt       = 0;
+  let collectionStarted = false;
 
   const off = mux.onRefresh((props) => {
     const ds = String(props?.data_source ?? "");
@@ -372,7 +404,6 @@ export async function collectVehicleMonitorSnapshot(opts: {
       const rows = Array.isArray(props?.data) ? props.data : (props?.data ? [props.data] : []);
 
       for (const row of rows) {
-        // Normaliza ID igual ao Internal Tools: uppercase + pad 8
         const id = String(row?.id ?? row?.param_id ?? "").toUpperCase().padStart(8, "0");
         if (!id || id === "00000000") continue;
 
@@ -387,34 +418,25 @@ export async function collectVehicleMonitorSnapshot(opts: {
           row?.last_update      != null ? String(row.last_update)      :
           row?.last_update_date != null ? String(row.last_update_date) : null;
 
-        // Nome canônico: PARAM_META > opr > row
-        const metaName   = PARAM_META[id]?.name ?? null;
-        const oprName    = idToName.get(id) ?? null;
-        const rowName    = row?.param_type_descr != null ? safeDecodeURIComponent(String(row.param_type_descr)) : null;
-        const canonical  = metaName ?? oprName ?? rowName ?? null;
+        const metaName  = PARAM_META[id]?.name ?? null;
+        const oprName   = idToName.get(id) ?? null;
+        const rowName   = row?.param_type_descr != null ? safeDecodeURIComponent(String(row.param_type_descr)) : null;
+        const canonical = metaName ?? oprName ?? rowName ?? null;
 
-        // Deduplicação por nome (lógica do Internal Tools)
         if (canonical) {
           const existingId    = nameToId.get(canonical);
           const incomingIsSys = isSysParam(id);
-
           if (!existingId) {
-            // Primeiro que chega para este nome → aceita
             nameToId.set(canonical, id);
           } else if (incomingIsSys && !isSysParam(existingId)) {
-            // SYS chega depois de não-SYS → SYS vence, remove o antigo
             latest.delete(existingId);
             nameToId.set(canonical, id);
           } else if (!incomingIsSys && isSysParam(existingId)) {
-            // Não-SYS chega mas SYS já está vencendo → descarta silenciosamente
             continue;
           }
-          // Se ambos SYS ou ambos não-SYS → atualiza valor normalmente
         }
 
-        const prev = latest.get(id);
-
-        // Conversão hex→decimal para params com PARAM_META
+        const prev      = latest.get(id);
         const converted = rawValue != null ? convertParamValue(id, rawValue) : null;
         const meta      = PARAM_META[id];
 
@@ -432,11 +454,14 @@ export async function collectVehicleMonitorSnapshot(opts: {
         });
       }
 
-      // Partial callback (streaming progressivo)
+      // FIX: atualiza controle reativo
+      lastParamAt       = Date.now();
+      collectionStarted = true;
+
       if (opts.onPartialParams) {
         try {
-          const allParams  = Array.from(latest.values());
-          const withValue  = allParams.filter(p => (p.raw_value ?? "") !== "").length;
+          const allParams = Array.from(latest.values());
+          const withValue = allParams.filter(p => (p.raw_value ?? "") !== "").length;
           opts.onPartialParams(allParams, { total: allParams.length, withValue, events: unitParametersEvents }, header, moduleState);
         } catch { /* best-effort */ }
       }
@@ -456,7 +481,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
     if (ds === "unit_connection_status") { unitConnEvents++; return; }
   });
 
-  // ── 7. Dispara rajada + janela de coleta ──────────────────────────────────
+  // ── 7. Dispara rajada + aguarda REATIVAMENTE ──────────────────────────────
   await mux.sendAction("send_quick_command", {
     unit_key:        header.unit_key,
     local_action_id: "5",
@@ -465,12 +490,46 @@ export async function collectVehicleMonitorSnapshot(opts: {
   });
 
   await sleep(waitAfterCmdMs);
-  await sleep(windowMs);
+
+  // FIX: substitui sleep(windowMs) fixo por espera reativa
+  // Encerra quando: (a) silêncio >= waitAfterLastParamMs após último UNIT_PARAMETERS
+  //                 (b) timeout total windowMs esgotado
+  const startedAt = Date.now();
+  await new Promise<void>((resolve) => {
+    const hardDeadline = setTimeout(() => {
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+      console.log(`[vm] vehicleId=${opts.vehicleId} TIMEOUT TOTAL ${elapsed}s — params=${latest.size} events=${unitParametersEvents}`);
+      cleanup();
+      resolve();
+    }, windowMs);
+
+    const quietChecker = setInterval(() => {
+      if (!collectionStarted) return;
+      if ((Date.now() - lastParamAt) >= waitAfterLastParamMs) {
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        console.log(`[vm] vehicleId=${opts.vehicleId} silêncio ${waitAfterLastParamMs}ms — encerrando em ${elapsed}s`);
+        cleanup();
+        resolve();
+      }
+    }, 500);
+
+    const progressTimer = setInterval(() => {
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
+      console.log(`[vm] vehicleId=${opts.vehicleId} aguardando... ${elapsed}s — params=${latest.size} events=${unitParametersEvents}`);
+    }, 10_000);
+
+    function cleanup() {
+      clearTimeout(hardDeadline);
+      clearInterval(quietChecker);
+      clearInterval(progressTimer);
+    }
+  });
+
   off();
 
   await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => {});
 
-  // ── 8. canSummary (portado do Internal Tools) ─────────────────────────────
+  // ── 8. canSummary ─────────────────────────────────────────────────────────
   const canSummary = buildCanSummary(moduleState);
 
   const paramsWithValue = Array.from(latest.values()).filter(p => (p.raw_value ?? "") !== "").length;

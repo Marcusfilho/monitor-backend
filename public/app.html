@@ -563,6 +563,32 @@ async function api(path,{method="GET",json=null,headers={}}={}){
 
 // ─── catalogs ────────────────────────────────────────────────────────────────
 let CATALOG_TYPES=[];
+// ─── asset-type highlight (por cliente) ──────────────────────────────────────
+const IT_BASE="";  // usa o próprio backend — sem porta externa
+let CLIENT_ASSET_SET=new Set();
+const _assetByClientCache=new Map();
+async function loadClientAssetSet(clientId,clientDescr){
+  if(!clientId){CLIENT_ASSET_SET=new Set();return;}
+  if(_assetByClientCache.has(clientId)){CLIENT_ASSET_SET=_assetByClientCache.get(clientId);return;}
+  try{
+    const[allRes,byRes]=await Promise.all([
+      fetch(IT_BASE+"/api/admin/asset-types",{cache:"force-cache"}),
+      fetch(IT_BASE+"/api/admin/asset-types/by-client?clientId="+clientId+"&clientName="+encodeURIComponent(clientDescr),{cache:"no-store"})
+    ]);
+    if(!allRes.ok||!byRes.ok)throw new Error("fetch failed");
+    const[allData,byClient]=await Promise.all([allRes.json(),byRes.json()]);
+    const idSet=new Set(byClient.asset_type_ids||[]);
+    const s=new Set();
+    for(const t of(allData.asset_types||[])){
+      if(idSet.has(t.asset_type??t.id))s.add(t.manufacturer+"|"+t.model);
+    }
+    _assetByClientCache.set(clientId,s);
+    CLIENT_ASSET_SET=s;
+  }catch(e){
+    console.warn("[asset-highlight]",e.message);
+    CLIENT_ASSET_SET=new Set();
+  }
+}
 // ─── clients (rewrite: lista vem no login, salva em sessionStorage) ──────────
 // Formato rewrite: [{client_id, client_descr, default_group_name}]
 // Não existe /api/clients — usamos html5_clients_cache do login
@@ -639,25 +665,49 @@ function renderClients(){
 }
 function applyClientSelection(){
   const v=$("clientSelect").value||"";
-  // format: client_id|client_descr
-  $("vehicleSettingId").value=""; // rewrite não usa vehicleSettingId
+  $("vehicleSettingId").value="";
+  const[clientId,clientDescr]=v?v.split("|"):["",""];
+  loadClientAssetSet(clientId,clientDescr).then(()=>{renderManufacturers();});
 }
 $("clientSelect").addEventListener("change",applyClientSelection);
 
 // ─── manufacturers / models ───────────────────────────────────────────────────
 function uniqSorted(arr){return[...new Set(arr)].sort((a,b)=>String(a).localeCompare(String(b)))}
+function _mfHasClient(m){
+  return CATALOG_TYPES.some(x=>x.manufacturer===m&&CLIENT_ASSET_SET.has(m+"|"+x.model));
+}
+function _applyOptionStyle(o,highlighted){
+  if(highlighted){o.style.fontWeight="700";o.style.color="#60a5fa";o.style.opacity="1";}
+  else{o.style.fontWeight="";o.style.color="";o.style.opacity="0.4";}
+}
 function renderManufacturers(){
-  const sel=$("cat_manufacturer");sel.innerHTML="";
-  for(const m of uniqSorted(CATALOG_TYPES.map(x=>x.manufacturer).filter(Boolean))){
-    const o=document.createElement("option");o.value=m;o.textContent=m;sel.appendChild(o);
+  const sel=$("cat_manufacturer");
+  const prev=sel.value;
+  sel.innerHTML="";
+  const all=uniqSorted(CATALOG_TYPES.map(x=>x.manufacturer).filter(Boolean));
+  const hi=all.filter(m=>_mfHasClient(m));
+  const lo=all.filter(m=>!_mfHasClient(m));
+  for(const m of[...hi,...lo]){
+    const o=document.createElement("option");o.value=m;o.textContent=m;
+    _applyOptionStyle(o,hi.includes(m));
+    sel.appendChild(o);
   }
+  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
   renderModels();
 }
 function renderModels(){
-  const man=$("cat_manufacturer").value,sel=$("cat_model");sel.innerHTML="";
-  for(const m of uniqSorted(CATALOG_TYPES.filter(x=>x.manufacturer===man).map(x=>x.model).filter(Boolean))){
-    const o=document.createElement("option");o.value=m;o.textContent=m;sel.appendChild(o);
+  const man=$("cat_manufacturer").value,sel=$("cat_model");
+  const prev=sel.value;
+  sel.innerHTML="";
+  const all=uniqSorted(CATALOG_TYPES.filter(x=>x.manufacturer===man).map(x=>x.model).filter(Boolean));
+  const hi=all.filter(m=>CLIENT_ASSET_SET.has(man+"|"+m));
+  const lo=all.filter(m=>!CLIENT_ASSET_SET.has(man+"|"+m));
+  for(const m of[...hi,...lo]){
+    const o=document.createElement("option");o.value=m;o.textContent=m;
+    _applyOptionStyle(o,hi.includes(m));
+    sel.appendChild(o);
   }
+  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
   updateAssetType();
 }
 function updateAssetType(){
@@ -899,23 +949,33 @@ $("btnCreate").addEventListener("click",async()=>{
 });
 
 // ─── VALIDAR CAN ──────────────────────────────────────────────────────────────
-$("btnApprove").addEventListener("click",()=>{
+$("btnApprove").addEventListener("click",async()=>{
   const inst=state.inst;
   const id=inst?.installation_id||inst?.id||"";
   const tok=inst?.installation_token||inst?.token||"";
   if(!id||!tok){showToast("Sem instalação ativa","bad");return}
-  const plate=inst?.plate_real||inst?.plateReal||"—";
-  confirmAction("Validar CAN?",`Confirma aprovação CAN para ${plate}?`,async()=>{
-    $("btnApprove").disabled=true;setSubline("Validando CAN...");
-    try{
-      const token=sessionStorage.getItem("html5_session_token")||"";
-      const r=await api(`/api/installations/${id}/approve-can`,{method:"POST",
-        json:{installation_token:tok},
-        headers:token?{"X-Session-Token":token}:{}});
-      if(!r.ok)throw new Error(r.data?.error||"Falha na validação");
-      showToast("CAN validado!","good");startPoll(id,tok);
-    }catch(e){showToast(e.message||"Erro","bad");$("btnApprove").disabled=false}
-  });
+  $("btnApprove").disabled=true;
+  // Dispara approve-can silenciosamente — não espera resposta
+  const token=sessionStorage.getItem("html5_session_token")||"";
+  api(`/api/installations/${id}/approve-can`,{method:"POST",
+    json:{installation_token:tok},
+    headers:token?{"X-Session-Token":token}:{}})
+    .catch(e=>console.warn("[approve-can bg]",e));
+  // Vai imediatamente para tela de finalização
+  const plate=inst?.plate_real||inst?.plateReal||inst?.payload?.plate_real||"—";
+  const serial=inst?.serial||inst?.payload?.serial||inst?.inner_id||"—";
+  const service=String(inst?.payload?.service||inst?.service||"").toUpperCase();
+  const isUninstall=service==="UNINSTALL";
+  const isNoSwap=service==="MAINT_NO_SWAP";
+  const model=inst?.payload?.vehicle?.manufacturer&&inst?.payload?.vehicle?.model?inst.payload.vehicle.manufacturer+" "+inst.payload.vehicle.model:"";
+  $("completedPlate").textContent=plate!=="—"?plate:(inst?.payload?.plate||"—");
+  $("completedSerial").textContent=(isUninstall?"Placa: ":"Serial: ")+(isUninstall?plate:serial)+(model?" • "+model:"");
+  $("completedTitle").textContent=isUninstall?"Desinstalação concluída!":isNoSwap?"Manutenção realizada!":"Instalação concluída!";
+  $("completedIcon").textContent=isUninstall?"🔴":isNoSwap?"🔧":"✅";
+  $("btnNewFromCompletion").textContent=(isUninstall||isNoSwap)?"+ Nova operação":"+ Nova instalação";
+  $("cardCan").classList.add("hidden");$("cardForm").classList.add("hidden");
+  $("cardCompleted").classList.remove("hidden");hideBar();
+  stopPoll();
 });
 
 // ─── ATUALIZAR CAN ────────────────────────────────────────────────────────────
