@@ -108,3 +108,52 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 | `SQLITE_DB_PATH` | SQLite DB path (default: `data/monitor.db`) |
 | `JOBS_STORE_PATH` | Job queue file (default: `/tmp/jobs_store_rw.json`) |
 | `DRIVE_EXPORT_ENABLED` / `GOOGLE_SA_KEY_PATH` / `SPREADSHEET_ID` | Google Drive export |
+
+---
+
+## Pendências e melhorias futuras
+
+### 🔴 Próxima sessão
+- P1: moduleState — log vm-ms nunca aparece, suspeita timeout 15s no sendAction
+- P2: canWorker serial — adicionar CONCURRENCY env var para rodar N loops paralelos
+- P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada
+
+### 🟡 Backlog
+(melhorias futuras sem urgência)
+
+### ✅ Feito recentemente
+- canWorker: fix de rota /worker/can/poll
+- Auth: migração para traffilogAuth HTTP
+- ASSET_TYPE: fix sobrescrita no SAVE_VHCL_ACTIVATION_NEW
+- systemd: monitor-backend-rewrite configurado como serviço
+
+---
+
+## Encerramento de sessão
+
+Quando eu pedir "fecha sessão", "fecha marco" ou similar, primeiro me perguntar:
+1. "Houve mudança de arquitetura ou decisão técnica importante nessa sessão?"
+2. "Existem pendências que continuam na próxima sessão?"
+3. "Há algo para anotar no backlog?"
+
+Se MARCO (resposta SIM para 1 ou 2):
+- Mover itens resolvidos de 🔴 para ✅ Feito
+- Atualizar 🔴 Próxima sessão com novas pendências
+- Atualizar arquitetura no CLAUDE.md se algo mudou
+- Commit do CLAUDE.md: "docs: fecha marco - [resumo]"
+- Commit do código modificado
+
+Se SESSÃO SIMPLES (ambas NÃO):
+- Apenas commit do código com mensagem descritiva
+- Atualizar 🟡 Backlog se houver item novo
+- CLAUDE.md só muda se tiver item novo no backlog
+
+---
+
+## Anotações rápidas
+
+Quando eu disser frases como "anota no backlog", "melhoria futura",
+"lembra de fazer", "adiciona nas correções futuras", "correção futura" ou similar:
+- Adicionar o item na seção 🟡 Backlog imediatamente
+- Confirmar com: "Anotado no backlog: [item]"
+- Não precisa commitar agora — será commitado no encerramento
