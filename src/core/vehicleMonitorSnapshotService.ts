@@ -337,6 +337,31 @@ export async function collectVehicleMonitorSnapshot(opts: {
   const isConnectedRaw = redis?.data?.[0]?.is_connected;
   const isConnected    = isConnectedRaw == null ? null : Number(isConnectedRaw);
 
+  // ── 3. Module State (antes dos subscribes — garante dado no primeiro partial) ───────
+  let ms: any = null;
+  try {
+    ms = await mux.sendAction<any>("get_monitor_module_state", {
+      tag: "loading_screen",
+      filter: "",
+      vehicle_id: String(opts.vehicleId),
+      ...(header.client_id != null ? { client_id: String(header.client_id) } : {}),
+    });
+    console.log(`[vm-ms] OK data=${ms?.data?.length ?? "null"} av=${ms?.action_value ?? "?"} keys=${Object.keys(ms ?? {}).join(",")}`);
+    if ((ms?.data?.length ?? 0) === 0) console.log(`[vm-ms] raw=${JSON.stringify(ms)}`);
+  } catch (msErr: any) {
+    console.log(`[vm-ms] ERRO: ${msErr?.message || String(msErr)}`);
+  }
+  const moduleState: VmModuleStateRow[] = (ms?.data ?? []).map((r: any) => ({
+    id:               String(r?.id ?? ""),
+    module:           String(r?.module_descr ?? ""),
+    sub:              String(r?.sub_module_descr ?? ""),
+    last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+    active:           asBool01(r?.active),
+    was_ok:           asBool01(r?.was_ok),
+    ok:               asBool01(r?.ok),
+    error:            asBool01(r?.error),
+    error_descr:      r?.error_descr != null ? String(r.error_descr) : null,
+  }));
   // ── 3. Subscribes ─────────────────────────────────────────────────────────
   // FIX: subscribe/unsubscribe são fire-and-forget — o Traffilog não retorna
   // mtkn correlacionável nessas respostas. Sem delays, igual ao Monitor.
@@ -363,26 +388,10 @@ export async function collectVehicleMonitorSnapshot(opts: {
     vehicle_id: String(opts.vehicleId),
   }).catch(() => {});
 
-  if (!header.unit_key) throw new Error("[vm] unit_key ausente no get_vehicle_info");
-
-  // ── 5. Module State ───────────────────────────────────────────────────────
-  const ms = await mux.sendAction<any>("get_monitor_module_state", {
-    tag: "loading_screen",
-    filter: "",
-    vehicle_id: String(opts.vehicleId),
-  });
-
-  const moduleState: VmModuleStateRow[] = (ms?.data ?? []).map((r: any) => ({
-    id:               String(r?.id ?? ""),
-    module:           String(r?.module_descr ?? ""),
-    sub:              String(r?.sub_module_descr ?? ""),
-    last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-    active:           asBool01(r?.active),
-    was_ok:           asBool01(r?.was_ok),
-    ok:               asBool01(r?.ok),
-    error:            asBool01(r?.error),
-    error_descr:      r?.error_descr != null ? String(r.error_descr) : null,
-  }));
+  if (!header.unit_key) {
+    const fs = require("fs"); fs.appendFileSync("/tmp/vm_debug.log", JSON.stringify({ts: new Date().toISOString(), vi}, null, 2) + "\n---\n");
+    console.log(`[vm] vehicleId=${opts.vehicleId} unit_key ausente — send_quick_command será pulado, aguardando dados passivos`);
+  }
 
   // ── 6. Handler de pushes ──────────────────────────────────────────────────
   const latest   = new Map<string, VmParam>();
@@ -481,15 +490,51 @@ export async function collectVehicleMonitorSnapshot(opts: {
     if (ds === "unit_connection_status") { unitConnEvents++; return; }
   });
 
-  // ── 7. Dispara rajada + aguarda REATIVAMENTE ──────────────────────────────
-  await mux.sendAction("send_quick_command", {
-    unit_key:        header.unit_key,
-    local_action_id: "5",
-    cmd_id:          "9",
-    ack_needed:      "0",
-  });
+  // ── 7. Dispara rajada + reenvio reativo (FIX_CAN_RETRY_V1) ─────────────────
+  // Reenvia send_quick_command a cada 5s até ter todos os grupos alvo ou timeout
 
-  await sleep(waitAfterCmdMs);
+  // Grupos: cada grupo = 1 parâmetro lógico. Basta 1 ID do grupo ter valor > "".
+  const TARGET_GROUPS: string[][] = [
+    ["00000031", "000000C5", "00002719", "0000A8BD"], // engine_total_fuel_used
+    ["00000032", "000000C3", "0000879F", "00002717"], // fuel_level_1
+    ["0000003C", "00002718", "0000C21F"],             // engine_fuel_rate
+    ["00000024", "0000010D", "00002723"],             // engine_oil_pressure
+    ["0000168E", "0000271E"],                         // engine_oil_temperature_1
+    ["0000002F", "0000010E", "0000271F"],             // engine_coolant_temperature
+    ["0000002E", "0000010F"],                         // engine_fuel_temperature_1
+    ["00002714"],                                     // sys_param_vehicle_distance
+    ["0000AF8C", "0000D419", "0000D41A"],             // arm_analog_input_3
+    ["000000AD", "0000003A", "00002715"],             // rpm
+  ];
+
+  function hasAllTargets(): boolean {
+    return TARGET_GROUPS.every(group =>
+      group.some(id => {
+        const p = latest.get(id.toUpperCase());
+        return p != null && (p.raw_value ?? "") !== "";
+      })
+    );
+  }
+
+  async function fireQuickCommand(): Promise<void> {
+    console.log(`[vm] vehicleId=${opts.vehicleId} unit_key="${header.unit_key}" send_quick_command iniciando`);
+    try {
+      await mux.sendAction("send_quick_command", {
+        unit_key:        header.unit_key,
+        local_action_id: "5",
+        cmd_id:          "9",
+        ack_needed:      "0",
+      });
+      console.log(`[vm] vehicleId=${opts.vehicleId} send_quick_command OK`);
+    } catch (e: any) {
+      console.log(`[vm] vehicleId=${opts.vehicleId} send_quick_command FALHOU (non-fatal): ${e?.message || e}`);
+    }
+  }
+
+  if (header.unit_key) {
+    await fireQuickCommand();
+    await sleep(waitAfterCmdMs);
+  }
 
   // FIX: substitui sleep(windowMs) fixo por espera reativa
   // Encerra quando: (a) silêncio >= waitAfterLastParamMs após último UNIT_PARAMETERS
@@ -518,10 +563,18 @@ export async function collectVehicleMonitorSnapshot(opts: {
       console.log(`[vm] vehicleId=${opts.vehicleId} aguardando... ${elapsed}s — params=${latest.size} events=${unitParametersEvents}`);
     }, 10_000);
 
+    // FIX_CAN_RETRY_V1: reenvio periódico a cada 5s enquanto faltam parâmetros alvo
+    const RETRY_INTERVAL_MS = 5_000;
+    const retryTimer = setInterval(() => {
+      if (!header.unit_key) return; // sem unit_key não há como reenviar
+      if (hasAllTargets()) return;
+      fireQuickCommand().catch(() => {});
+    }, RETRY_INTERVAL_MS);
     function cleanup() {
       clearTimeout(hardDeadline);
       clearInterval(quietChecker);
       clearInterval(progressTimer);
+      clearInterval(retryTimer);
     }
   });
 

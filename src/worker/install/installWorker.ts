@@ -25,6 +25,7 @@ import { ensureVehicleId }                  from "../../core/vhclsService";
 import { checkAndFreeSerial }               from "../../core/cmdtService";
 import { mwsLoadBaseline, mwsSave, mwsPostcheck, mwsExtractActivationAttrs } from "../../core/mwsService";
 import { executeChangeCompany }             from "../../core/changeCompanyService";
+import { getSelectedSchemeId }               from "../../services/schemeSelectionService";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -132,25 +133,30 @@ async function resolveVehicleIdWithPath(
   payload: any,
   jobId  : string
 ): Promise<ResolveResult | null> {
-  const plate  = String(payload.plate  || "").trim();
+  // Caminho A usa SEMPRE a placa real (plate_real/plateReal) — nunca o serial.
+  // O frontend envia plate=serial para INSTALL, mas plate_real é a placa verdadeira.
+  const plateReal = String(payload.plate_real || payload.plateReal || "").trim()
+    .replace(/[^A-Z0-9_-]/gi, "").toUpperCase();
   const serial = String(payload.serial || "").trim();
   const clientIdCadastro = Number(payload.client_id || 0);
 
-  // -- Tentativa 1: por placa (Caminho A) --
-  if (plate) {
+  // -- Tentativa 1: por placa real (Caminho A) --
+  if (plateReal) {
     const payloadByPlate = { ...payload, service: "INSTALL" };
-    // força busca apenas por placa nesta tentativa
-    payloadByPlate.serial  = "";
+    // força busca pela placa real — sem serial para não contaminar
+    payloadByPlate.plate    = plateReal;
+    payloadByPlate.license  = plateReal;
+    payloadByPlate.serial   = "";
     payloadByPlate.inner_id = "";
     payloadByPlate.INNER_ID = "";
 
     const vid = await ensureVehicleId(cfg, { jobId, log: console.log }, payloadByPlate);
     if (vid) {
-      console.log(`[install-rw] job=${jobId} Caminho A: placa="${plate}" → vehicle_id=${vid}`);
+      console.log(`[install-rw] job=${jobId} Caminho A: plateReal="${plateReal}" → vehicle_id=${vid}`);
       // client_mismatch não se aplica no Caminho A (CHANGE_COMPANY é exclusivo do B)
       return { vehicleId: vid, resolvedBy: "plate", clientIdFound: null, clientMismatch: false };
     }
-    console.log(`[install-rw] job=${jobId} placa="${plate}" não encontrada → tentando Caminho B`);
+    console.log(`[install-rw] job=${jobId} plateReal="${plateReal}" não encontrada → tentando Caminho B`);
   }
 
   // -- Tentativa 2: por serial (Caminho B) --
@@ -345,33 +351,24 @@ async function processJob(job: any): Promise<void> {
     resolvedBy  = resolved.resolvedBy;
     clientIdFound = resolved.clientIdFound ?? null;
 
-    // 2. CHANGE_COMPANY — somente Caminho B com client_mismatch
+    // CHANGE_COMPANY será executada APÓS o SAVE (ver etapa 8a abaixo)
     if (resolved.resolvedBy === "serial" && resolved.clientMismatch) {
-      const clientIdDest  = String(payload.client_id || "");
-      const clientDescr   = String(payload.client_descr || "");
-
-      if (!clientIdDest || !clientDescr) {
-        console.log(
-          `[install-rw] job=${jobId} client_mismatch detectado mas client_id/client_descr ausentes no payload ` +
-          `— CHANGE_COMPANY pulado`
-        );
-      } else {
-        console.log(`[install-rw] job=${jobId} Caminho B + client_mismatch → executando CHANGE_COMPANY`);
-
-        const ccResult = await executeChangeCompany(cfg, vehicleId, clientIdDest, clientDescr, jobId)
-          .catch((e: any) => ({ ok: false as const, error: String(e?.message || e) }));
-
-        if (!ccResult.ok) {
-          await failJob(jobId, "change_company_failed", {
-            vehicle_id : vehicleId,
-            client_dest: clientIdDest,
-            error      : ccResult.error,
-          });
-          return;
+      payload._needsChangeCompany = true;
+      // Extrai campos do veículo do XML do VHCLS para o payload do ASSET_BASIC_SAVE
+      try {
+        const snapFiles = fs.readdirSync("/tmp")
+          .filter((f: string) => f.startsWith(`vhcls_raw_${jobId}_`) && f.endsWith(".xml"))
+          .sort().reverse();
+        if (snapFiles.length) {
+          const xml = fs.readFileSync(`/tmp/${snapFiles[0]}`, "utf8");
+          const attrRe = /(\w+)="([^"]*)"/g;
+          let m: RegExpExecArray | null;
+          const vhclsData: Record<string, string> = {};
+          while ((m = attrRe.exec(xml)) !== null) vhclsData[m[1]] = m[2];
+          payload._vhclsData = vhclsData;
+          console.log(`[install-rw] job=${jobId} vhclsData extraído: ASSET_TYPE=${vhclsData.ASSET_TYPE||"?"} FIRMWARE=${vhclsData.FIRMWARE||"?"}`);
         }
-
-        console.log(`[install-rw] job=${jobId} CHANGE_COMPANY OK group_id=${ccResult.group_id}`);
-      }
+      } catch { /* não bloqueia */ }
     }
   }
 
@@ -434,6 +431,26 @@ async function processJob(job: any): Promise<void> {
       payload.fieldValue  = baseline.fields.FIELD_VALUE;
     }
     console.log(`[install-rw] job=${jobId} baseline loaded keys=${Object.keys(baseline.fields).length}`);
+
+    // SKIP_SB_V1: verifica se SB pode ser pulado
+    // Condição: schemeId já cadastrado == schemeId do cliente && asset_type já cadastrado == asset_type do cadastro
+    const assignedSchemeId = String(baseline.fields.ASSIGNED_VEHICLE_SETTING_ID || "").trim();
+    const assignedAssetType = String(baseline.fields.ASSET_TYPE || "").trim();
+    const targetSchemeId = getSelectedSchemeId(payload.client_id) ?? String(payload.vehicle_setting_id || payload.vehicleSettingId || "").trim();
+    const targetAssetType = String(payload.assetType ?? payload.asset_type ?? payload.ASSET_TYPE ?? "").trim();
+
+    const schemeMatch = !!(assignedSchemeId && targetSchemeId && assignedSchemeId === targetSchemeId);
+    const assetMatch  = !!(assignedAssetType && targetAssetType && assignedAssetType === targetAssetType);
+    const skipSb = schemeMatch && assetMatch;
+
+    console.log(
+      `[install-rw] job=${jobId} SKIP_SB_CHECK` +
+      ` assignedScheme=${assignedSchemeId} targetScheme=${targetSchemeId} schemeMatch=${schemeMatch}` +
+      ` assignedAsset=${assignedAssetType} targetAsset=${targetAssetType} assetMatch=${assetMatch}` +
+      ` → skip_sb=${skipSb}`
+    );
+
+    if (skipSb) payload._skip_sb = true;
   } catch (e: any) {
     console.log(`[install-rw] job=${jobId} baseline load failed (non-blocking): ${e?.message || e}`);
   }
@@ -497,6 +514,29 @@ async function processJob(job: any): Promise<void> {
     return;
   }
 
+  // 8a. CHANGE_COMPANY — executada APÓS o SAVE para não ser desfeita pelo CMDT
+  if (payload._needsChangeCompany) {
+    const clientIdDest = String(payload.client_id || "");
+    const clientDescr  = String(payload.client_descr || "");
+    if (!clientIdDest || !clientDescr) {
+      console.log(`[install-rw] job=${jobId} _needsChangeCompany mas client_id/client_descr ausentes — pulado`);
+    } else {
+      console.log(`[install-rw] job=${jobId} CHANGE_COMPANY pós-SAVE → executando`);
+      const vhclsData = (payload._vhclsData && typeof payload._vhclsData === "object") ? payload._vhclsData as Record<string, string> : {};
+      const ccResult = await executeChangeCompany(cfg, vehicleId, clientIdDest, clientDescr, jobId, vhclsData)
+        .catch((e: any) => ({ ok: false as const, error: String(e?.message || e) }));
+      if (!ccResult.ok) {
+        await failJob(jobId, "change_company_failed", {
+          vehicle_id : vehicleId,
+          client_dest: clientIdDest,
+          error      : ccResult.error,
+        });
+        return;
+      }
+      console.log(`[install-rw] job=${jobId} CHANGE_COMPANY pós-SAVE OK group_id=${ccResult.group_id}`);
+    }
+  }
+
   // 8. Sucesso
   // vehicle_setting_id é repassado ao resultado para o jobRoutes.ts usar no scheme_builder
   const vehicleSettingId = String(payload.vehicle_setting_id || payload.ASSIGNED_VEHICLE_SETTING_ID || vehicleSettingIdFromPostcheck || "");
@@ -510,11 +550,12 @@ async function processJob(job: any): Promise<void> {
     serial            : saveFields.DIAL_NUMBER,
     dial              : dial,
     http              : saveResult.status,
-    vehicle_setting_id: vehicleSettingId,  // para Scheme Check no scheme_builder
-    client_id_found   : clientIdFound,           // para CHANGE_COMPANY no dispatchPipeline
+    vehicle_setting_id: vehicleSettingId,
+    client_id_found   : clientIdFound,
+    skip_sb           : payload._skip_sb === true,
   });
 
-  console.log(`[install-rw] job=${jobId} INSTALL OK vehicle_id=${vehicleId} serial=${dial} resolved_by=${resolvedBy}`);
+  console.log(`[install-rw] job=${jobId} INSTALL OK vehicle_id=${vehicleId} serial=${dial} resolved_by=${resolvedBy} skip_sb=${payload._skip_sb === true}`);
 }
 
 // ---------------------------------------------------------------------------
