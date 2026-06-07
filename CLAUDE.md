@@ -114,8 +114,8 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 ## Pendências e melhorias futuras
 
 ### 🔴 Próxima sessão
-- P1: moduleState — log vm-ms nunca aparece, suspeita timeout 15s no sendAction
-- P2: canWorker serial — adicionar CONCURRENCY env var para rodar N loops paralelos
+- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Causa raiz não confirmada — suspeita: falta de contexto de sessão ou parâmetro adicional no `get_monitor_module_state`. Próximo passo: testar com veículo conectado e comparar com sessão do Internal Tools.
+- P2: canWorker paralelo — adicionar `CAN_WORKER_CONCURRENCY` env var para rodar N loops paralelos
 - P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada
 
 ### 🟡 Backlog
@@ -126,6 +126,8 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 - Auth: migração para traffilogAuth HTTP
 - ASSET_TYPE: fix sobrescrita no SAVE_VHCL_ACTIVATION_NEW
 - systemd: monitor-backend-rewrite configurado como serviço
+- SKIP_SB bug: installWorker retornava antes do SAVE_VHCL_ACTIVATION_NEW — http=200 era falso, instalação não era gravada no HTML5
+- vehicleMonitorSnapshotService: get_monitor_module_state envolto em try/catch; unit_key ausente vira aviso em vez de exceção fatal
 
 ---
 
