@@ -133,8 +133,6 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 ### 🟡 Backlog
 
-- **Filtrar asset_types por serial vinculado no sync por cliente**: `syncAssetTypesByClient()` busca todos os `vehicle_id` do cliente e coleta seus `asset_type`, mas inclui veículos placeholder/inativos (sem serial vinculado). Resultado: asset_types que não existem mais aparecem como "existentes". Fix: filtrar para trazer apenas veículos onde o serial está vinculado (campo serial/`DIAL_NUMBER` não vazio ou nulo) antes de agregar os asset_types.
-
 - **Validação de serial antes de avançar tela (install / maint_with_swap)**: bloquear o botão "próxima tela" se o serial não estiver disponível. Regra: serial em uso quando `inner_id != license_nmbr && license_nmbr != "cmdt"`. Verificar onde inserir — provavelmente no modal de entrada do serial (antes de submeter), evitando que o job seja criado e o usuário precise recarregar o navegador. Solução rápida preferida.
 
 - **Upload de fotos para SharePoint**: substituir AppScript Google Drive por upload direto via Graph API. Frontend envia `multipart/form-data` → backend recebe em memória (`multer` memoryStorage, limite 15MB) → `PUT` Graph API para pasta SharePoint. Sem tocar disco da VM. Service Worker no frontend para envio em background. Pico estimado: 5 usuários simultâneos ~40MB RAM.
@@ -142,6 +140,10 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 - **Integração lista SharePoint (BaseInstalados)**: enviar os 18 campos exportados diretamente para lista `BaseInstalados` no site `SmartDrivingLabs`. Auth via OAuth 2.0 Client Credentials (já validada). Colunas mapeadas: `ID_Registro, Data, Placa (Title), Serial, Tecnico, Cliente, Serviço, Fabricante, Modelo, Ano, Cor, Chassi, LocalInstalacao, Comentario, JobID, Etiqueta, Chicote, CAN`. Gravar via `POST /sites/{id}/lists/{id}/items`.
 
 ### ✅ Feito recentemente
+- UNINSTALL flow: vehicle_id, serial (inner_id) e client_id/client_descr agora passados no payload via vhcls-lookup; CMDT criado corretamente após desativação
+- vhcls-lookup: retorna inner_id, client_id, client_descr; detecta login=-1 e faz relogin automático
+- asset_types sync: normalização trim+lowercase resolve mismatch de espaços ("Scania " vs "Scania"); catálogo saltou de 8 para 46 modelos Scania
+- syncAssetTypesByClient: filtra veículos sem INNER_ID (placeholders); usa chave normalizada; Francisconi e outros clientes agora recebem asset_types corretos
 - canWorker: fix de rota /worker/can/poll
 - Auth: migração para traffilogAuth HTTP
 - ASSET_TYPE: fix sobrescrita no SAVE_VHCL_ACTIVATION_NEW
