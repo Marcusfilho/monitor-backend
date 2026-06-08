@@ -1,6 +1,4 @@
 import { Router, Request, Response } from "express";
-import { executeChangeCompany } from "../core/changeCompanyService";
-import { configFromEnv } from "../core/html5Session";
 import { getSelectedSchemeId } from "../services/schemeSelectionService";
 import {
   createJob,
@@ -31,29 +29,7 @@ const router = Router();
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-async function maybeChangeCompany(
-  job   : BaseJob,
-  result: any,
-  jobId : string
-): Promise<void> {
-  const clientIdCadastro = Number(job.payload?.client_id || 0);
-  const clientIdFound    = Number(result.client_id_found || 0);
-  if (!clientIdCadastro || !clientIdFound || clientIdCadastro === clientIdFound) return;
-  const clientDescr = String(job.payload?.client_descr || "");
-  if (!clientDescr) {
-    console.log(`[pipeline] job=${jobId} client_mismatch mas client_descr ausente — CHANGE_COMPANY pulado`);
-    return;
-  }
-  console.log(`[pipeline] job=${jobId} client_mismatch ${clientIdFound}→${clientIdCadastro} — executando CHANGE_COMPANY`);
-  const cfg = configFromEnv();
-  const cc  = await executeChangeCompany(cfg, result.vehicle_id, clientIdCadastro, clientDescr, jobId)
-    .catch((e: any) => ({ ok: false as const, error: String(e?.message || e) }));
-  if (cc.ok) {
-    console.log(`[pipeline] job=${jobId} CHANGE_COMPANY OK group_id=${cc.group_id}`);
-  } else {
-    console.log(`[pipeline] job=${jobId} CHANGE_COMPANY FALHOU: ${cc.error}`);
-  }
-}
+// CHANGE_COMPANY centralizada no installWorker — removida daqui para evitar duplicação.
 function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void {
   if (finalStatus !== "completed") return;
 
@@ -62,12 +38,16 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
   switch (job.type) {
     case "html5_install": {
       const schemeId = getSelectedSchemeId(job.payload?.client_id) ?? result.vehicle_setting_id ?? "";
-      maybeChangeCompany(job, result, job.id).then(() => {
+      // SKIP_SB_V1: se installWorker detectou que SB pode ser pulado, vai direto para CAN
+      if (result.skip_sb === true) {
+        console.log(`[pipeline] html5_install skip_sb=true → monitor_can_snapshot direto plate=${plate}`);
+        createJob("monitor_can_snapshot", {
+          ...job.payload, ...result, plate, _from: job.id,
+          installation_token: randomUUID(),
+        });
+      } else {
         createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
-      }).catch((e: any) => {
-        console.log(`[pipeline] maybeChangeCompany erro (não bloqueia): ${e?.message || e}`);
-        createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
-      });
+      }
       break;
     }
 
@@ -85,12 +65,16 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
 
     case "html5_maint_with_swap": {
       const schemeId = getSelectedSchemeId(job.payload?.client_id) ?? result.vehicle_setting_id ?? "";
-      maybeChangeCompany(job, result, job.id).then(() => {
+      // SKIP_SB_V1: mesma regra do install
+      if (result.skip_sb === true) {
+        console.log(`[pipeline] html5_maint_with_swap skip_sb=true → monitor_can_snapshot direto plate=${plate}`);
+        createJob("monitor_can_snapshot", {
+          ...job.payload, ...result, plate, _from: job.id,
+          installation_token: randomUUID(),
+        });
+      } else {
         createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
-      }).catch((e: any) => {
-        console.log(`[pipeline] maybeChangeCompany erro (não bloqueia): ${e?.message || e}`);
-        createJob("scheme_builder", { ...job.payload, ...result, vehicle_setting_id: schemeId, plate, _from: job.id });
-      });
+      }
       break;
     }
 

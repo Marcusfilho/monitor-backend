@@ -5,7 +5,7 @@ import eventsRoutes        from "./routes/eventsRoutes";
 import authRoutes          from "./routes/authRoutes";
 import installationsRoutes from "./routes/installationsRoutes";
 import { requireSession }  from "./middleware/requireSession";
-import adminRoutes         from "./routes/adminRoutes";
+import adminRoutes, { syncAssetTypesByClient } from "./routes/adminRoutes";
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +26,19 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/installations", requireSession, installationsRoutes);
 app.use("/events",            eventsRoutes);
 app.use("/api/admin",         adminRoutes);
+
+// ─── Sync asset_types_by_client — a cada 1h ───────────────────────────────────
+const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hora
+function scheduleSyncByClient() {
+  syncAssetTypesByClient()
+    .then(() => console.log("[index] syncAssetTypesByClient OK"))
+    .catch(e  => console.error("[index] syncAssetTypesByClient ERRO:", e.message));
+}
+// Primeira execução: 30s após o boot (aguarda workers subirem)
+setTimeout(() => {
+  scheduleSyncByClient();
+  setInterval(scheduleSyncByClient, SYNC_INTERVAL_MS);
+}, 30_000);
 
 // ─── Worker heartbeat (path raiz, fora do jobRoutes) ─────────────────────────
 app.post("/api/worker/heartbeat", (req: any, res: any) => {

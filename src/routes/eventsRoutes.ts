@@ -137,9 +137,10 @@ router.get("/:jobId", (req: Request, res: Response) => {
       return;
     }
 
-    // Só há dados CAN quando o job monitor_can_snapshot completou
+    // Aceita snapshot parcial (durante coleta) ou final (job completo)
     const snapshot: VmSnapshot | null =
       job.result?.snapshot ?? null;
+    const isPartial: boolean = job.result?.partial === true;
 
     const startTime = jobStartTimes.get(jobId) ?? Date.now();
     const stop      = shouldStop(snapshot, startTime);
@@ -149,7 +150,7 @@ router.get("/:jobId", (req: Request, res: Response) => {
       const payload = JSON.stringify(snapshot);
       if (payload !== lastPayload) {
         lastPayload = payload;
-        sendData(snapshot);
+        sendData({ ...snapshot, _partial: isPartial });
       }
     }
 

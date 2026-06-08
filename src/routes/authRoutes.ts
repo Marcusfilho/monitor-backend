@@ -2,6 +2,7 @@
 // POST /api/auth/html5-login  — autentica usuário no HTML5 e retorna token de sessão
 // GET  /api/auth/session       — valida se um token ainda está ativo
 
+import { initSessionTable, setSession, getSession, deleteSession, purgeExpiredSessions } from "../services/sessionStore";
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import * as https from "https";
@@ -24,26 +25,11 @@ const HTML5_INDEX_URL = "https://html5.traffilog.com/appv2/index.htm";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 horas
 
 // ---------------------------------------------------------------------------
-// Map de sessões em memória: token → { clients, username, expiresAt }
+// Sessões persistidas no SQLite via sessionStore
 // ---------------------------------------------------------------------------
-
-interface SessionEntry {
-  clients: ClientRecord[];
-  username: string;
-  expiresAt: number;
-}
-
-export const sessionMap = new Map<string, SessionEntry>();
-
+initSessionTable();
 // Limpeza periódica de sessões expiradas (a cada 30 min)
-setInterval(() => {
-  const now = Date.now();
-  let purged = 0;
-  for (const [token, s] of sessionMap.entries()) {
-    if (s.expiresAt < now) { sessionMap.delete(token); purged++; }
-  }
-  if (purged > 0) console.log(`[auth] ${purged} sessões expiradas removidas`);
-}, 30 * 60 * 1000);
+setInterval(() => purgeExpiredSessions(), 30 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // Helpers HTTP (sem node-fetch — usa https nativo igual ao restante do projeto)
@@ -364,7 +350,7 @@ router.post("/html5-login", async (req, res) => {
 
     // 5. Gera token de sessão
     const token = randomUUID();
-    sessionMap.set(token, {
+    setSession(token, {
       clients:   filtered,
       username:  String(username),
       expiresAt: Date.now() + SESSION_TTL_MS,
@@ -400,9 +386,9 @@ router.get("/session", (req, res) => {
   const token = String(req.query.token || "").trim();
   if (!token) return res.status(400).json({ ok: false, error: "token obrigatório" });
 
-  const session = sessionMap.get(token);
+  const session = getSession(token);
   if (!session || session.expiresAt < Date.now()) {
-    sessionMap.delete(token);
+    deleteSession(token);
     return res.status(401).json({ ok: false, reason: "expired_or_invalid" });
   }
 

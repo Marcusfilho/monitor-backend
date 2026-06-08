@@ -10,8 +10,10 @@
 
 import WebSocket from "ws";
 import { getTrafflogToken } from "../../core/traffilogAuth.js";
+import { updateJob } from "../../jobs/jobStore.js";
 import {
   collectVehicleMonitorSnapshot,
+  buildCanSummary,
   type WsLike,
 } from "../../core/vehicleMonitorSnapshotService.js";
 
@@ -42,16 +44,33 @@ async function apiFetch(path: string, body: unknown) {
 }
 
 async function pollNextJob(): Promise<any | null> {
-  const data = await apiFetch("/worker/can/poll", {});
+  const res = await fetch(`${BASE}/api/jobs/next`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-worker-key": KEY },
+    body: JSON.stringify({ job_type: "monitor_can_snapshot", worker_key: KEY }),
+  });
+  if (!res.ok) { console.log(`[can-rw] poll HTTP ${res.status}`); return null; }
+  if (res.status === 204) return null;
+  const data = await res.json() as any;
   return data?.job ?? null;
 }
 
 async function completeJob(jobId: string, result: unknown) {
-  await apiFetch(`/worker/can/complete/${jobId}`, { result });
+  const res = await fetch(`${BASE}/api/jobs/${jobId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-worker-key": KEY },
+    body: JSON.stringify({ result, worker_key: KEY }),
+  });
+  if (!res.ok) console.error(`[can-rw] complete HTTP ${res.status} job=${jobId}`);
 }
 
 async function failJob(jobId: string, reason: string, detail?: unknown) {
-  await apiFetch(`/worker/can/fail/${jobId}`, { reason, detail });
+  const res = await fetch(`${BASE}/api/jobs/${jobId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-worker-key": KEY },
+    body: JSON.stringify({ status: "error", result: { reason, detail }, worker_key: KEY }),
+  });
+  if (!res.ok) console.error(`[can-rw] fail HTTP ${res.status} job=${jobId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,8 +97,9 @@ function openWs(token: string): WsLike {
 // ---------------------------------------------------------------------------
 async function processJob(job: any): Promise<void> {
   const jobId     = String(job.id     || job.jobId || "");
-  const vehicleId = Number(job.vehicle_id || job.vehicleId || 0);
-  const clientId  = job.client_id  || job.clientId  || null;
+  const p         = job.payload ?? job;
+  const vehicleId = Number(p.vehicle_id || p.vehicleId || 0);
+  const clientId  = p.client_id  || p.clientId  || null;
 
   console.log(`[can-rw] job=${jobId} vehicleId=${vehicleId}`);
 
@@ -112,6 +132,23 @@ async function processJob(job: any): Promise<void> {
       sessionToken,
       vehicleId,
       clientId,
+      onPartialParams: (params, counts, header, moduleState) => {
+        updateJob(jobId, {
+          result: {
+            ok: false,
+            partial: true,
+            snapshot: {
+              vehicleId,
+              header,
+              parameters:  params,
+              moduleState,
+              isConnected: null,
+              canSummary:  buildCanSummary(moduleState),
+              counts,
+            },
+          },
+        });
+      },
     });
 
     console.log(

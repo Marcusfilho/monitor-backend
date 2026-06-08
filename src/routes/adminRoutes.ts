@@ -36,7 +36,8 @@ const HTML5_INDEX_URL = "https://html5.traffilog.com/appv2/index.htm";
 // config/ fica na raiz do projeto (~/monitor-backend-rewrite/config/)
 const CONFIG_DIR       = path.resolve(__dirname, "../../config");
 const ASSET_TYPES_PATH = path.join(CONFIG_DIR, "asset_types_active.json");
-const SCHEMES_PATH     = path.join(CONFIG_DIR, "schemes_selection.json");
+const SCHEMES_PATH                = path.join(CONFIG_DIR, "schemes_selection.json");
+const ASSET_TYPES_BY_CLIENT_PATH  = path.join(CONFIG_DIR, "asset_types_by_client.json");
 
 // catalog_vehicle_type.json — lista dos modelos que a Questar usa (já filtrado)
 const CATALOG_PATH = path.resolve(__dirname, "../../public/catalog_vehicle_type.json");
@@ -350,28 +351,25 @@ router.post("/asset-types/sync", async (_req, res) => {
     if (!catalog.length) {
       return res.status(502).json({ ok: false, error: "Catálogo ASSET_TYPES vazio ou parse falhou" });
     }
+    // 3. Buscar VHCLS completo para descobrir quais manufacturer|model estão em uso
+    const rVhcls = await httpPost(
+      HTML5_ACTION_URL,
+      "action=VHCLS&VERSION_ID=2&REFRESH_FLG=1&LICENSE_NMBR=&CLIENT_DESCR=&OWNER_DESCR=&DIAL_NMBR=&INNER_ID=",
+      { cookie }
+    );
+    const allVehicles = parseVhclsXml(rVhcls.body);
+    console.log(`[admin] asset-types sync: ${allVehicles.length} veículos no VHCLS`);
 
-    // 3. Ler lista dos modelos que a Questar usa (catalog_vehicle_type.json)
-    let usedModels: Array<{ manufacturer: string; model: string; asset_type: number }> = [];
-    if (fs.existsSync(CATALOG_PATH)) {
-      usedModels = JSON.parse(fs.readFileSync(CATALOG_PATH, "utf8"));
+    // 4. Montar Set de pares manufacturer|model em uso
+    const usedPairs = new Set<string>();
+    for (const v of allVehicles) {
+      if (v.manufacturer_descr && v.model) usedPairs.add(v.manufacturer_descr + "|" + v.model);
     }
+    console.log(`[admin] asset-types sync: ${usedPairs.size} pares distintos`);
 
-    // 4. Match por asset_type ID
-    const usedIds = new Set(usedModels.map(m => m.asset_type));
-    const matched = catalog.filter(c => usedIds.has(c.id));
-
-    // 5. Para os IDs que não tiveram match no catálogo online, usar o catalog local como fallback
-    const matchedIds = new Set(matched.map(m => m.id));
-    const fallback = usedModels
-      .filter(m => !matchedIds.has(m.asset_type))
-      .map(m => ({
-        id:           m.asset_type,
-        manufacturer: m.manufacturer,
-        model:        m.model,
-        sub_model:    "",
-      }));
-
+    // 5. Filtrar catálogo pelos pares em uso
+    const matched = catalog.filter(c => usedPairs.has(c.manufacturer + "|" + c.model));
+    const fallback: typeof matched = [];
     const finalList = [...matched, ...fallback].sort((a, b) => {
       const mfg = a.manufacturer.localeCompare(b.manufacturer);
       return mfg !== 0 ? mfg : a.model.localeCompare(b.model);
@@ -383,7 +381,7 @@ router.post("/asset-types/sync", async (_req, res) => {
       ok: true,
       generated_at:   new Date().toISOString(),
       total_matched:  finalList.length,
-      total_vhcls_ids: usedIds.size,
+      total_vhcls_ids: usedPairs.size,
       total_catalog:  catalog.length,
       asset_types:    finalList,
     };
@@ -503,8 +501,8 @@ router.get("/schemes/client/:clientId", async (req, res) => {
 // Cruza asset_types_active.json com VHCLS filtrado por cliente
 // Retorna Set de pares "manufacturer|model" que o cliente usa
 // ---------------------------------------------------------------------------
-function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_descr: string; model: string }> {
-  const results: Array<{ client_id: string; manufacturer_descr: string; model: string }> = [];
+function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_descr: string; model: string; asset_type_id: number }> {
+  const results: Array<{ client_id: string; manufacturer_descr: string; model: string; asset_type_id: number }> = [];
   const re = /<DATA\s([^>]*?)\/>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
@@ -519,68 +517,114 @@ function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_des
       client_id:          attr('CLIENT_ID'),
       manufacturer_descr: attr('MANUFACTURER_DESCR'),
       model:              attr('MODEL'),
+      asset_type_id:      parseInt(attr('ASSET_TYPE'), 10) || 0,
     });
   }
   return results;
 }
 
-router.get("/asset-types/by-client", async (req, res) => {
-  const clientId   = String(req.query.clientId   || "").trim();
-  const clientName = String(req.query.clientName || "").trim();
+router.get("/asset-types/by-client", (req, res) => {
+  const clientId = String(req.query.clientId || "").trim();
   if (!clientId) {
     return res.status(400).json({ ok: false, error: "clientId é obrigatório" });
   }
-  // 1. Ler lista salva em disco (gerada pelo sync) — zero latência
-  if (!fs.existsSync(ASSET_TYPES_PATH)) {
-    return res.status(404).json({ ok: false, error: "Lista não encontrada. Execute o sync primeiro." });
+  // Lê JSON pré-gerado pelo sync — zero latência, zero HTML5
+  if (!fs.existsSync(ASSET_TYPES_BY_CLIENT_PATH)) {
+    return res.status(404).json({
+      ok: false,
+      error: "Cache não gerado. Execute POST /api/admin/asset-types/sync-by-client primeiro.",
+    });
   }
-  let assetTypes: Array<{ id: number; manufacturer: string; model: string }> = [];
   try {
-    const saved = JSON.parse(fs.readFileSync(ASSET_TYPES_PATH, "utf8"));
-    assetTypes = saved.asset_types || [];
+    const data = JSON.parse(fs.readFileSync(ASSET_TYPES_BY_CLIENT_PATH, "utf8"));
+    const ids: number[] = data.by_client?.[clientId] ?? [];
+    res.json({ ok: true, client_id: clientId, asset_type_ids: ids, generated_at: data.generated_at });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: "Erro ao ler asset_types_active.json: " + e.message });
+    res.status(500).json({ ok: false, error: "Erro ao ler cache: " + e.message });
   }
-  // 2. Buscar VHCLS filtrado pelo cliente via HTML5
+});
+
+// ---------------------------------------------------------------------------
+// syncAssetTypesByClient — itera todos os clientes, acumula asset_type IDs
+// Salva em config/asset_types_by_client.json
+// ---------------------------------------------------------------------------
+async function syncAssetTypesByClient(): Promise<void> {
   const loginName = (process.env.HTML5_LOGIN_NAME || "").trim();
   const loginPass = (process.env.HTML5_PASSWORD   || "").trim();
-  if (!loginName || !loginPass) {
-    return res.status(500).json({ ok: false, error: "HTML5_LOGIN_NAME/HTML5_PASSWORD não configurados" });
+  if (!loginName || !loginPass) throw new Error("HTML5_LOGIN_NAME/HTML5_PASSWORD não configurados");
+
+  console.log("[admin] syncAssetTypesByClient — iniciando...");
+
+  const cookie = await loginHtml5(loginName, loginPass);
+  if (!cookie) throw new Error("Falha no login HTML5");
+
+  // 1. Buscar lista de clientes
+  const rClients = await httpPost(HTML5_ACTION_URL, "action=CLIENTS&VERSION_ID=2", { cookie });
+  const clients = parseClientsXml(rClients.body);
+  console.log(`[admin] syncAssetTypesByClient — ${clients.length} clientes`);
+
+  // 2. Buscar VHCLS completo uma única vez (sem filtro — retorna todos)
+  const rVhcls = await httpPost(
+    HTML5_ACTION_URL,
+    "action=VHCLS&VERSION_ID=2&REFRESH_FLG=1&LICENSE_NMBR=&CLIENT_DESCR=&OWNER_DESCR=&DIAL_NMBR=&INNER_ID=",
+    { cookie }
+  );
+  const allVehicles = parseVhclsXml(rVhcls.body);
+  console.log(`[admin] syncAssetTypesByClient — ${allVehicles.length} veículos no VHCLS`);
+
+  // 3. Ler asset_types_active para montar lookup manufacturer|model → id
+  let assetTypes: Array<{ id: number; manufacturer: string; model: string }> = [];
+  if (fs.existsSync(ASSET_TYPES_PATH)) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(ASSET_TYPES_PATH, "utf8"));
+      assetTypes = saved.asset_types || [];
+    } catch { /* continua sem catálogo */ }
   }
+  const catalogLookup = new Map<string, number>();
+  for (const t of assetTypes) {
+    catalogLookup.set(t.manufacturer + "|" + t.model, t.id);
+  }
+
+  // 4. Agrupar asset_type_ids por client_id via cruzamento manufacturer|model
+  const byClient: Record<string, Set<number>> = {};
+  for (const v of allVehicles) {
+    if (!v.client_id) continue;
+    if (!byClient[v.client_id]) byClient[v.client_id] = new Set();
+    const key = v.manufacturer_descr + "|" + v.model;
+    const id = catalogLookup.get(key);
+    if (id) byClient[v.client_id].add(id);
+  }
+
+  // 4. Serializar Sets para arrays
+  const byClientSerialized: Record<string, number[]> = {};
+  for (const [cid, ids] of Object.entries(byClient)) {
+    byClientSerialized[cid] = [...ids].sort((a, b) => a - b);
+  }
+
+  // 5. Salvar
+  const output = {
+    generated_at:  new Date().toISOString(),
+    total_clients: clients.length,
+    total_vehicles: allVehicles.length,
+    by_client:     byClientSerialized,
+  };
+  ensureConfigDir();
+  fs.writeFileSync(ASSET_TYPES_BY_CLIENT_PATH, JSON.stringify(output, null, 2), "utf8");
+  console.log(`[admin] syncAssetTypesByClient — salvo: ${Object.keys(byClientSerialized).length} clientes em ${ASSET_TYPES_BY_CLIENT_PATH}`);
+}
+
+// POST /api/admin/asset-types/sync-by-client — dispara sync manual
+router.post("/asset-types/sync-by-client", async (_req, res) => {
   try {
-    const cookie = await loginHtml5(loginName, loginPass);
-    if (!cookie) return res.status(502).json({ ok: false, error: "Falha no login HTML5" });
-    const r = await httpPost(
-      HTML5_ACTION_URL,
-      "action=VHCLS&VERSION_ID=2&REFRESH_FLG=1&LICENSE_NMBR=&CLIENT_DESCR=" + encodeURIComponent(clientName) + "&OWNER_DESCR=&DIAL_NMBR=&INNER_ID=",
-      { cookie }
-    );
-    const vhcls = parseVhclsXml(r.body);
-    // 3. Filtrar só veículos do clientId solicitado
-    const clientVehicles = vhcls.filter(v => v.client_id === clientId);
-    // 4. Montar Set de pares "manufacturer|model" que o cliente usa
-    const clientPairs = new Set<string>();
-    for (const v of clientVehicles) {
-      if (v.manufacturer_descr && v.model) {
-        clientPairs.add(v.manufacturer_descr + "|" + v.model);
-      }
-    }
-    // 5. Cruzar com asset_types_active para retornar os IDs correspondentes
-    const matchedIds = assetTypes
-      .filter(t => clientPairs.has(t.manufacturer + "|" + t.model))
-      .map(t => t.id);
-    console.log(`[admin] by-client clientId=${clientId} clientName=${clientName}: ${clientVehicles.length} veículos, ${matchedIds.length} modelos`);
-    res.json({
-      ok:             true,
-      client_id:      clientId,
-      client_name:    clientName,
-      asset_type_ids: matchedIds,
-      pairs:          [...clientPairs],
-    });
+    await syncAssetTypesByClient();
+    const data = JSON.parse(fs.readFileSync(ASSET_TYPES_BY_CLIENT_PATH, "utf8"));
+    res.json({ ok: true, ...data, by_client: undefined,
+      clients_synced: Object.keys(data.by_client).length });
   } catch (e: any) {
-    console.error("[admin] asset-types/by-client error:", e);
+    console.error("[admin] sync-by-client error:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
+export { syncAssetTypesByClient };
 export default router;

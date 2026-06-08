@@ -23,6 +23,9 @@ export async function getTrafflogToken(): Promise<string> {
       let d = "";
       res.on("data", c => d += c);
       res.on("end", () => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`[traffilogAuth] HTTP ${res.statusCode} body="${d.slice(0,200)}"`));
+        }
         try {
           const props = JSON.parse(d)?.response?.properties;
           const tok = props?.session_token || props?.data?.[0]?.session_token;

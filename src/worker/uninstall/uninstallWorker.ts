@@ -307,11 +307,14 @@ async function saveCmdt(
   }
 
   // Sobrescreve campos dinâmicos para a placa CMDT
-  baseline.fields.LICENSE_NMBR = "CMDT";
-  baseline.fields.INNER_ID     = serialOld;
-  baseline.fields.DIAL_NUMBER  = serialOld;
-  baseline.fields.CLIENT_ID    = clientId;
-  baseline.fields.VEHICLE_ID   = String(newVehicleId);
+  baseline.fields.LICENSE_NMBR    = "CMDT";
+  baseline.fields.INNER_ID        = serialOld;
+  baseline.fields.DIAL_NUMBER     = serialOld;
+  baseline.fields.CLIENT_ID       = clientId;
+  baseline.fields.VEHICLE_ID      = String(newVehicleId);
+  // campos obrigatórios que o vehicle novo (vazio) não tem preenchidos
+  baseline.fields.MILAGE_SOURCE_ID  = "5067";
+  baseline.fields.WARRANTY_PERIOD_ID = "1";
 
   const saveResult = await mwsSave(
     cfg,

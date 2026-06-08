@@ -190,6 +190,8 @@ export function mwsEnrichSavePayloadFromBaseline(
       LICENSE_NMBR: payload.LICENSE_NMBR,
       DIAL_NUMBER : payload.DIAL_NUMBER,
       INNER_ID    : payload.INNER_ID,
+      CLIENT_ID   : payload.CLIENT_ID,
+      ASSET_TYPE  : payload.ASSET_TYPE,
     };
 
     payload = { ...base, ...payload };
@@ -365,6 +367,10 @@ export async function mwsSave(
   base.VERSION_ID  = String(base.VERSION_ID || "2");
   base.VEHICLE_ID  = String(vehicleId);
   base.LICENSE_NMBR = String(base.LICENSE_NMBR || plate || "");
+  // FIX_CLIENT_ID_V1: CLIENT_ID do baseline pode ser o cliente antigo (antes da CHANGE_COMPANY).
+  // Se o caller definiu CLIENT_ID explicitamente no baseline.fields, usa ele — caso contrário preserva.
+  // O installWorker passa fakeBaseline com fields vindos do buildInstallFields que já tem o CLIENT_ID correto.
+  if (baseline.fields.CLIENT_ID) base.CLIENT_ID = String(baseline.fields.CLIENT_ID);
 
   // serial novo
   base.DIAL_NUMBER = newSerial;
