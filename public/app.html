@@ -229,6 +229,26 @@
       .row2{grid-template-columns:1fr}
       .row3{grid-template-columns:1fr 1fr}
     }
+    .csel{position:relative}
+    .csel-btn{width:100%;text-align:left;background:#0b1118;border:1px solid #273245;border-radius:13px;
+      padding:11px 32px 11px 13px;color:var(--text);font-size:14px;font-family:var(--sans);
+      cursor:pointer;position:relative;-webkit-appearance:none;box-sizing:border-box}
+    .csel-btn::after{content:"▾";position:absolute;right:12px;top:50%;transform:translateY(-50%);
+      color:var(--muted);font-size:12px;pointer-events:none}
+    .csel-btn:focus{border-color:#3b5880;outline:none}
+    .csel-drop{display:none;position:absolute;z-index:300;left:0;right:0;max-height:240px;overflow-y:auto;
+      background:#0f1620;border:1px solid #334155;border-radius:13px;margin-top:4px;
+      box-shadow:0 8px 24px rgba(0,0,0,.5)}
+    .csel-drop.open{display:block}
+    .csel-grp{padding:7px 13px 3px;font-size:10px;font-weight:700;color:#4a5a6e;
+      text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+    .csel-item{display:block;width:100%;text-align:left;padding:10px 14px;background:none;
+      border:none;border-bottom:1px solid #1a2535;color:#cbd5e1;font-size:13px;
+      font-family:var(--sans);cursor:pointer}
+    .csel-item:last-child{border-bottom:none}
+    .csel-item:hover,.csel-item:focus{background:#1a2b42;outline:none}
+    .csel-item.hi{color:#60a5fa;font-weight:700}
+    .csel-item.sel{background:#0c1e38}
   </style>
 </head>
 <body>
@@ -285,7 +305,7 @@
     <div class="banner-err" id="plateLookupBanner" style="border-color:#1e3a5f;background:#091624;display:none">
       <span style="font-size:16px;flex-shrink:0;line-height:1">🔍</span>
       <div>
-        <div class="be-title" style="color:#7dd3fc">Placa não encontrada no HTML5</div>
+        <div class="be-title" style="color:#7dd3fc" id="plateLookupTitle">Placa não encontrada no HTML5</div>
         <div class="be-msg" style="color:#93c5fd" id="plateLookupDetail">Use o serial do equipamento a instalar no campo abaixo.</div>
       </div>
     </div>
@@ -293,6 +313,15 @@
     <div id="rowSerial">
       <label>Serial</label>
       <input id="serial" placeholder="ex.: 913055459" inputmode="numeric"/>
+    </div>
+
+    <!-- Banner serial em uso -->
+    <div class="banner-err" id="serialInUseBanner" style="display:none">
+      <span style="font-size:18px;flex-shrink:0;line-height:1">🚫</span>
+      <div>
+        <div class="be-title">Serial em uso</div>
+        <div class="be-msg" id="serialInUseDetail"></div>
+      </div>
     </div>
 
     <!-- Banner erro serial -->
@@ -308,11 +337,17 @@
       <div class="row2" style="margin-top:0">
         <div>
           <label>Fabricante</label>
-          <select id="cat_manufacturer" style="font-size:13px"></select>
+          <div class="csel" id="csel_manufacturer">
+            <button type="button" class="csel-btn" id="cat_manufacturer_btn">—</button>
+            <div class="csel-drop" id="cat_manufacturer_drop"></div>
+          </div>
         </div>
         <div>
           <label>Modelo</label>
-          <select id="cat_model" style="font-size:13px"></select>
+          <div class="csel" id="csel_model">
+            <button type="button" class="csel-btn" id="cat_model_btn">—</button>
+            <div class="csel-drop" id="cat_model_drop"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -505,7 +540,8 @@ function esc(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").
 // ─── state ───────────────────────────────────────────────────────────────────
 const state={
   inst:null,lastSnapshot:null,pollTimer:null,pollMs:5000,
-  debug:false,technician:null,_html5Start:null
+  debug:false,technician:null,_html5Start:null,
+  _serialInUse:false,_serialCheckPending:false,
 };
 
 // ─── toast ───────────────────────────────────────────────────────────────────
@@ -677,48 +713,68 @@ function uniqSorted(arr){return[...new Set(arr)].sort((a,b)=>String(a).localeCom
 function _mfHasClient(m){
   return CATALOG_TYPES.some(x=>x.manufacturer===m&&CLIENT_ASSET_SET.has(m+"|"+x.model));
 }
-function _applyOptionStyle(o,highlighted){
-  if(highlighted){o.style.fontWeight="700";o.style.color="#60a5fa";o.style.opacity="1";}
-  else{o.style.fontWeight="";o.style.color="";o.style.opacity="0.4";}
+// ─── custom select engine ──────────────────────────────────────────────────────
+const _cselVals={},_cselCbs={};
+function _cselVal(id){return _cselVals[id]||""}
+function _cselClose(){document.querySelectorAll(".csel-drop.open").forEach(d=>d.classList.remove("open"))}
+document.addEventListener("click",e=>{
+  const btn=e.target.closest(".csel-btn");
+  if(btn){
+    const drop=btn.nextElementSibling;
+    if(drop){const was=drop.classList.contains("open");_cselClose();if(!was)drop.classList.add("open");}
+    return;
+  }
+  if(!e.target.closest(".csel"))_cselClose();
+});
+function _cselBuild(id,groups,onChange){
+  _cselCbs[id]=onChange;
+  const drop=$(id+"_drop"),btn=$(id+"_btn");
+  const prev=_cselVals[id]||"";
+  drop.innerHTML="";
+  let firstVal="",firstText="",curText="";
+  for(const g of groups){
+    if(g.label){const lbl=document.createElement("div");lbl.className="csel-grp";lbl.textContent=g.label;drop.appendChild(lbl);}
+    for(const it of g.items){
+      if(!firstVal){firstVal=it.value;firstText=it.text;}
+      if(it.value===prev)curText=it.text;
+      const row=document.createElement("button");row.type="button";
+      row.className="csel-item"+(it.hi?" hi":"")+(it.value===prev?" sel":"");
+      row.textContent=it.text;
+      row.addEventListener("click",()=>{
+        _cselVals[id]=it.value;btn.textContent=it.text;
+        drop.querySelectorAll(".csel-item").forEach(r=>r.classList.toggle("sel",r===row));
+        _cselClose();_cselCbs[id]&&_cselCbs[id]();
+      });
+      drop.appendChild(row);
+    }
+  }
+  if(curText){btn.textContent=curText;}
+  else if(firstVal){_cselVals[id]=firstVal;btn.textContent=firstText;}
+  else{_cselVals[id]="";btn.textContent="—";}
+  onChange&&onChange();
 }
 function renderManufacturers(){
-  const sel=$("cat_manufacturer");
-  const prev=sel.value;
-  sel.innerHTML="";
   const all=uniqSorted(CATALOG_TYPES.map(x=>x.manufacturer).filter(Boolean));
-  const hi=all.filter(m=>_mfHasClient(m));
-  const lo=all.filter(m=>!_mfHasClient(m));
-  for(const m of[...hi,...lo]){
-    const o=document.createElement("option");o.value=m;o.textContent=m;
-    _applyOptionStyle(o,hi.includes(m));
-    sel.appendChild(o);
-  }
-  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
-  renderModels();
+  const hi=all.filter(m=>_mfHasClient(m)),lo=all.filter(m=>!_mfHasClient(m));
+  const groups=[];
+  if(hi.length)groups.push({label:"★ Fabricantes do cliente",items:hi.map(m=>({value:m,text:m,hi:true}))});
+  if(lo.length)groups.push({label:hi.length?"Outros fabricantes":"Fabricantes",items:lo.map(m=>({value:m,text:m,hi:false}))});
+  _cselBuild("cat_manufacturer",groups,renderModels);
 }
 function renderModels(){
-  const man=$("cat_manufacturer").value,sel=$("cat_model");
-  const prev=sel.value;
-  sel.innerHTML="";
+  const man=_cselVal("cat_manufacturer");
   const all=uniqSorted(CATALOG_TYPES.filter(x=>x.manufacturer===man).map(x=>x.model).filter(Boolean));
-  const hi=all.filter(m=>CLIENT_ASSET_SET.has(man+"|"+m));
-  const lo=all.filter(m=>!CLIENT_ASSET_SET.has(man+"|"+m));
-  for(const m of[...hi,...lo]){
-    const o=document.createElement("option");o.value=m;o.textContent=m;
-    _applyOptionStyle(o,hi.includes(m));
-    sel.appendChild(o);
-  }
-  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
-  updateAssetType();
+  const hi=all.filter(m=>CLIENT_ASSET_SET.has(man+"|"+m)),lo=all.filter(m=>!CLIENT_ASSET_SET.has(man+"|"+m));
+  const groups=[];
+  if(hi.length)groups.push({label:"★ Modelos do cliente",items:hi.map(m=>({value:m,text:m,hi:true}))});
+  if(lo.length)groups.push({label:hi.length?"Outros modelos":"Modelos",items:lo.map(m=>({value:m,text:m,hi:false}))});
+  _cselBuild("cat_model",groups,updateAssetType);
 }
 function updateAssetType(){
-  const man=$("cat_manufacturer").value,model=$("cat_model").value;
+  const man=_cselVal("cat_manufacturer"),model=_cselVal("cat_model");
   const it=CATALOG_TYPES.find(x=>x.manufacturer===man&&x.model===model);
-  const v=it?String(it.asset_type):"";
-  $("assetTypeText").textContent=v||"—";
+  $("assetTypeText").textContent=it?String(it.asset_type):"—";
 }
-$("cat_manufacturer").addEventListener("change",renderModels);
-$("cat_model").addEventListener("change",updateAssetType);
 
 // ─── ano select ───────────────────────────────────────────────────────────────
 function fillYearSelect(){
@@ -789,15 +845,24 @@ async function _doLookup(plate){
       headers:token?{"X-Session-Token":token}:{}
     });
     if(r.ok&&r.data?.ok){
-      // placa encontrada — esconder banner, preencher vehicle_id oculto se existir
-      $("plateLookupBanner").style.display="none";
       dot.textContent="✓";dot.style.color="var(--good)";
       if(r.data.vehicle_id)state._vehicleId=r.data.vehicle_id;
       state._innerIdFromLookup=r.data.inner_id||null;
       state._clientIdFromLookup=r.data.client_id||null;
       state._clientDescrFromLookup=r.data.client_descr||null;
+      // MAINT_WITH_SWAP / UNINSTALL — exibe serial atual para confirmação visual
+      const svc=$("service").value;
+      if((svc==="MAINT_WITH_SWAP"||svc==="UNINSTALL")&&state._innerIdFromLookup){
+        $("plateLookupTitle").textContent="Serial atual do veículo";
+        $("plateLookupDetail").textContent="Confirme: "+state._innerIdFromLookup;
+        $("plateLookupBanner").style.display="flex";
+      }else{
+        $("plateLookupBanner").style.display="none";
+      }
     }else{
       // placa não encontrada — mostrar banner orientando serial
+      $("plateLookupTitle").textContent="Placa não encontrada no HTML5";
+      $("plateLookupDetail").textContent="Use o serial do equipamento a instalar no campo abaixo.";
       $("plateLookupBanner").style.display="flex";
       dot.textContent="✗";dot.style.color="var(--warn)";
       state._vehicleId=null;
@@ -811,6 +876,42 @@ async function _doLookup(plate){
   }
 }
 
+// ─── serial in-use check (INSTALL path B e MAINT_WITH_SWAP) ──────────────────
+let _serialLookupTimer=null;
+$("serial").addEventListener("input",()=>{
+  clearTimeout(_serialLookupTimer);
+  const svc=$("service").value;
+  if(svc!=="INSTALL"&&svc!=="MAINT_WITH_SWAP"){return}
+  const serial=norm($("serial").value);
+  if(serial.length<6){_clearSerialInUse();return}
+  _serialLookupTimer=setTimeout(()=>_checkSerial(serial),700);
+});
+function _clearSerialInUse(){
+  state._serialInUse=false;state._serialCheckPending=false;
+  $("serialInUseBanner").style.display="none";
+}
+async function _checkSerial(serial){
+  state._serialCheckPending=true;
+  const token=sessionStorage.getItem("html5_session_token")||"";
+  try{
+    const r=await api("/api/installations/vhcls-lookup?plate="+encodeURIComponent(serial)+"&by=serial",{
+      headers:token?{"X-Session-Token":token}:{}
+    });
+    const d=r.data;
+    if(r.ok&&d?.ok&&d.vehicle_id){
+      const lic=(d.license_nmbr||"").toUpperCase().trim();
+      const isFree=!lic||lic==="CMDT"||normLicKey(lic)===normLicKey(serial);
+      if(!isFree){
+        state._serialInUse=true;
+        $("serialInUseDetail").textContent="Vinculado à placa "+lic+(d.client_descr?" ("+d.client_descr+")":"");
+        $("serialInUseBanner").style.display="flex";
+      }else{_clearSerialInUse()}
+    }else{_clearSerialInUse()}
+  }catch(e){_clearSerialInUse()}
+  finally{state._serialCheckPending=false}
+}
+function normLicKey(v){return String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,"")}
+
 
 function applyServiceUI(){
   const svc=$("service").value;
@@ -822,7 +923,12 @@ function applyServiceUI(){
   const isUninstall=(svc==="UNINSTALL"),isNoSwap=(svc==="MAINT_NO_SWAP");
   $("rowGsensor").classList.toggle("hidden",isUninstall||isNoSwap);
 }
-$("service").addEventListener("change",()=>{applyServiceUI();updateBtnLabel()});
+$("service").addEventListener("change",()=>{
+  applyServiceUI();updateBtnLabel();
+  _clearSerialInUse();
+  $("plateLookupBanner").style.display="none";
+  _lastLookupPlate="";
+});
 
 function updateBtnLabel(){
   const svc=$("service")?.value||"INSTALL";
@@ -869,8 +975,8 @@ function buildPayload(){
     const at=Number($("assetTypeText").textContent||0)||null;
     body.assetType=at;
     body.vehicle={
-      manufacturer:$("cat_manufacturer").value||null,
-      model:$("cat_model").value||null,
+      manufacturer:_cselVal("cat_manufacturer")||null,
+      model:_cselVal("cat_model")||null,
       year:$("extraAno")?.value?Number($("extraAno").value):null,
     };
   }
@@ -885,13 +991,21 @@ function buildPayload(){
 }
 function validatePayload(p){
   const errs=[],svc=up(p.service);
-  if(!norm(p.plate_real))errs.push("Placa real é obrigatória");
+  if(!norm(p.plate_real))errs.push("Placa é obrigatória");
+  if(!p.client_id)errs.push("Cliente é obrigatório");
   if(svc==="INSTALL"){
-    if(!norm(p.serial))errs.push("Serial é obrigatório para INSTALL");
-    if(!p.client_id)errs.push("Cliente é obrigatório");
-    if(!p.assetType)errs.push("Modelo (assetType) é obrigatório");
+    if(!norm(p.serial))errs.push("Serial é obrigatório");
+    if(!p.assetType)errs.push("Fabricante/Modelo (assetType) é obrigatório");
+    if(!$("gs_label").value)errs.push("Posição da etiqueta é obrigatória");
+    if(!$("gs_harness").value)errs.push("Posição do chicote é obrigatória");
   }
-  if(svc==="MAINT_WITH_SWAP"&&!norm(p.serial))errs.push("Serial (novo) é obrigatório");
+  if(svc==="MAINT_WITH_SWAP"){
+    if(!norm(p.serial))errs.push("Serial novo é obrigatório");
+    if(!$("gs_label").value)errs.push("Posição da etiqueta é obrigatória");
+    if(!$("gs_harness").value)errs.push("Posição do chicote é obrigatória");
+  }
+  if(state._serialInUse)errs.push("Serial em uso — vincule um serial disponível");
+  if(state._serialCheckPending)errs.push("Verificando serial, aguarde...");
   return errs;
 }
 
@@ -927,9 +1041,11 @@ function doReset(){
   $("plate_real").value="";$("fleet").value="";$("serial").value="";
   $("comment").value="";$("extraCor").value="";$("extraChassi").value="";$("extraLocal").value="";
   $("extraAno").selectedIndex=0;
-  $("cat_manufacturer").selectedIndex=0;renderModels();
+  _cselVals["cat_manufacturer"]="";_cselVals["cat_model"]="";renderManufacturers();
   $("service").value="INSTALL";applyServiceUI();updateBtnLabel();
   $("serialErrorBanner").classList.remove("show");
+  _clearSerialInUse();
+  $("plateLookupBanner").style.display="none";_lastLookupPlate="";
   _gs.label="";_gs.harness="";if(GS_COMMANDS.length)_gsRender();
   $("cardCan").classList.add("hidden");$("cardCompleted").classList.add("hidden");
   $("cardForm").classList.remove("hidden");
@@ -940,7 +1056,7 @@ function doReset(){
 $("btnCreate").addEventListener("click",async()=>{
   const p=buildPayload();
   const errs=validatePayload(p);
-  if(errs.length){showToast(errs[0],"bad");return}
+  if(errs.length){showAlert("Dados incompletos",errs.join("\n"));return}
   $("btnCreate").disabled=true;setSubline("Criando...");
   try{
     const token=sessionStorage.getItem("html5_session_token")||"";
@@ -1050,9 +1166,16 @@ $("btnCompleteMaint").addEventListener("click",()=>{
 // ─── confirm modal ───────────────────────────────────────────────────────────
 function confirmAction(title,msg,onOk){
   $("confirmTitle").textContent=title;$("confirmMsg").textContent=msg;
+  $("confirmCancel").style.display="";$("confirmOk").textContent="Sim";
   $("confirmModal").classList.add("open");
   $("confirmOk").onclick=()=>{$("confirmModal").classList.remove("open");onOk()};
   $("confirmCancel").onclick=()=>$("confirmModal").classList.remove("open");
+}
+function showAlert(title,msg){
+  $("confirmTitle").textContent=title;$("confirmMsg").textContent=msg;
+  $("confirmCancel").style.display="none";$("confirmOk").textContent="Entendi";
+  $("confirmModal").classList.add("open");
+  $("confirmOk").onclick=()=>{$("confirmModal").classList.remove("open");$("confirmCancel").style.display="";$("confirmOk").textContent="Sim"};
 }
 
 // ─── CAN helpers (portados do original) ──────────────────────────────────────

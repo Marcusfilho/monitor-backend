@@ -52,16 +52,17 @@ export interface VhclsPayload {
 }
 
 export interface VhclsResolveResult {
-  plate    : string;
-  status   : number;
-  len      : number;
-  loginNeg : boolean;
-  vehicleId: number | null;
-  innerId  : string | null;
-  clientId : string | null;
-  clientDescr: string | null;
-  jarFlags : string;
-  head     : string;
+  plate       : string;
+  status      : number;
+  len         : number;
+  loginNeg    : boolean;
+  vehicleId   : number | null;
+  innerId     : string | null;
+  licensePlate: string | null;
+  clientId    : string | null;
+  clientDescr : string | null;
+  jarFlags    : string;
+  head        : string;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,10 +108,11 @@ function safeSnippet(text: string, n = 260): string {
 // ---------------------------------------------------------------------------
 
 interface VhclsParseResult {
-  vehicleId  : number | null;
-  innerId    : string | null;
-  clientId   : string | null;
-  clientDescr: string | null;
+  vehicleId   : number | null;
+  innerId     : string | null;
+  licensePlate: string | null;
+  clientId    : string | null;
+  clientDescr : string | null;
   err: "unauthorized_or_vhcls_error" | "not_found" | null;
 }
 
@@ -118,13 +120,14 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
   const lk = normLicenseKey(licenseKey);
 
   if (/login\s*=\s*"-1"/i.test(xml) || /Action:\s*VHCLS\s+error/i.test(xml)) {
-    return { vehicleId: null, innerId: null, clientId: null, clientDescr: null, err: "unauthorized_or_vhcls_error" };
+    return { vehicleId: null, innerId: null, licensePlate: null, clientId: null, clientDescr: null, err: "unauthorized_or_vhcls_error" };
   }
 
   const dataTags = xml.match(/<DATA\b[^>]*\/>/gi) || [];
 
   for (const tag of dataTags) {
-    const lic        = normLicenseKey(extractAttr(tag, "LICENSE_NMBR"));
+    const licRaw     = extractAttr(tag, "LICENSE_NMBR");
+    const lic        = normLicenseKey(licRaw);
     const innerId    = extractAttr(tag, "INNER_ID");
     const vid        = extractAttr(tag, "VEHICLE_ID");
     const clientId   = extractAttr(tag, "CLIENT_ID")   || null;
@@ -135,21 +138,22 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
 
     if (licMatch || innerMatch) {
       const n = Number(vid);
-      return { vehicleId: n > 0 ? n : null, innerId: innerId || null, clientId, clientDescr, err: null };
+      return { vehicleId: n > 0 ? n : null, innerId: innerId || null, licensePlate: licRaw || null, clientId, clientDescr, err: null };
     }
   }
 
   // resultado único sem match de placa — aceita o único registro
   if (dataTags.length === 1) {
+    const licRaw      = extractAttr(dataTags[0], "LICENSE_NMBR");
     const vid         = extractAttr(dataTags[0], "VEHICLE_ID");
     const innerId     = extractAttr(dataTags[0], "INNER_ID");
     const clientId    = extractAttr(dataTags[0], "CLIENT_ID")    || null;
     const clientDescr = extractAttr(dataTags[0], "CLIENT_DESCR") || null;
     const n = Number(vid);
-    if (n > 0) return { vehicleId: n, innerId: innerId || null, clientId, clientDescr, err: null };
+    if (n > 0) return { vehicleId: n, innerId: innerId || null, licensePlate: licRaw || null, clientId, clientDescr, err: null };
   }
 
-  return { vehicleId: null, innerId: null, clientId: null, clientDescr: null, err: "not_found" };
+  return { vehicleId: null, innerId: null, licensePlate: null, clientId: null, clientDescr: null, err: "not_found" };
 }
 
 // ---------------------------------------------------------------------------
@@ -157,21 +161,22 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
 // ---------------------------------------------------------------------------
 
 async function postVhcls(
-  actionUrl  : string,
-  baseUrl    : string,
+  actionUrl   : string,
+  baseUrl     : string,
   cookieHeader: string,
-  licenseKey : string,
-  timeoutMs  : number
+  licenseKey  : string,
+  timeoutMs   : number,
+  byInnerId   : boolean = false
 ): Promise<{ status: number; text: string }> {
   const body = new URLSearchParams({
     action      : "VHCLS",
     VERSION_ID  : "2",
     REFRESH_FLG : "1",
-    LICENSE_NMBR: licenseKey,
+    LICENSE_NMBR: byInnerId ? "" : licenseKey,
     CLIENT_DESCR: "",
     OWNER_DESCR : "",
     DIAL_NMBR   : "",
-    INNER_ID    : "",
+    INNER_ID    : byInnerId ? licenseKey : "",
   }).toString();
 
   const origin = baseUrl || "https://html5.traffilog.com";
@@ -367,10 +372,11 @@ export async function ensureVehicleId(
  * Útil para lookups pontuais (ex: snapshot de UNINSTALL).
  */
 export async function resolveByPlate(
-  cfg   : Html5SessionConfig,
-  plate : string,
-  tag   = "VHCLS",
-  jobId = ""
+  cfg       : Html5SessionConfig,
+  plate     : string,
+  tag       = "VHCLS",
+  jobId     = "",
+  byInnerId = false
 ): Promise<VhclsResolveResult> {
   const lk = normLicenseKey(plate);
 
@@ -399,7 +405,8 @@ export async function resolveByPlate(
       process.env.HTML5_BASE_URL || "",
       cookieHeader,
       lk,
-      cfg.httpTimeoutMs
+      cfg.httpTimeoutMs,
+      byInnerId
     ).catch(() => ({ status: 0, text: "" }));
 
     const parsed   = parseVehicleIdFromVhclsXml(text, lk);
@@ -429,22 +436,23 @@ export async function resolveByPlate(
     }
 
     return {
-      plate      : lk,
+      plate       : lk,
       status,
-      len        : text.length,
+      len         : text.length,
       loginNeg,
-      vehicleId  : parsed.vehicleId,
-      innerId    : parsed.innerId    ?? null,
-      clientId   : parsed.clientId   ?? null,
-      clientDescr: parsed.clientDescr ?? null,
-      jarFlags   : "",
-      head       : headSafe,
+      vehicleId   : parsed.vehicleId,
+      innerId     : parsed.innerId      ?? null,
+      licensePlate: parsed.licensePlate ?? null,
+      clientId    : parsed.clientId     ?? null,
+      clientDescr : parsed.clientDescr  ?? null,
+      jarFlags    : "",
+      head        : headSafe,
     };
   }
 
   return {
     plate: lk, status: 0, len: 0, loginNeg: false,
-    vehicleId: null, innerId: null, clientId: null, clientDescr: null,
+    vehicleId: null, innerId: null, licensePlate: null, clientId: null, clientDescr: null,
     jarFlags: "", head: "",
   };
 }

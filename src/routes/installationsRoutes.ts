@@ -90,17 +90,18 @@ router.post("/", (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.get("/vhcls-lookup", async (req: Request, res: Response) => {
-  const plate = normPlate(req.query.plate);
+  const plate     = normPlate(req.query.plate);
+  const bySerial  = String(req.query.by || "").toLowerCase() === "serial";
 
   if (!plate) {
     res.status(400).json({ ok: false, error: "plate_ausente", detail: "Query param ?plate= obrigatório" });
     return;
   }
 
-  console.log(`[installations] GET /vhcls-lookup plate=${plate}`);
+  console.log(`[installations] GET /vhcls-lookup plate=${plate} by=${bySerial ? "serial" : "plate"}`);
 
   try {
-    const result = await resolveByPlate(cfg, plate);
+    const result = await resolveByPlate(cfg, plate, "VHCLS", "", bySerial);
 
     // VhclsResolveResult: { plate, status, len, loginNeg, vehicleId, jarFlags, head }
     // vehicleId é null se não encontrado
@@ -113,9 +114,10 @@ router.get("/vhcls-lookup", async (req: Request, res: Response) => {
       ok          : true,
       plate,
       vehicle_id  : result.vehicleId,
-      inner_id    : result.innerId    ?? null,
-      client_id   : result.clientId   ?? null,
-      client_descr: result.clientDescr ?? null,
+      inner_id    : result.innerId      ?? null,
+      license_nmbr: result.licensePlate ?? null,
+      client_id   : result.clientId     ?? null,
+      client_descr: result.clientDescr  ?? null,
     });
 
   } catch (e: any) {
