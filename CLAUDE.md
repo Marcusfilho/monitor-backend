@@ -87,7 +87,7 @@ All workers are also loaded inline by `src/index.ts` via dynamic `import()` so t
 - **`traffilogAuth.ts`** — HTTP login to AppEngine API, returns `session_token` for WS URL construction.
 - **`html5Session.ts`** — Manages cookie jar (`TFL_SESSION`, `ASP.NET_SessionId`) for HTML5 operations. Persists to disk at `HTML5_COOKIEJAR_PATH`.
 - **`mwsService.ts`** — Wraps `GET_VHCL_ACTIVATION_DATA_NEW` (baseline load) and `SAVE_VHCL_ACTIVATION_NEW` (save) via HTML5 action URL.
-- **`vhclsService.ts`** — Resolves `vehicle_id` via `VHCLS` HTML5 action. Dumps raw XML to `/tmp/vhcls_raw_<jobId>_*.xml` for client mismatch detection.
+- **`vhclsService.ts`** — Resolves `vehicle_id` via `VHCLS` HTML5 action. Accepts `byInnerId` flag: when true, posts `INNER_ID=<key>` instead of `LICENSE_NMBR=<key>` — required for serial-number lookup (Traffilog ignores serial in LICENSE_NMBR). Dumps raw XML to `/tmp/vhcls_raw_<jobId>_*.xml` for client mismatch detection.
 - **`vehicleMonitorSnapshotService.ts`** — WS message orchestration for CAN data collection (params + moduleState).
 - **`changeCompanyService.ts`** — Moves a vehicle between clients via HTML5 `ASSET_BASIC_SAVE`.
 
@@ -133,13 +133,13 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 ### 🟡 Backlog
 
-- **Validação de serial antes de avançar tela (install / maint_with_swap)**: bloquear o botão "próxima tela" se o serial não estiver disponível. Regra: serial em uso quando `inner_id != license_nmbr && license_nmbr != "cmdt"`. Verificar onde inserir — provavelmente no modal de entrada do serial (antes de submeter), evitando que o job seja criado e o usuário precise recarregar o navegador. Solução rápida preferida.
-
 - **Upload de fotos para SharePoint**: substituir AppScript Google Drive por upload direto via Graph API. Frontend envia `multipart/form-data` → backend recebe em memória (`multer` memoryStorage, limite 15MB) → `PUT` Graph API para pasta SharePoint. Sem tocar disco da VM. Service Worker no frontend para envio em background. Pico estimado: 5 usuários simultâneos ~40MB RAM.
 
 - **Integração lista SharePoint (BaseInstalados)**: enviar os 18 campos exportados diretamente para lista `BaseInstalados` no site `SmartDrivingLabs`. Auth via OAuth 2.0 Client Credentials (já validada). Colunas mapeadas: `ID_Registro, Data, Placa (Title), Serial, Tecnico, Cliente, Serviço, Fabricante, Modelo, Ano, Cor, Chassi, LocalInstalacao, Comentario, JobID, Etiqueta, Chicote, CAN`. Gravar via `POST /sites/{id}/lists/{id}/items`.
 
 ### ✅ Feito recentemente
+- Validação de serial em uso: `vhcls-lookup?by=serial` usa `INNER_ID=` no VHCLS (LICENSE_NMBR= não funciona para seriais); frontend exibe banner vermelho e bloqueia criação de job se serial já vinculado a outra placa
+- Seletores Fabricante/Modelo mobile: substituídos por dropdown customizado (`_cselBuild`/`_cselVal` em app.html) com itens do cliente em azul/negrito — CSS em `<option>` nativo não funciona em iOS/Android
 - UNINSTALL flow: vehicle_id, serial (inner_id) e client_id/client_descr agora passados no payload via vhcls-lookup; CMDT criado corretamente após desativação
 - vhcls-lookup: retorna inner_id, client_id, client_descr; detecta login=-1 e faz relogin automático
 - asset_types sync: normalização trim+lowercase resolve mismatch de espaços ("Scania " vs "Scania"); catálogo saltou de 8 para 46 modelos Scania
