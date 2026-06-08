@@ -552,7 +552,7 @@ async function api(path,{method="GET",json=null,headers={}}={}){
       sessionStorage.clear();
       setTimeout(()=>window.location.href="/index.html",1500);
     }
-  }).catch(()=>{dot.style.background="var(--warn)";txt.textContent="verificando..."});
+  }).catch(()=>{dot.style.background="var(--bad)";txt.textContent="servidor offline";setTimeout(initSession,8000)});
 })();
 
 // ─── técnico ─────────────────────────────────────────────────────────────────
@@ -572,8 +572,8 @@ async function loadClientAssetSet(clientId,clientDescr){
   if(_assetByClientCache.has(clientId)){CLIENT_ASSET_SET=_assetByClientCache.get(clientId);return;}
   try{
     const[allRes,byRes]=await Promise.all([
-      fetch(IT_BASE+"/api/admin/asset-types",{cache:"force-cache"}),
-      fetch(IT_BASE+"/api/admin/asset-types/by-client?clientId="+clientId+"&clientName="+encodeURIComponent(clientDescr),{cache:"no-store"})
+      fetch("/api/admin/asset-types",{cache:"no-store"}),
+      fetch("/api/admin/asset-types/by-client?clientId="+clientId+"&clientName="+encodeURIComponent(clientDescr),{cache:"no-store"})
     ]);
     if(!allRes.ok||!byRes.ok)throw new Error("fetch failed");
     const[allData,byClient]=await Promise.all([allRes.json(),byRes.json()]);
@@ -638,7 +638,8 @@ async function loadJson(rel){const r=await fetch(rel,{cache:"no-store"});if(!r.o
 
 async function loadCatalogs(){
   try{
-    CATALOG_TYPES=await loadJson("catalog_vehicle_type.json");
+    const _atData=await loadJson("/api/admin/asset-types");
+    CATALOG_TYPES=(_atData.asset_types||[]).map(t=>({manufacturer:t.manufacturer,model:t.model,asset_type:t.id}));
   }catch(e){showToast("Falha ao carregar catálogos.","bad");console.error(e)}
   // clients já carregados do sessionStorage — renderizar imediatamente
   renderClients();renderManufacturers();renderGsSelectors();
@@ -792,11 +793,17 @@ async function _doLookup(plate){
       $("plateLookupBanner").style.display="none";
       dot.textContent="✓";dot.style.color="var(--good)";
       if(r.data.vehicle_id)state._vehicleId=r.data.vehicle_id;
+      state._innerIdFromLookup=r.data.inner_id||null;
+      state._clientIdFromLookup=r.data.client_id||null;
+      state._clientDescrFromLookup=r.data.client_descr||null;
     }else{
       // placa não encontrada — mostrar banner orientando serial
       $("plateLookupBanner").style.display="flex";
       dot.textContent="✗";dot.style.color="var(--warn)";
       state._vehicleId=null;
+      state._innerIdFromLookup=null;
+      state._clientIdFromLookup=null;
+      state._clientDescrFromLookup=null;
     }
   }catch(e){
     dot.textContent="";dot.style.display="none";
@@ -867,7 +874,13 @@ function buildPayload(){
       year:$("extraAno")?.value?Number($("extraAno").value):null,
     };
   }
-  if(svc==="UNINSTALL"||svc==="MAINT_NO_SWAP")body.serial="";
+  if(svc==="UNINSTALL"){
+    body.serial=state._innerIdFromLookup||"";
+    if(state._vehicleId)body.vehicle_id=state._vehicleId;
+    if(!body.client_id&&state._clientIdFromLookup)body.client_id=Number(state._clientIdFromLookup);
+    if(!body.client_descr&&state._clientDescrFromLookup)body.client_descr=state._clientDescrFromLookup;
+  }
+  if(svc==="MAINT_NO_SWAP")body.serial="";
   return body;
 }
 function validatePayload(p){
@@ -910,10 +923,10 @@ $("btnReset").addEventListener("click",()=>{
 });
 function doReset(){
   stopPoll();saveLs("","");state.inst=null;state.lastSnapshot=null;state._html5Start=null;
+  $("btnCreate").disabled=false;$("btnApprove").disabled=true;$("btnRefresh").disabled=true;
   $("plate_real").value="";$("fleet").value="";$("serial").value="";
   $("comment").value="";$("extraCor").value="";$("extraChassi").value="";$("extraLocal").value="";
   $("extraAno").selectedIndex=0;
-  $("clientSelect").selectedIndex=0;applyClientSelection();
   $("cat_manufacturer").selectedIndex=0;renderModels();
   $("service").value="INSTALL";applyServiceUI();updateBtnLabel();
   $("serialErrorBanner").classList.remove("show");
@@ -1366,7 +1379,29 @@ function renderAll(inst){
   // snapshot
   const snap=extractSnapshot(inst);
   const snapParams=canExtractRows(snap)?.params;
-  if(snap&&snapParams&&snapParams.length>0)state.lastSnapshot=snap;
+  if(snap&&snapParams&&snapParams.length>0){
+    // ANTI_ZERO_V1: merge parâmetros — não sobrescreve valor > 0 com 0 ou vazio
+    if(state.lastSnapshot){
+      const oldRows=canExtractRows(state.lastSnapshot).params;
+      const oldMap=new Map();
+      for(const p of oldRows){const id=canRowParamId(p);if(id!=null)oldMap.set(id,p);}
+      const newRows=canExtractRows(snap).params;
+      for(const p of newRows){
+        const id=canRowParamId(p);if(id==null)continue;
+        const oldP=oldMap.get(id);if(!oldP)continue;
+        const newRaw=canRowParamRaw(p),newVal=canRowParamVal(p);
+        const oldRaw=canRowParamRaw(oldP),oldVal=canRowParamVal(oldP);
+        const newHas=canHasVal(newRaw)||canHasVal(newVal);
+        const oldHas=canHasVal(oldRaw)||canHasVal(oldVal);
+        const newIsZero=newHas&&(Number(newRaw)===0||newRaw==="0"||Number(newVal)===0||newVal==="0");
+        if(oldHas&&newIsZero){
+          if(newRaw!=null&&oldRaw!=null)p.raw_value=oldRaw;
+          if(newVal!=null&&oldVal!=null)p.value=oldVal;
+        }
+      }
+    }
+    state.lastSnapshot=snap;
+  }
   else if(!state.lastSnapshot)state.lastSnapshot=snap;
   const activeSnap=state.lastSnapshot;
 

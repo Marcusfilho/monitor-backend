@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Diretrizes de Desenvolvimento
+
+### Premissa Principal: Performance
+Ao propor qualquer correção, ajuste ou nova implementação, sempre prefira a solução mais rápida em tempo de execução, mesmo que isso implique mais código ou menor legibilidade.
+
+- Priorize algoritmos de menor complexidade (O(n) > O(n²), etc.)
+- Prefira operações em memória a I/O desnecessário
+- Evite abstrações que adicionem overhead sem ganho real
+- Em caso de dúvida entre duas soluções, escolha a de menor latência
+
+### Regra de decisão
+Sempre que houver trade-off entre velocidade de execução e qualidade de código, escolha velocidade. Justifique brevemente quando a escolha impactar manutenibilidade.
+
 ## Commands
 
 ```bash
@@ -119,7 +132,14 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 - P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada
 
 ### 🟡 Backlog
-(melhorias futuras sem urgência)
+
+- **Filtrar asset_types por serial vinculado no sync por cliente**: `syncAssetTypesByClient()` busca todos os `vehicle_id` do cliente e coleta seus `asset_type`, mas inclui veículos placeholder/inativos (sem serial vinculado). Resultado: asset_types que não existem mais aparecem como "existentes". Fix: filtrar para trazer apenas veículos onde o serial está vinculado (campo serial/`DIAL_NUMBER` não vazio ou nulo) antes de agregar os asset_types.
+
+- **Validação de serial antes de avançar tela (install / maint_with_swap)**: bloquear o botão "próxima tela" se o serial não estiver disponível. Regra: serial em uso quando `inner_id != license_nmbr && license_nmbr != "cmdt"`. Verificar onde inserir — provavelmente no modal de entrada do serial (antes de submeter), evitando que o job seja criado e o usuário precise recarregar o navegador. Solução rápida preferida.
+
+- **Upload de fotos para SharePoint**: substituir AppScript Google Drive por upload direto via Graph API. Frontend envia `multipart/form-data` → backend recebe em memória (`multer` memoryStorage, limite 15MB) → `PUT` Graph API para pasta SharePoint. Sem tocar disco da VM. Service Worker no frontend para envio em background. Pico estimado: 5 usuários simultâneos ~40MB RAM.
+
+- **Integração lista SharePoint (BaseInstalados)**: enviar os 18 campos exportados diretamente para lista `BaseInstalados` no site `SmartDrivingLabs`. Auth via OAuth 2.0 Client Credentials (já validada). Colunas mapeadas: `ID_Registro, Data, Placa (Title), Serial, Tecnico, Cliente, Serviço, Fabricante, Modelo, Ano, Cor, Chassi, LocalInstalacao, Comentario, JobID, Etiqueta, Chicote, CAN`. Gravar via `POST /sites/{id}/lists/{id}/items`.
 
 ### ✅ Feito recentemente
 - canWorker: fix de rota /worker/can/poll

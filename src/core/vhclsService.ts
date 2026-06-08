@@ -57,6 +57,9 @@ export interface VhclsResolveResult {
   len      : number;
   loginNeg : boolean;
   vehicleId: number | null;
+  innerId  : string | null;
+  clientId : string | null;
+  clientDescr: string | null;
   jarFlags : string;
   head     : string;
 }
@@ -104,7 +107,10 @@ function safeSnippet(text: string, n = 260): string {
 // ---------------------------------------------------------------------------
 
 interface VhclsParseResult {
-  vehicleId: number | null;
+  vehicleId  : number | null;
+  innerId    : string | null;
+  clientId   : string | null;
+  clientDescr: string | null;
   err: "unauthorized_or_vhcls_error" | "not_found" | null;
 }
 
@@ -112,33 +118,38 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
   const lk = normLicenseKey(licenseKey);
 
   if (/login\s*=\s*"-1"/i.test(xml) || /Action:\s*VHCLS\s+error/i.test(xml)) {
-    return { vehicleId: null, err: "unauthorized_or_vhcls_error" };
+    return { vehicleId: null, innerId: null, clientId: null, clientDescr: null, err: "unauthorized_or_vhcls_error" };
   }
 
   const dataTags = xml.match(/<DATA\b[^>]*\/>/gi) || [];
 
   for (const tag of dataTags) {
-    const lic     = normLicenseKey(extractAttr(tag, "LICENSE_NMBR"));
-    const innerId = extractAttr(tag, "INNER_ID");
-    const vid     = extractAttr(tag, "VEHICLE_ID");
+    const lic        = normLicenseKey(extractAttr(tag, "LICENSE_NMBR"));
+    const innerId    = extractAttr(tag, "INNER_ID");
+    const vid        = extractAttr(tag, "VEHICLE_ID");
+    const clientId   = extractAttr(tag, "CLIENT_ID")   || null;
+    const clientDescr = extractAttr(tag, "CLIENT_DESCR") || null;
 
     const licMatch   = !!(lic && vid && lic === lk);
     const innerMatch = !!(innerId && vid && innerIdMatch(innerId, lk));
 
     if (licMatch || innerMatch) {
       const n = Number(vid);
-      return { vehicleId: n > 0 ? n : null, err: null };
+      return { vehicleId: n > 0 ? n : null, innerId: innerId || null, clientId, clientDescr, err: null };
     }
   }
 
   // resultado único sem match de placa — aceita o único registro
   if (dataTags.length === 1) {
-    const vid = extractAttr(dataTags[0], "VEHICLE_ID");
+    const vid         = extractAttr(dataTags[0], "VEHICLE_ID");
+    const innerId     = extractAttr(dataTags[0], "INNER_ID");
+    const clientId    = extractAttr(dataTags[0], "CLIENT_ID")    || null;
+    const clientDescr = extractAttr(dataTags[0], "CLIENT_DESCR") || null;
     const n = Number(vid);
-    if (n > 0) return { vehicleId: n, err: null };
+    if (n > 0) return { vehicleId: n, innerId: innerId || null, clientId, clientDescr, err: null };
   }
 
-  return { vehicleId: null, err: "not_found" };
+  return { vehicleId: null, innerId: null, clientId: null, clientDescr: null, err: "not_found" };
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +208,7 @@ async function resolveVehicleIdDirect(
   cfg       : Html5SessionConfig,
   ctx       : VhclsContext | null | undefined,
   licenseKey: string
-): Promise<number | null> {
+): Promise<{ vid: number; innerId: string | null; clientId: string | null; clientDescr: string | null } | null> {
   const lk = normLicenseKey(licenseKey);
   if (!lk) return null;
 
@@ -231,7 +242,7 @@ async function resolveVehicleIdDirect(
 
     const parsed = parseVehicleIdFromVhclsXml(text, lk);
 
-    if (!parsed.err && parsed.vehicleId) return parsed.vehicleId;
+    if (!parsed.err && parsed.vehicleId) return { vid: parsed.vehicleId, innerId: parsed.innerId ?? null, clientId: parsed.clientId ?? null, clientDescr: parsed.clientDescr ?? null };
 
     // session expired → força relogin e tenta mais 1x
     if (parsed.err === "unauthorized_or_vhcls_error" && attempt === 1) {
@@ -320,12 +331,25 @@ export async function ensureVehicleId(
   if (!uniq.length) return null;
 
   for (const licenseKey of uniq) {
-    const vid = await resolveVehicleIdDirect(cfg, ctx, licenseKey);
-    if (vid) {
+    const resolved = await resolveVehicleIdDirect(cfg, ctx, licenseKey);
+    if (resolved) {
+      const { vid, innerId, clientId, clientDescr } = resolved;
       payload.vehicle_id = vid;
       payload.VEHICLE_ID = vid;
       payload.vehicleId  = vid;
-      vhclsLog(ctx, `[vhclsService] resolved: license=${licenseKey} → VEHICLE_ID=${vid}`);
+      if (innerId && !payload.inner_id && !payload.INNER_ID && !payload.serial) {
+        payload.inner_id = innerId;
+        payload.INNER_ID = innerId;
+      }
+      if (clientId && !payload.client_id && !payload.CLIENT_ID) {
+        payload.client_id = clientId;
+        payload.CLIENT_ID = clientId;
+      }
+      if (clientDescr && !payload.client_descr && !payload.CLIENT_DESCR) {
+        payload.client_descr = clientDescr;
+        payload.CLIENT_DESCR = clientDescr;
+      }
+      vhclsLog(ctx, `[vhclsService] resolved: license=${licenseKey} → VEHICLE_ID=${vid} INNER_ID=${innerId ?? "n/a"} CLIENT_ID=${clientId ?? "n/a"} CLIENT_DESCR=${clientDescr ?? "n/a"}`);
       return vid;
     }
   }
@@ -368,33 +392,59 @@ export async function resolveByPlate(
 
   console.log(`[vhclsService] [${tag}] job=${jobId} plate=${lk} cookieLen=${cookieLen}`);
 
-  const cookieHeader = ensureCookieDefaults(readJarCookie(cfg.cookieJarPath));
-  const { status, text } = await postVhcls(
-    cfg.actionUrl,
-    process.env.HTML5_BASE_URL || "",
-    cookieHeader,
-    lk,
-    cfg.httpTimeoutMs
-  ).catch(() => ({ status: 0, text: "" }));
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const cookieHeader = ensureCookieDefaults(readJarCookie(cfg.cookieJarPath));
+    const { status, text } = await postVhcls(
+      cfg.actionUrl,
+      process.env.HTML5_BASE_URL || "",
+      cookieHeader,
+      lk,
+      cfg.httpTimeoutMs
+    ).catch(() => ({ status: 0, text: "" }));
 
-  const parsed   = parseVehicleIdFromVhclsXml(text, lk);
-  const loginNeg = /login\s*=\s*"-1"/i.test(text);
-  const head     = safeSnippet(text, 220);
+    const parsed   = parseVehicleIdFromVhclsXml(text, lk);
+    const loginNeg = /login\s*=\s*"-1"/i.test(text);
+    const head     = safeSnippet(text, 220);
+    const headSafe = /ASP\.NET_SessionId=|TFL_SESSION=|AWSALB=/i.test(head)
+      ? "<cookie_header_redacted>"
+      : head;
 
-  // não logar se o snippet parecer um cookie header
-  const headSafe = /ASP\.NET_SessionId=|TFL_SESSION=|AWSALB=/i.test(head)
-    ? "<cookie_header_redacted>"
-    : head;
+    console.log(`[vhclsService] [${tag}] attempt=${attempt} http=${status} len=${text.length} loginNeg=${loginNeg ? 1 : 0} head=${headSafe}`);
 
-  console.log(`[vhclsService] [${tag}] http=${status} len=${text.length} loginNeg=${loginNeg ? 1 : 0} head=${headSafe}`);
+    // session expirada na primeira tentativa → relogin + retry
+    if (parsed.err === "unauthorized_or_vhcls_error" && attempt === 1) {
+      try {
+        const raw = fs.existsSync(cfg.cookieJarPath) ? fs.readFileSync(cfg.cookieJarPath, "utf8") : "{}";
+        let m: Record<string, string> = {};
+        try { m = JSON.parse(raw); } catch { /* ignora */ }
+        delete m["TFL_SESSION"];
+        delete m["ASP.NET_SessionId"];
+        const tmp = `${cfg.cookieJarPath}.tmp.${Date.now()}`;
+        fs.writeFileSync(tmp, JSON.stringify(m), "utf8");
+        fs.renameSync(tmp, cfg.cookieJarPath);
+      } catch { /* não bloqueia */ }
+      console.log(`[vhclsService] [${tag}] session expirada → relogin → retry`);
+      await ensureHtml5Session(cfg, `${tag}_RETRY`).catch(() => {});
+      continue;
+    }
+
+    return {
+      plate      : lk,
+      status,
+      len        : text.length,
+      loginNeg,
+      vehicleId  : parsed.vehicleId,
+      innerId    : parsed.innerId    ?? null,
+      clientId   : parsed.clientId   ?? null,
+      clientDescr: parsed.clientDescr ?? null,
+      jarFlags   : "",
+      head       : headSafe,
+    };
+  }
 
   return {
-    plate    : lk,
-    status,
-    len      : text.length,
-    loginNeg,
-    vehicleId: parsed.vehicleId,
-    jarFlags : "",   // preenchido pelo caller se necessário
-    head     : headSafe,
+    plate: lk, status: 0, len: 0, loginNeg: false,
+    vehicleId: null, innerId: null, clientId: null, clientDescr: null,
+    jarFlags: "", head: "",
   };
 }

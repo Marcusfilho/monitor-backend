@@ -110,9 +110,12 @@ router.get("/vhcls-lookup", async (req: Request, res: Response) => {
     }
 
     res.json({
-      ok        : true,
+      ok          : true,
       plate,
-      vehicle_id: result.vehicleId,
+      vehicle_id  : result.vehicleId,
+      inner_id    : result.innerId    ?? null,
+      client_id   : result.clientId   ?? null,
+      client_descr: result.clientDescr ?? null,
     });
 
   } catch (e: any) {
