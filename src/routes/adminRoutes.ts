@@ -360,15 +360,18 @@ router.post("/asset-types/sync", async (_req, res) => {
     const allVehicles = parseVhclsXml(rVhcls.body);
     console.log(`[admin] asset-types sync: ${allVehicles.length} veículos no VHCLS`);
 
-    // 4. Montar Set de pares manufacturer|model em uso
+    // 4. Montar Set de pares manufacturer|model em uso (trim + lowercase para tolerar espaços do VHCLS)
     const usedPairs = new Set<string>();
     for (const v of allVehicles) {
-      if (v.manufacturer_descr && v.model) usedPairs.add(v.manufacturer_descr + "|" + v.model);
+      if (v.manufacturer_descr && v.model)
+        usedPairs.add(v.manufacturer_descr.trim().toLowerCase() + "|" + v.model.trim().toLowerCase());
     }
     console.log(`[admin] asset-types sync: ${usedPairs.size} pares distintos`);
 
-    // 5. Filtrar catálogo pelos pares em uso
-    const matched = catalog.filter(c => usedPairs.has(c.manufacturer + "|" + c.model));
+    // 5. Filtrar catálogo pelos pares em uso (mesma normalização)
+    const matched = catalog.filter(c =>
+      usedPairs.has(c.manufacturer.trim().toLowerCase() + "|" + c.model.trim().toLowerCase())
+    );
     const fallback: typeof matched = [];
     const finalList = [...matched, ...fallback].sort((a, b) => {
       const mfg = a.manufacturer.localeCompare(b.manufacturer);
@@ -501,8 +504,8 @@ router.get("/schemes/client/:clientId", async (req, res) => {
 // Cruza asset_types_active.json com VHCLS filtrado por cliente
 // Retorna Set de pares "manufacturer|model" que o cliente usa
 // ---------------------------------------------------------------------------
-function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_descr: string; model: string; asset_type_id: number }> {
-  const results: Array<{ client_id: string; manufacturer_descr: string; model: string; asset_type_id: number }> = [];
+function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_descr: string; model: string; asset_type_id: number; inner_id: string }> {
+  const results: Array<{ client_id: string; manufacturer_descr: string; model: string; asset_type_id: number; inner_id: string }> = [];
   const re = /<DATA\s([^>]*?)\/>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
@@ -518,6 +521,7 @@ function parseVhclsXml(xml: string): Array<{ client_id: string; manufacturer_des
       manufacturer_descr: attr('MANUFACTURER_DESCR'),
       model:              attr('MODEL'),
       asset_type_id:      parseInt(attr('ASSET_TYPE'), 10) || 0,
+      inner_id:           attr('INNER_ID'),
     });
   }
   return results;
@@ -573,6 +577,7 @@ async function syncAssetTypesByClient(): Promise<void> {
   console.log(`[admin] syncAssetTypesByClient — ${allVehicles.length} veículos no VHCLS`);
 
   // 3. Ler asset_types_active para montar lookup manufacturer|model → id
+  //    Chaves normalizadas (trim + lowercase) para tolerar espaços extras do VHCLS
   let assetTypes: Array<{ id: number; manufacturer: string; model: string }> = [];
   if (fs.existsSync(ASSET_TYPES_PATH)) {
     try {
@@ -582,18 +587,25 @@ async function syncAssetTypesByClient(): Promise<void> {
   }
   const catalogLookup = new Map<string, number>();
   for (const t of assetTypes) {
-    catalogLookup.set(t.manufacturer + "|" + t.model, t.id);
+    const key = t.manufacturer.trim().toLowerCase() + "|" + t.model.trim().toLowerCase();
+    catalogLookup.set(key, t.id);
   }
 
-  // 4. Agrupar asset_type_ids por client_id via cruzamento manufacturer|model
+  // 4. Agrupar asset_type_ids por client_id
+  //    - ignora veículos sem serial (INNER_ID vazio = placeholder/estoque sem rastreador)
+  //    - normaliza chave manufacturer|model (trim + lowercase) para tolerar espaços do VHCLS
   const byClient: Record<string, Set<number>> = {};
+  let skippedNoSerial = 0;
   for (const v of allVehicles) {
     if (!v.client_id) continue;
-    if (!byClient[v.client_id]) byClient[v.client_id] = new Set();
-    const key = v.manufacturer_descr + "|" + v.model;
+    if (!v.inner_id)  { skippedNoSerial++; continue; }
+    const key = v.manufacturer_descr.trim().toLowerCase() + "|" + v.model.trim().toLowerCase();
     const id = catalogLookup.get(key);
-    if (id) byClient[v.client_id].add(id);
+    if (!id) continue;
+    if (!byClient[v.client_id]) byClient[v.client_id] = new Set();
+    byClient[v.client_id].add(id);
   }
+  console.log(`[admin] syncAssetTypesByClient — ${skippedNoSerial} veículos sem serial ignorados`);
 
   // 4. Serializar Sets para arrays
   const byClientSerialized: Record<string, number[]> = {};
