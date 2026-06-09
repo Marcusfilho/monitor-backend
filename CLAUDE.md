@@ -78,7 +78,7 @@ All workers follow the same pattern: poll loop → `pollNextJob()` → `processJ
 - **schemeBuilderWorker** — opens WS session and applies vehicle scheme via `associate_vehicles_actions_opr` + `execute_action_opr`, waits for `UNIT_CONFIG_STATUS` push.
 - **canWorker** — opens WS session, calls `collectVehicleMonitorSnapshot()`, streams partial results via `updateJob()`.
 - **gsWorker** — sends G-Sensor calibration command `o2w` over WS.
-- **saveSnapshotWorker** — writes completed job data to SQLite via `snapshotStore`, then exports to Google Drive.
+- **saveSnapshotWorker** — writes completed job data to SQLite via `snapshotStore`, then exports to SharePoint (or Drive if enabled).
 
 All workers are also loaded inline by `src/index.ts` via dynamic `import()` so the entire system runs as a single process.
 
@@ -120,14 +120,15 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 | `HTML5_COOKIEJAR_PATH` | Cookie persistence |
 | `SQLITE_DB_PATH` | SQLite DB path (default: `data/monitor.db`) |
 | `JOBS_STORE_PATH` | Job queue file (default: `/tmp/jobs_store_rw.json`) |
-| `DRIVE_EXPORT_ENABLED` / `GOOGLE_SA_KEY_PATH` / `SPREADSHEET_ID` | Google Drive export |
+| `DRIVE_EXPORT_ENABLED` / `GOOGLE_SA_KEY_PATH` / `SPREADSHEET_ID` | Google Drive export (legado) |
+| `SP_EXPORT_ENABLED` / `SP_TENANT_ID` / `SP_CLIENT_ID` / `SP_CLIENT_SECRET` / `SP_SITE_HOST` / `SP_SITE_PATH` / `SP_LIST_NAME` | SharePoint export via Graph API |
 
 ---
 
 ## Pendências e melhorias futuras
 
 ### 🔴 Próxima sessão
-- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Causa raiz não confirmada — suspeita: falta de contexto de sessão ou parâmetro adicional no `get_monitor_module_state`. Próximo passo: testar com veículo conectado e comparar com sessão do Internal Tools. **Confirmado por usuário: campo moduleState não aparece no snapshot exportado.**
+- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Causa raiz não confirmada — suspeita: falta de contexto de sessão ou parâmetro adicional no `get_monitor_module_state`. Próximo passo: testar com veículo conectado e comparar com sessão do Internal Tools.
 - P2: canWorker paralelo — adicionar `CAN_WORKER_CONCURRENCY` env var para rodar N loops paralelos
 - P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada
 
@@ -137,6 +138,10 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 
 ### ✅ Feito recentemente
+- SharePoint export via Graph API: `src/services/sharepointExporter.ts` — OAuth2 Client Credentials, descoberta dinâmica de siteId/listId, mapeamento de colunas internas SP; `snapshotStore` suporta múltiplos exporters via `_loadExporters()`; `DRIVE_EXPORT_ENABLED=0` + `SP_EXPORT_ENABLED=1`; serviço exportado em PT (Instalação, Desinstalação, etc.)
+- CAN no snapshot: `approve-can` percorre cadeia de jobs para achar `monitor_can_snapshot` e passa `result.snapshot` no payload do `save_snapshot`
+- Campos extras (Cor/Chassi/LocalInstalacao): fallbacks de nomes de campo no saveSnapshotWorker (`p.cor ?? p.vehicle_color`, etc.)
+- GS_CALIBRATION regression fix: restaurado `...(job.result ?? {})` no spread do base em `approve-can` — `vehicle_id` vinha do result do installWorker
 - Validação de serial em uso: `vhcls-lookup?by=serial` usa `INNER_ID=` no VHCLS (LICENSE_NMBR= não funciona para seriais); frontend exibe banner vermelho e bloqueia criação de job se serial já vinculado a outra placa
 - Seletores Fabricante/Modelo mobile: substituídos por dropdown customizado (`_cselBuild`/`_cselVal` em app.html) com itens do cliente em azul/negrito — CSS em `<option>` nativo não funciona em iOS/Android
 - UNINSTALL flow: vehicle_id, serial (inner_id) e client_id/client_descr agora passados no payload via vhcls-lookup; CMDT criado corretamente após desativação
