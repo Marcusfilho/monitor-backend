@@ -127,7 +127,7 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 ## Pendências e melhorias futuras
 
 ### 🔴 Próxima sessão
-- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Causa raiz não confirmada — suspeita: falta de contexto de sessão ou parâmetro adicional no `get_monitor_module_state`. Próximo passo: testar com veículo conectado e comparar com sessão do Internal Tools.
+- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Causa raiz não confirmada — suspeita: falta de contexto de sessão ou parâmetro adicional no `get_monitor_module_state`. Próximo passo: testar com veículo conectado e comparar com sessão do Internal Tools. **Confirmado por usuário: campo moduleState não aparece no snapshot exportado.**
 - P2: canWorker paralelo — adicionar `CAN_WORKER_CONCURRENCY` env var para rodar N loops paralelos
 - P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada
 
@@ -135,7 +135,6 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 - **Upload de fotos para SharePoint**: substituir AppScript Google Drive por upload direto via Graph API. Frontend envia `multipart/form-data` → backend recebe em memória (`multer` memoryStorage, limite 15MB) → `PUT` Graph API para pasta SharePoint. Sem tocar disco da VM. Service Worker no frontend para envio em background. Pico estimado: 5 usuários simultâneos ~40MB RAM.
 
-- **Integração lista SharePoint (BaseInstalados)**: enviar os 18 campos exportados diretamente para lista `BaseInstalados` no site `SmartDrivingLabs`. Auth via OAuth 2.0 Client Credentials (já validada). Colunas mapeadas: `ID_Registro, Data, Placa (Title), Serial, Tecnico, Cliente, Serviço, Fabricante, Modelo, Ano, Cor, Chassi, LocalInstalacao, Comentario, JobID, Etiqueta, Chicote, CAN`. Gravar via `POST /sites/{id}/lists/{id}/items`.
 
 ### ✅ Feito recentemente
 - Validação de serial em uso: `vhcls-lookup?by=serial` usa `INNER_ID=` no VHCLS (LICENSE_NMBR= não funciona para seriais); frontend exibe banner vermelho e bloqueia criação de job se serial já vinculado a outra placa

@@ -62,6 +62,34 @@ function openDb(): any {
   return new Database(DB_PATH);
 }
 
+function _ensureSchema(): void {
+  if (!Database) return;
+  const db = openDb();
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS service_snapshots (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id             TEXT NOT NULL,
+        service            TEXT,
+        technician         TEXT,
+        plate              TEXT,
+        serial             TEXT,
+        vehicle_id         INTEGER,
+        asset_type         INTEGER,
+        vehicle_setting_id INTEGER,
+        client_id          INTEGER,
+        client_descr       TEXT,
+        status             TEXT NOT NULL DEFAULT 'pending',
+        snapshot_json      TEXT NOT NULL,
+        created_at         TEXT NOT NULL
+      )
+    `).run();
+  } finally {
+    db.close();
+  }
+}
+_ensureSchema();
+
 // ─── operações principais ────────────────────────────────────────────────────
 
 /**
