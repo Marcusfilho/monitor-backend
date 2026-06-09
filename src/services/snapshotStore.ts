@@ -203,34 +203,57 @@ function _insertSnapshot(p: SnapshotPayload): number {
   }
 }
 
+// ─── privado: exporters habilitados ──────────────────────────────────────────
+// Adicione novos destinos aqui: basta criar um módulo com exportSnapshot(id, p)
+// e registrá-lo com a env var de controle correspondente.
+
+type ExportFn = (id: number, p: SnapshotPayload) => Promise<void>;
+
+function _loadExporters(): ExportFn[] {
+  const fns: ExportFn[] = [];
+
+  if (process.env.SP_EXPORT_ENABLED === "1") {
+    try {
+      const m = require("./sharepointExporter");
+      if (typeof m?.exportSnapshot === "function") fns.push(m.exportSnapshot);
+    } catch (e: any) {
+      console.warn("[SNAPSHOT_STORE_V1] sharepointExporter não carregou:", e?.message);
+    }
+  }
+
+  if (process.env.DRIVE_EXPORT_ENABLED === "1") {
+    try {
+      const m = require("./driveExporter");
+      if (typeof m?.exportSnapshot === "function") fns.push(m.exportSnapshot);
+    } catch (e: any) {
+      console.warn("[SNAPSHOT_STORE_V1] driveExporter não carregou:", e?.message);
+    }
+  }
+
+  return fns;
+}
+
 // ─── privado: export + limpeza ────────────────────────────────────────────────
 
 async function _tryExportAndClean(id: number, p: SnapshotPayload): Promise<void> {
-  // importa o driveExporter dinamicamente para não quebrar
-  // o worker se o módulo ainda não existir
-  let exporter: any = null;
-  try {
-    exporter = require("./driveExporter");
-  } catch {
-    console.log(
-      `[SNAPSHOT_STORE_V1] driveExporter não disponível ainda — id=${id} fica pending`,
-    );
+  const exporters = _loadExporters();
+
+  if (exporters.length === 0) {
+    console.log(`[SNAPSHOT_STORE_V1] nenhum exporter habilitado — id=${id} fica pending`);
     return;
   }
 
-  if (typeof exporter?.exportSnapshot !== "function") {
-    console.log(
-      `[SNAPSHOT_STORE_V1] driveExporter.exportSnapshot não é função — id=${id} fica pending`,
-    );
-    return;
-  }
+  const results = await Promise.allSettled(exporters.map(fn => fn(id, p)));
+  const anyOk   = results.some(r => r.status === "fulfilled");
 
-  await exporter.exportSnapshot(id, p);
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.error(`[SNAPSHOT_STORE_V1] exporter[${i}] falhou (id=${id}):`, (r as any).reason?.message ?? r);
+    }
+  });
 
-  // chegou aqui = export confirmado
-  if (CLEANUP_MODE === "delete") {
-    deleteSnapshot(id);
-  } else {
-    markExported(id);
-  }
+  if (!anyOk) throw new Error("todos os exporters falharam");
+
+  if (CLEANUP_MODE === "delete") deleteSnapshot(id);
+  else markExported(id);
 }
