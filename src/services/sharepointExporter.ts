@@ -108,6 +108,13 @@ async function _ensureIds(token: string): Promise<void> {
 // ─── mapeamento snapshot → campos SharePoint ─────────────────────────────────
 // Nomes internos obtidos via GET /columns em 2026-06-09
 
+const SERVICE_PT: Record<string, string> = {
+  INSTALL         : "Instalação",
+  UNINSTALL       : "Desinstalação",
+  MAINT_WITH_SWAP : "Manutenção com troca",
+  MAINT_NO_SWAP   : "Manutenção sem troca",
+};
+
 const LABEL_PT: Record<string, string> = {
   UP: "CIMA", DOWN: "BAIXO", LEFT: "ESQUERDA",
   RIGHT: "DIREITA", FRONT: "FRENTE", BACK: "TRASEIRO",
@@ -125,7 +132,7 @@ function _buildFields(p: SnapshotPayload): Record<string, any> {
 
   return {
     Title                  : c.plate_real               ?? "",   // Placa
-    "Servi_x00e7_o"        : c.service                  ?? "",   // Serviço
+    "Servi_x00e7_o"        : SERVICE_PT[String(c.service ?? "").toUpperCase()] ?? c.service ?? "",
     Serial                 : p.serial                   ?? "",
     Modelo                 : c.vehicle?.model            ?? "",
     Etiqueta               : etiqueta,
