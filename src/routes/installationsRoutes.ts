@@ -224,31 +224,42 @@ router.get("/:id", (req: Request, res: Response) => {
 // POST /api/installations/:id/approve-can  — técnico valida CAN e dispara próxima etapa
 // ---------------------------------------------------------------------------
 router.post("/:id/approve-can", (req: Request, res: Response) => {
-  const { getJob, updateJob, createJob } = require("../jobs/jobStore");
+  const { getJob, listJobs, updateJob, createJob } = require("../jobs/jobStore");
   const { getGsCommand } = require("../core/gsCommandMap");
 
   const job = getJob(String(req.params.id));
   if (!job) { res.status(404).json({ ok: false, error: "job_not_found" }); return; }
 
+  // busca o snapshot CAN na cadeia de jobs
+  const allJobs: any[] = listJobs();
+  function collectChain(fromId: string): any[] {
+    return allJobs
+      .filter((j: any) => j.payload?._from === fromId)
+      .flatMap((j: any) => [j, ...collectChain(j.id)]);
+  }
+  const chain = [job, ...collectChain(job.id)];
+  const canJob = chain
+    .filter((j: any) => j.type === "monitor_can_snapshot")
+    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+  const canSnapshot = canJob?.result?.snapshot ?? null;
+
   const service = String(job.payload?.service ?? "").toUpperCase();
   const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
   const plate   = job.payload?.plate ?? "";
-  const result  = job.result ?? {};
+
+  const base = { ...job.payload, plate, _from: job.id, can: canSnapshot };
 
   if (needsGs) {
     const label   = String(job.payload?.gsensor?.label_pos   ?? job.payload?.label_position   ?? "").toUpperCase();
     const harness = String(job.payload?.gsensor?.harness_pos ?? job.payload?.harness_position ?? "").toUpperCase();
     const gsCmd   = getGsCommand(label, harness);
     if (gsCmd) {
-      createJob("gs_calibration", {
-        ...job.payload, ...result, plate, _from: job.id,
-        GS_ACTION_ID: gsCmd.action_id, GS_COMMAND_SYNTAX: gsCmd.command_syntax,
-      });
+      createJob("gs_calibration", { ...base, GS_ACTION_ID: gsCmd.action_id, GS_COMMAND_SYNTAX: gsCmd.command_syntax });
     } else {
-      createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+      createJob("save_snapshot", base);
     }
   } else {
-    createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
+    createJob("save_snapshot", base);
   }
 
   updateJob(job.id, { status: "approved" as any });
