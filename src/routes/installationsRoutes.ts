@@ -247,7 +247,7 @@ router.post("/:id/approve-can", (req: Request, res: Response) => {
   const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
   const plate   = job.payload?.plate ?? "";
 
-  const base = { ...job.payload, plate, _from: job.id, can: canSnapshot };
+  const base = { ...job.payload, ...(job.result ?? {}), plate, _from: job.id, can: canSnapshot };
 
   if (needsGs) {
     const label   = String(job.payload?.gsensor?.label_pos   ?? job.payload?.label_position   ?? "").toUpperCase();
