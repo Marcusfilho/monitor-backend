@@ -110,7 +110,7 @@ async function _ensureIds(token: string): Promise<void> {
 
 const SERVICE_PT: Record<string, string> = {
   INSTALL         : "Instalação",
-  UNINSTALL       : "Desinstalação",
+  UNINSTALL       : "Retirada",
   MAINT_WITH_SWAP : "Manutenção com troca",
   MAINT_NO_SWAP   : "Manutenção sem troca",
 };
