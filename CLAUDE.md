@@ -138,6 +138,8 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 
 ### ✅ Feito recentemente
+- Resiliência a latência Traffilog: `HTTP_TIMEOUT_MS=60000` no `.env`; postcheck (`mwsPostcheck`) timeout por AbortError agora é não-fatal no installWorker — continua com `dial=saveFields.DIAL_NUMBER` em vez de falhar o job
+- Botão "Reprocessar HTML5" / "Reenviar cadastro": endpoint `POST /api/installations/:id/retry-html5` implementado em `installationsRoutes.ts` — reseta job HTML5 (`error` ou `processing`) para `pending`, worker reprocessa automaticamente no próximo poll (~4s)
 - SharePoint export via Graph API: `src/services/sharepointExporter.ts` — OAuth2 Client Credentials, descoberta dinâmica de siteId/listId, mapeamento de colunas internas SP; `snapshotStore` suporta múltiplos exporters via `_loadExporters()`; `DRIVE_EXPORT_ENABLED=0` + `SP_EXPORT_ENABLED=1`; serviço exportado em PT (Instalação, Desinstalação, etc.)
 - CAN no snapshot: `approve-can` percorre cadeia de jobs para achar `monitor_can_snapshot` e passa `result.snapshot` no payload do `save_snapshot`
 - Campos extras (Cor/Chassi/LocalInstalacao): fallbacks de nomes de campo no saveSnapshotWorker (`p.cor ?? p.vehicle_color`, etc.)

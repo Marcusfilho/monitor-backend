@@ -493,7 +493,7 @@ async function processJob(job: any): Promise<void> {
   }
 
   // 7. Postcheck
-  let dial = "";
+  let dial = saveFields.DIAL_NUMBER; // fallback se postcheck timeout
   let vehicleSettingIdFromPostcheck = "";
   try {
     const pc = await mwsPostcheck(cfg, vehicleId, saveFields.DIAL_NUMBER, jobId);
@@ -510,8 +510,14 @@ async function processJob(job: any): Promise<void> {
       return;
     }
   } catch (e: any) {
-    await failJob(jobId, "mws_postcheck_exception", { detail: e?.message || String(e) });
-    return;
+    const isTimeout = (e?.name === "AbortError") || String(e?.message || "").includes("This operation was aborted");
+    if (isTimeout) {
+      // Timeout de rede no postcheck — SAVE provavelmente aplicado, continuando com dial do payload
+      console.log(`[install-rw] job=${jobId} mws_postcheck TIMEOUT (latência Traffilog) — assumindo SAVE OK, dial=${dial}`);
+    } else {
+      await failJob(jobId, "mws_postcheck_exception", { detail: e?.message || String(e) });
+      return;
+    }
   }
 
   // 8a. CHANGE_COMPANY — executada APÓS o SAVE para não ser desfeita pelo CMDT

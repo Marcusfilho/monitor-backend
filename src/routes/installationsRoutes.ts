@@ -6,6 +6,7 @@ import { getSelectedSchemeId } from "../services/schemeSelectionService";
  *   POST   /api/installations                          → cria job html5_install
  *   GET    /api/installations/vhcls-lookup?plate=XXX  → proxy VHCLS (evita CORS no browser)
  *   POST   /api/installations/:jobId/actions/complete-maint → finaliza MAINT_NO_SWAP (caminho NÃO)
+ *   POST   /api/installations/:id/retry-html5         → reprocessa job HTML5 com erro ou travado
  *
  * Paralelismo de SB (SB_PARALLEL_V1):
  *   createJob("scheme_builder") é fire-and-forget — sem await.
@@ -13,7 +14,7 @@ import { getSelectedSchemeId } from "../services/schemeSelectionService";
  */
 
 import { Router, Request, Response } from "express";
-import { createJob, getJob, completeJob } from "../jobs/jobStore";
+import { createJob, getJob, completeJob, updateJob } from "../jobs/jobStore";
 import { resolveByPlate }               from "../core/vhclsService";
 import { configFromEnv }               from "../core/html5Session";
 
@@ -338,6 +339,47 @@ router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
   }
 
   res.json({ ok: true, job_id: jobId, status: "completed", sb_queued: sbQueued });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/installations/:id/retry-html5  — reprocessa job HTML5 com erro
+// ---------------------------------------------------------------------------
+
+const HTML5_JOB_TYPES = ["html5_install", "html5_uninstall", "html5_maint_with_swap", "html5_maint_no_swap"];
+
+router.post("/:id/retry-html5", (req: Request, res: Response) => {
+  const jobId = String(req.params.id);
+  const job   = getJob(jobId);
+
+  if (!job) {
+    res.status(404).json({ ok: false, error: "job_not_found" });
+    return;
+  }
+
+  if (!HTML5_JOB_TYPES.includes(job.type)) {
+    res.status(400).json({
+      ok    : false,
+      error : "job_type_invalido",
+      detail: `Apenas jobs HTML5 podem ser reprocessados. Tipo atual: "${job.type}"`,
+    });
+    return;
+  }
+
+  if (job.status !== "error" && job.status !== "processing") {
+    res.status(409).json({
+      ok    : false,
+      error : "status_invalido",
+      detail: `Job ${jobId} está em "${job.status}" — só é possível reprocessar jobs com erro ou em processamento`,
+    });
+    return;
+  }
+
+  const anterior = job.status;
+  updateJob(jobId, { status: "pending" as any, result: null } as any);
+
+  console.log(`[installations] retry-html5 job=${jobId} type=${job.type} anterior=${anterior}`);
+
+  res.json({ ok: true, job_id: jobId, status: "pending" });
 });
 
 export default router;
