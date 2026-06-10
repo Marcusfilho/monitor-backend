@@ -5,7 +5,17 @@ const TRAFFILOG_API_BASE_URL = (
   "https://api-il.traffilog.com/appengine_3/5E1DCD81-5138-4A35-B271-E33D71FFFFD9/1/json"
 ).trim();
 
+const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutos
+let _cachedToken = "";
+let _cacheTs     = 0;
+
+export function invalidateTrafflogToken(): void {
+  _cachedToken = "";
+  _cacheTs     = 0;
+}
+
 export async function getTrafflogToken(): Promise<string> {
+  if (_cachedToken && Date.now() - _cacheTs < TOKEN_TTL_MS) return _cachedToken;
   const loginName = (process.env.WS_LOGIN_NAME || "").trim();
   const password  = (process.env.WS_PASSWORD   || "").trim();
   if (!loginName || !password)
@@ -31,7 +41,9 @@ export async function getTrafflogToken(): Promise<string> {
           const tok = props?.session_token || props?.data?.[0]?.session_token;
           if (!tok || String(tok).trim().length < 20)
             return reject(new Error(`[traffilogAuth] login HTTP sem token av=${props?.action_value}`));
-          resolve(String(tok).trim());
+          _cachedToken = String(tok).trim();
+          _cacheTs     = Date.now();
+          resolve(_cachedToken);
         } catch (e) {
           reject(new Error(`[traffilogAuth] parse error: ${e}`));
         }

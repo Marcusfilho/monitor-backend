@@ -9,7 +9,7 @@
  */
 
 import WebSocket from "ws";
-import { getTrafflogToken } from "../../core/traffilogAuth.js";
+import { getTrafflogToken, invalidateTrafflogToken } from "../../core/traffilogAuth.js";
 import { updateJob } from "../../jobs/jobStore.js";
 import {
   collectVehicleMonitorSnapshot,
@@ -123,7 +123,7 @@ async function processJob(job: any): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("[can-rw] WS open timeout 15s")), 15000);
     (ws as any).once("open",  () => { clearTimeout(timer); resolve(); });
-    (ws as any).once("error", (e: any) => { clearTimeout(timer); reject(e); });
+    (ws as any).once("error", (e: any) => { clearTimeout(timer); invalidateTrafflogToken(); reject(e); });
   });
 
   try {

@@ -47,7 +47,7 @@ const WS_ORIGIN     = (process.env.MONITOR_WS_ORIGIN || "https://operation.traff
 
 if (!BASE) throw new Error("[sb-rw] API_BASE_URL não definido");
 if (!KEY)  throw new Error("[sb-rw] WORKER_KEY não definido");
-import { getTrafflogToken } from "../../core/traffilogAuth.js";
+import { getTrafflogToken, invalidateTrafflogToken } from "../../core/traffilogAuth.js";
 
 // ---------------------------------------------------------------------------
 // Session token — obtido via HTTP por job (getTrafflogToken)
@@ -528,6 +528,9 @@ async function processJob(job: any): Promise<void> {
 
     const isDisconnected = msg.includes("disconnected") || msg.includes("silence timeout");
     const isTimeout      = msg.includes("timeout") && !isDisconnected;
+    const isWsOpen       = msg.includes("WS fechou") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+
+    if (isWsOpen) invalidateTrafflogToken(); // token possivelmente expirado — força renovação
 
     if (isDisconnected) {
       // FIX_SB_PIPELINE_V1: execute chegou OK mas pushes UNIT_CONFIG_STATUS não recebidos.
