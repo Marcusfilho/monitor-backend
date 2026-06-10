@@ -470,18 +470,31 @@ async function processJob(job: any): Promise<void> {
 
   // 6. SAVE_VHCL_ACTIVATION_NEW
   const fakeBaseline = { fields: saveFields, rawText: baselineRawText };
+  const doSave = () => mwsSave(
+    cfg, jobId, vehicleId,
+    saveFields.LICENSE_NMBR,
+    saveFields.DIAL_NUMBER,
+    fakeBaseline,
+    { stripFields: payload.strip_fields === 1 || payload.strip_fields === "1" }
+  );
   let saveResult;
   try {
-    saveResult = await mwsSave(
-      cfg, jobId, vehicleId,
-      saveFields.LICENSE_NMBR,
-      saveFields.DIAL_NUMBER,
-      fakeBaseline,
-      { stripFields: payload.strip_fields === 1 || payload.strip_fields === "1" }
-    );
+    saveResult = await doSave();
   } catch (e: any) {
-    await failJob(jobId, "mws_save_exception", { detail: e?.message || String(e) });
-    return;
+    const isFetchFailed = String(e?.message || "").includes("fetch failed");
+    if (isFetchFailed) {
+      // Conexão TCP stale — aguarda 2s e retenta uma vez
+      console.log(`[install-rw] job=${jobId} mws_save fetch failed — retry em 2s`);
+      await new Promise(r => setTimeout(r, 2000));
+      try { saveResult = await doSave(); }
+      catch (e2: any) {
+        await failJob(jobId, "mws_save_exception", { detail: e2?.message || String(e2) });
+        return;
+      }
+    } else {
+      await failJob(jobId, "mws_save_exception", { detail: e?.message || String(e) });
+      return;
+    }
   }
 
   if (saveResult.hasError) {
