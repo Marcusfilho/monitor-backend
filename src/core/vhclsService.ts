@@ -223,13 +223,23 @@ async function resolveVehicleIdDirect(
   for (let attempt = 1; attempt <= 2; attempt++) {
     const cookieHeader = ensureCookieDefaults(readJarCookie(cfg.cookieJarPath));
 
-    const { status, text } = await postVhcls(
-      cfg.actionUrl,
-      process.env.HTML5_BASE_URL || "",
-      cookieHeader,
-      lk,
-      cfg.httpTimeoutMs
-    );
+    let status: number, text: string;
+    try {
+      ({ status, text } = await postVhcls(
+        cfg.actionUrl,
+        process.env.HTML5_BASE_URL || "",
+        cookieHeader,
+        lk,
+        cfg.httpTimeoutMs
+      ));
+    } catch (e: any) {
+      if (String(e?.message || "").includes("fetch failed") && attempt === 1) {
+        console.log(`[vhclsService] ${lk}: fetch failed → retry em 2s`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      throw e;
+    }
 
     // snapshot de debug (opcional)
     try {
@@ -400,14 +410,24 @@ export async function resolveByPlate(
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     const cookieHeader = ensureCookieDefaults(readJarCookie(cfg.cookieJarPath));
-    const { status, text } = await postVhcls(
-      cfg.actionUrl,
-      process.env.HTML5_BASE_URL || "",
-      cookieHeader,
-      lk,
-      cfg.httpTimeoutMs,
-      byInnerId
-    ).catch(() => ({ status: 0, text: "" }));
+    let status: number, text: string;
+    try {
+      ({ status, text } = await postVhcls(
+        cfg.actionUrl,
+        process.env.HTML5_BASE_URL || "",
+        cookieHeader,
+        lk,
+        cfg.httpTimeoutMs,
+        byInnerId
+      ));
+    } catch (e: any) {
+      if (String(e?.message || "").includes("fetch failed") && attempt === 1) {
+        console.log(`[vhclsService] [${tag}] fetch failed → retry em 2s`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      ({ status, text } = { status: 0, text: "" });
+    }
 
     const parsed   = parseVehicleIdFromVhclsXml(text, lk);
     const loginNeg = /login\s*=\s*"-1"/i.test(text);
