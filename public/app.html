@@ -518,6 +518,19 @@
   </div>
 </div>
 
+<!-- Modal fotos -->
+<div class="confirm-modal" id="photoModal">
+  <div class="confirm-sheet" style="max-width:440px;width:96%">
+    <h3 style="margin-bottom:4px">📷 Fotos da Instalação</h3>
+    <p id="photoModalSub" style="font-size:12px;color:var(--muted);margin:0 0 14px"></p>
+    <div id="photoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px"></div>
+    <div class="actions">
+      <button id="photoModalClose" class="btn-secondary" style="flex:1">Fechar</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="photoFileInput" accept="image/*" capture="environment" style="display:none">
+
 <!-- Modal confirmar -->
 <div class="confirm-modal" id="confirmModal">
   <div class="confirm-sheet">
@@ -1037,6 +1050,7 @@ $("btnReset").addEventListener("click",()=>{
 });
 function doReset(){
   stopPoll();saveLs("","");state.inst=null;state.lastSnapshot=null;state._html5Start=null;
+  _photoState.counts={};_photoState.uploading=new Set();_photoUpdateFlag();
   $("btnCreate").disabled=false;$("btnApprove").disabled=true;$("btnRefresh").disabled=true;
   $("plate_real").value="";$("fleet").value="";$("serial").value="";
   $("comment").value="";$("extraCor").value="";$("extraChassi").value="";$("extraLocal").value="";
@@ -1568,6 +1582,127 @@ function renderAll(inst){
 // ─── INIT ────────────────────────────────────────────────────────────────────
 loadCatalogs();
 showBarForm();
+
+// ─── FOTOS ───────────────────────────────────────────────────────────────────
+const PHOTO_TYPES=[
+  {slug:"Cabeamento",      label:"🔌 Cabeamento"},
+  {slug:"LocalInstalacao", label:"📍 Local Instal."},
+  {slug:"Veiculo",         label:"🚛 Veículo"},
+  {slug:"Equipamento",     label:"📦 Equipamento"},
+  {slug:"Placa",           label:"🔖 Placa"},
+  {slug:"Chassi",          label:"🔢 Chassi"},
+  {slug:"Documento",       label:"📄 Documento"},
+];
+const _photoState={counts:{},uploading:new Set()};
+
+function _photoUpdateFlag(){
+  const total=Object.values(_photoState.counts).reduce((a,b)=>a+b,0);
+  const flag=$("photoFlag");
+  if(!flag)return;
+  if(total===0){flag.textContent="Nenhuma enviada";flag.style.background="#1a2535";flag.style.color="#5a7a9a"}
+  else{flag.textContent=`${total} enviada${total>1?"s":""}`;flag.style.background="#0d2d1a";flag.style.color="#6dbf6d"}
+}
+
+function _photoRenderGrid(){
+  const grid=$("photoGrid");
+  if(!grid)return;
+  grid.innerHTML=PHOTO_TYPES.map(t=>{
+    const count=_photoState.counts[t.slug]||0;
+    const loading=_photoState.uploading.has(t.slug);
+    const badge=loading
+      ? `<span style="font-size:10px;background:#1a1a00;color:#bbbb00;padding:2px 6px;border-radius:10px">⏳</span>`
+      : count>0
+        ? `<span style="font-size:10px;background:#0d2d1a;color:#6dbf6d;padding:2px 6px;border-radius:10px">✓ ${count}</span>`
+        : `<span style="font-size:10px;background:#1a1a2a;color:#5a7a9a;padding:2px 6px;border-radius:10px">—</span>`;
+    return `<button type="button" onclick="_photoPickFile('${t.slug}')"
+      style="background:#0d1520;border:1px solid #2a3a52;border-radius:10px;padding:10px 8px;
+        cursor:pointer;text-align:left;color:var(--text);font-size:13px;display:flex;
+        align-items:center;justify-content:space-between;gap:6px;${loading?"opacity:0.6;pointer-events:none":""}">
+      <span>${t.label}</span>${badge}
+    </button>`;
+  }).join("");
+}
+
+function _photoPickFile(slug){
+  const inp=$("photoFileInput");
+  inp.setAttribute("data-type",slug);
+  inp.value="";
+  inp.click();
+}
+
+async function _photoUpload(file,slug){
+  const clientVal=($("clientSelect")?.value||"").split("|");
+  const clientDescr=(clientVal[1]||"").trim();
+  const plate=(($("plate_real")?.value)||"").trim().toUpperCase();
+  const fleet=(($("fleet")?.value)||"").trim().toUpperCase();
+  const token=sessionStorage.getItem("html5_session_token")||"";
+
+  _photoState.uploading.add(slug);
+  _photoRenderGrid();
+
+  try{
+    const fd=new FormData();
+    fd.append("photo",file);
+    fd.append("type",slug);
+    fd.append("client_descr",clientDescr);
+    fd.append("plate",plate);
+    if(fleet)fd.append("fleet",fleet);
+
+    const r=await fetch("/api/photos/upload",{
+      method:"POST",
+      headers:{"x-session-token":token},
+      body:fd,
+      signal:AbortSignal.timeout(60000),
+    });
+    const text=await r.text().catch(()=>"");
+    let d=null;try{d=text?JSON.parse(text):null}catch{d=null}
+
+    if(r.ok&&d?.ok){
+      _photoState.counts[slug]=(_photoState.counts[slug]||0)+1;
+      showToast(`${slug} ${_photoState.counts[slug]} enviada ✓`,"ok");
+    }else{
+      showToast(`Erro ao enviar ${slug}: ${d?.error||r.status}`,"err");
+    }
+  }catch(e){
+    showToast(`Falha ao enviar ${slug}: ${e?.message||"timeout"}`,"err");
+  }finally{
+    _photoState.uploading.delete(slug);
+    _photoRenderGrid();
+    _photoUpdateFlag();
+  }
+}
+
+$("photoFileInput").addEventListener("change",function(){
+  const file=this.files?.[0];
+  const slug=this.getAttribute("data-type");
+  if(file&&slug)_photoUpload(file,slug);
+});
+
+$("btnOpenPhotos").addEventListener("click",()=>{
+  const clientVal=($("clientSelect")?.value||"").split("|");
+  const clientDescr=(clientVal[1]||"").trim();
+  const plate=(($("plate_real")?.value)||"").trim();
+  const fleet=(($("fleet")?.value)||"").trim();
+
+  if(!clientDescr||!plate){
+    showToast("Selecione o cliente e preencha a placa antes de adicionar fotos","err");
+    return;
+  }
+
+  const sub=$("photoModalSub");
+  const plateFull=fleet?`${fleet.toUpperCase()} - ${plate.toUpperCase()}`:plate.toUpperCase();
+  if(sub)sub.textContent=`${clientDescr} · ${plateFull}`;
+
+  _photoRenderGrid();
+  $("photoModal").classList.add("open");
+});
+
+$("photoModalClose").addEventListener("click",()=>{
+  $("photoModal").classList.remove("open");
+});
+$("photoModal").addEventListener("click",e=>{
+  if(e.target===$("photoModal"))$("photoModal").classList.remove("open");
+});
 </script>
 </body>
 </html>

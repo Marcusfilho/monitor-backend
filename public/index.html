@@ -171,8 +171,9 @@
         method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({username,password})
       });
-      const data=await r.json();
-      if(!r.ok||!data.ok)throw new Error(data.error||"Falha no login");
+      const text=await r.text().catch(()=>"");
+      let data=null;try{data=text?JSON.parse(text):null}catch{data=null}
+      if(!r.ok||!data?.ok)throw new Error(data?.error||"Falha no login (tente novamente)");
       setProgress(80);setStatus("sessão pronta...");
       sessionStorage.setItem("html5_session_token",data.session_token);
       sessionStorage.setItem("html5_clients_cache",JSON.stringify(data.clients));

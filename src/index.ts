@@ -6,6 +6,7 @@ import authRoutes          from "./routes/authRoutes";
 import installationsRoutes from "./routes/installationsRoutes";
 import { requireSession }  from "./middleware/requireSession";
 import adminRoutes, { syncAssetTypesByClient } from "./routes/adminRoutes";
+import photoRoutes from "./routes/photoRoutes";
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,7 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/installations", requireSession, installationsRoutes);
 app.use("/events",            eventsRoutes);
 app.use("/api/admin",         adminRoutes);
+app.use("/api/photos",        requireSession, photoRoutes);
 
 // ─── Sync asset_types_by_client — a cada 1h ───────────────────────────────────
 const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hora

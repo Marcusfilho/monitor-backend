@@ -197,6 +197,24 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/jobs/:id/retry  — reseta job error/processing → pending ────────
+router.post("/:id/retry", (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const existing = getJob(id);
+    if (!existing) { res.status(404).json({ ok: false, error: "job_not_found" }); return; }
+    if (existing.status !== "error" && existing.status !== "processing") {
+      res.status(400).json({ ok: false, error: `job status="${existing.status}" não pode ser retentado` });
+      return;
+    }
+    const job = updateJob(id, { status: "pending" as any, result: null } as any);
+    console.log(`[jobs] retry job=${id} type=${existing.type} status=error→pending`);
+    res.json({ ok: true, job_id: id, type: existing.type, status: "pending" });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "internal_error" });
+  }
+});
+
 // ─── POST /api/jobs/:id/progress  — atualizar progresso ──────────────────────
 router.post("/:id/progress", (req: Request, res: Response) => {
   try {

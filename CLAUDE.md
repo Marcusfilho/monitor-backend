@@ -90,6 +90,7 @@ All workers are also loaded inline by `src/index.ts` via dynamic `import()` so t
 - **`vhclsService.ts`** — Resolves `vehicle_id` via `VHCLS` HTML5 action. Accepts `byInnerId` flag: when true, posts `INNER_ID=<key>` instead of `LICENSE_NMBR=<key>` — required for serial-number lookup (Traffilog ignores serial in LICENSE_NMBR). Dumps raw XML to `/tmp/vhcls_raw_<jobId>_*.xml` for client mismatch detection.
 - **`vehicleMonitorSnapshotService.ts`** — WS message orchestration for CAN data collection (params + moduleState).
 - **`changeCompanyService.ts`** — Moves a vehicle between clients via HTML5 `ASSET_BASIC_SAVE`.
+- **`sharepointPhotoUploader.ts`** — Upload de fotos de instalação para SharePoint via Graph API drive. Descobre driveId de "Arquivos SDL" dinamicamente, numera fotos sequencialmente por tipo (`Cabeamento1`, `Veiculo2`, etc.), cria pastas intermediárias automaticamente. Estrutura: `Operação/Clientes/Fotos Instalações/{cliente}/{[frota -] placa}/`.
 
 ### Auth & Session
 
@@ -122,6 +123,8 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 | `JOBS_STORE_PATH` | Job queue file (default: `/tmp/jobs_store_rw.json`) |
 | `DRIVE_EXPORT_ENABLED` / `GOOGLE_SA_KEY_PATH` / `SPREADSHEET_ID` | Google Drive export (legado) |
 | `SP_EXPORT_ENABLED` / `SP_TENANT_ID` / `SP_CLIENT_ID` / `SP_CLIENT_SECRET` / `SP_SITE_HOST` / `SP_SITE_PATH` / `SP_LIST_NAME` | SharePoint export via Graph API |
+| `SP_PHOTOS_DRIVE` | Nome do document library para fotos (default: `Arquivos SDL`) |
+| `SP_PHOTOS_ROOT` | Caminho raiz das fotos no drive (default: `Operação/Clientes/Fotos Instalações`) |
 
 ---
 
@@ -134,10 +137,14 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 ### 🟡 Backlog
 
-- **Upload de fotos para SharePoint**: substituir AppScript Google Drive por upload direto via Graph API. Frontend envia `multipart/form-data` → backend recebe em memória (`multer` memoryStorage, limite 15MB) → `PUT` Graph API para pasta SharePoint. Sem tocar disco da VM. Service Worker no frontend para envio em background. Pico estimado: 5 usuários simultâneos ~40MB RAM.
+- **Botão "Reprocessar HTML5" não está funcionando**: endpoint implementado e testado via curl, mas o botão no app não surte efeito — investigar se o problema é no frontend (estado da UI, `installation_id` incorreto) ou se o job não está sendo repegado pelo worker após o reset.
+- **Melhorias no painel admin (admin.html) — gestão de jobs**: (1) Corrigir exibição de jobs ativos: atualmente só mostra 1 instalação ativa mesmo com múltiplas em paralelo — investigar filtro/query em `/api/admin/jobs`; (2) Botão Retry (↺) em jobs com status `error` — endpoint `POST /api/jobs/:id/retry` já existe; (3) Botão Encerrar (✕) em qualquer job independente do status, não só os ativos; (4) Remover link do painel admin do menu lateral do `app.html` e reposicionar — sugestão: ícone discreto no rodapé do app (ex: engrenagem ⚙ canto inferior direito) visível apenas para usuários admin.
 
 
 ### ✅ Feito recentemente
+- Upload de fotos para SharePoint: `POST /api/photos/upload` (multer memoryStorage 15MB) → `sharepointPhotoUploader.ts` → Graph API drive PUT. Estrutura `Fotos Instalações/{cliente}/{placa}/TipoN.ext`. Modal no app com 7 tipos (Cabeamento, Local, Veículo, Equipamento, Placa, Chassi, Documento), upload imediato ao selecionar, feedback por foto, reset no `doReset()`
+- Endpoint genérico `POST /api/jobs/:id/retry` em `jobRoutes.ts` — reseta qualquer job `error` ou `processing` → `pending`; usado para reprocessar SB/CAN/etc. sem intervenção manual
+- Fix login `index.html`: `r.json()` substituído por `r.text()` + `JSON.parse()` com fallback — evita crash `Unexpected token '<'` quando backend ou proxy retorna HTML em vez de JSON
 - Resiliência a latência Traffilog: `HTTP_TIMEOUT_MS=60000` no `.env`; postcheck (`mwsPostcheck`) timeout por AbortError agora é não-fatal no installWorker — continua com `dial=saveFields.DIAL_NUMBER` em vez de falhar o job
 - Botão "Reprocessar HTML5" / "Reenviar cadastro": endpoint `POST /api/installations/:id/retry-html5` implementado em `installationsRoutes.ts` — reseta job HTML5 (`error` ou `processing`) para `pending`, worker reprocessa automaticamente no próximo poll (~4s)
 - SharePoint export via Graph API: `src/services/sharepointExporter.ts` — OAuth2 Client Credentials, descoberta dinâmica de siteId/listId, mapeamento de colunas internas SP; `snapshotStore` suporta múltiplos exporters via `_loadExporters()`; `DRIVE_EXPORT_ENABLED=0` + `SP_EXPORT_ENABLED=1`; serviço exportado em PT (Instalação, Desinstalação, etc.)
