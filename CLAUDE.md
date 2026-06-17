@@ -131,17 +131,23 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 ## Pendências e melhorias futuras
 
 ### 🔴 Próxima sessão
-- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Causa raiz não confirmada — suspeita: falta de contexto de sessão ou parâmetro adicional no `get_monitor_module_state`. Próximo passo: testar com veículo conectado e comparar com sessão do Internal Tools.
+- P0 🚨: Validação CAN travada — CAN abre sessão WS, conecta (unitConnEvents=12) mas `unitParametersEvents=0` e `moduleState=[]`. Confirmado em produção na instalação 9BSG6X400T4123745 (job ab9187721bf9, 17/06/2026): params=0, can0/can1/j1708 todos null. SB estava OK (silence timeout → pipeline avançou). O canWorker está funcional e em loop ativo (3 tentativas × 120s), mas o Traffilog não envia UNIT_PARAMETERS nenhuma vez. Investigar: (a) comparar sequência de mensagens WS do CAN com sessão funcional do Internal Tools — especialmente se `vehicle_subscribe` retorna `av=0` ou se há `UNIT_PARAMETERS` sendo filtrado/descartado; (b) avaliar se há diferença de comportamento quando o veículo transmite vs. não transmite; (c) testar forçar `get_monitor_module_state` manualmente via WS e ver se retorna dados. **Atenção redobrada** — não alterar sem reprodução controlada e logs WS completos em mãos.
+- P1: moduleState — `[vm-ms] OK data=0 av=0` confirmado, Traffilog retorna `data=[]`. Provavelmente mesma raiz do P0.
 - P2: canWorker paralelo — adicionar `CAN_WORKER_CONCURRENCY` env var para rodar N loops paralelos
 - P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada
 
 ### 🟡 Backlog
 
+- **Verificação do fluxo completo pós-instalação**: acompanhar se CAN está coletando parâmetros e se exportação para SharePoint está correta para todas as instalações recentes (ex: TAW0D75 em waiting_approval, 9BSG6X400T4123745 snapshot enviado). Usuário fará o acompanhamento manualmente.
+- **Manutenção sem troca — fluxo não funciona**: ao cadastrar manutenção sem troca, deve perguntar "Deseja testar CAN?". **Não** → pula HTML5, pula CAN, vai direto para tela de finalização + envia SB silencioso. **Sim** → pula HTML5, vai para CAN e segue processo normal (approve-can → GS → save_snapshot). Em ambos os casos o `vehicle_id` deve vir do resolve da placa (não do payload direto).
 - **Botão "Reprocessar HTML5" não está funcionando**: endpoint implementado e testado via curl, mas o botão no app não surte efeito — investigar se o problema é no frontend (estado da UI, `installation_id` incorreto) ou se o job não está sendo repegado pelo worker após o reset.
 - **Melhorias no painel admin (admin.html) — gestão de jobs**: (1) Corrigir exibição de jobs ativos: atualmente só mostra 1 instalação ativa mesmo com múltiplas em paralelo — investigar filtro/query em `/api/admin/jobs`; (2) Botão Retry (↺) em jobs com status `error` — endpoint `POST /api/jobs/:id/retry` já existe; (3) Botão Encerrar (✕) em qualquer job independente do status, não só os ativos; (4) Remover link do painel admin do menu lateral do `app.html` e reposicionar — sugestão: ícone discreto no rodapé do app (ex: engrenagem ⚙ canto inferior direito) visível apenas para usuários admin.
 
 
 ### ✅ Feito recentemente
+- Fix VHCLS sessão stale silenciosa: quando `DATASOURCE` vazio (sem `login=-1`), `vhclsService` detecta `empty_datasource`, invalida TFL_SESSION do cookiejar e força relogin automático antes do retry — resolve instalações travando com `vehicle_id_not_found` após sessão HTML5 expirar silenciosamente
+- Fix SB handshake timeout: `processJob` agora tem loop de 2 tentativas; em timeout de handshake WS, invalida token e reabre sessão com token fresco após 5s — resolve `Opening handshake has timed out` que falhava sem retry
+- Fix SB av=1 sem process_id: quando `associate call_num=1` retorna `av=1` (scheme já associado de tentativa anterior) e `get_vcls_action_review_opr` não devolve `process_id`, fecha WS e retorna como ok — avança pipeline para CAN sem falhar com "process_id nao retornado"
 - Upload de fotos para SharePoint: `POST /api/photos/upload` (multer memoryStorage 15MB) → `sharepointPhotoUploader.ts` → Graph API drive PUT. Estrutura `Fotos Instalações/{cliente}/{placa}/TipoN.ext`. Modal no app com 7 tipos (Cabeamento, Local, Veículo, Equipamento, Placa, Chassi, Documento), upload imediato ao selecionar, feedback por foto, reset no `doReset()`
 - Endpoint genérico `POST /api/jobs/:id/retry` em `jobRoutes.ts` — reseta qualquer job `error` ou `processing` → `pending`; usado para reprocessar SB/CAN/etc. sem intervenção manual
 - Fix login `index.html`: `r.json()` substituído por `r.text()` + `JSON.parse()` com fallback — evita crash `Unexpected token '<'` quando backend ou proxy retorna HTML em vez de JSON
