@@ -405,6 +405,12 @@ async function runSbFlow(params: {
     processId = processId || String(findFirstKey(reviewRow, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} get_vcls OK av=${av3} processId=${processId}`);
     if (!processId) {
+      if (avAssoc1 === "1") {
+        // av=1 = scheme já estava associado (retentativa); sem processo pendente = já aplicado
+        console.log(`[sb-rw] job=${jobId} av_assoc=1 + sem process_id → scheme já aplicado, avançando para CAN`);
+        try { ws.close(); } catch {}
+        return;
+      }
       throw new Error("process_id nao retornado pelo Traffilog — abortando SB");
     }
 
@@ -518,29 +524,42 @@ async function processJob(job: any): Promise<void> {
 
   if (!sessionToken) { await failJob(jobId, "session_token_unavailable"); return; }
 
-  try {
-    await runSbFlow({ clientId, clientName, vehicleId, vehicleSettingId, comment, sessionToken, jobId });
-    await completeJob(jobId, { ok: true, status: "ok" });
-    console.log(`[sb-rw] job=${jobId} SB OK`);
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    console.log(`[sb-rw] job=${jobId} FALHOU: ${msg}`);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await runSbFlow({ clientId, clientName, vehicleId, vehicleSettingId, comment, sessionToken, jobId });
+      await completeJob(jobId, { ok: true, status: "ok" });
+      console.log(`[sb-rw] job=${jobId} SB OK`);
+      return;
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      console.log(`[sb-rw] job=${jobId} tentativa ${attempt}/2 FALHOU: ${msg}`);
 
-    const isDisconnected = msg.includes("disconnected") || msg.includes("silence timeout");
-    const isTimeout      = msg.includes("timeout") && !isDisconnected;
-    const isWsOpen       = msg.includes("WS fechou") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+      // Handshake timeout: WS não abriu — retry com token fresco
+      const isHandshakeTimeout = msg.includes("handshake") || msg.includes("timed out");
+      if (isHandshakeTimeout && attempt === 1) {
+        console.log(`[sb-rw] job=${jobId} WS handshake timeout → token fresco + retry em 5s`);
+        invalidateTrafflogToken();
+        try { sessionToken = await getTrafflogToken(); } catch {}
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
 
-    if (isWsOpen) invalidateTrafflogToken(); // token possivelmente expirado — força renovação
+      const isDisconnected = msg.includes("disconnected") || msg.includes("silence timeout");
+      const isTimeout      = msg.includes("timeout") && !isDisconnected && !isHandshakeTimeout;
+      const isWsOpen       = msg.includes("WS fechou") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
 
-    if (isDisconnected) {
-      // FIX_SB_PIPELINE_V1: execute chegou OK mas pushes UNIT_CONFIG_STATUS não recebidos.
-      // SB provavelmente rodou no equipamento — completa o job para avançar pipeline para CAN.
-      console.log(`[sb-rw] job=${jobId} SB_DISCONNECTED → completando como ok (avança para CAN)`);
-      await completeJob(jobId, { ok: true, status: "completed_no_push", detail: msg });
-    } else if (isTimeout) {
-      await failJob(jobId, "sb_timeout", msg);
-    } else {
-      await failJob(jobId, "sb_flow_error", msg);
+      if (isWsOpen || isHandshakeTimeout) invalidateTrafflogToken();
+
+      if (isDisconnected) {
+        // SB provavelmente rodou no equipamento — completa o job para avançar pipeline para CAN.
+        console.log(`[sb-rw] job=${jobId} SB_DISCONNECTED → completando como ok (avança para CAN)`);
+        await completeJob(jobId, { ok: true, status: "completed_no_push", detail: msg });
+      } else if (isTimeout) {
+        await failJob(jobId, "sb_timeout", msg);
+      } else {
+        await failJob(jobId, "sb_flow_error", msg);
+      }
+      return;
     }
   }
 }
