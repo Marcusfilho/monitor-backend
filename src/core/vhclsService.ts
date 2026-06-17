@@ -113,7 +113,7 @@ interface VhclsParseResult {
   licensePlate: string | null;
   clientId    : string | null;
   clientDescr : string | null;
-  err: "unauthorized_or_vhcls_error" | "not_found" | null;
+  err: "unauthorized_or_vhcls_error" | "empty_datasource" | "not_found" | null;
 }
 
 function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParseResult {
@@ -124,6 +124,12 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
   }
 
   const dataTags = xml.match(/<DATA\b[^>]*\/>/gi) || [];
+
+  // Resposta com DATASOURCE vazio (sem tags DATA): sessão stale no Traffilog
+  // (retorna XML estruturalmente correto mas sem dados — diferente de login=-1)
+  if (dataTags.length === 0) {
+    return { vehicleId: null, innerId: null, licensePlate: null, clientId: null, clientDescr: null, err: "empty_datasource" };
+  }
 
   for (const tag of dataTags) {
     const licRaw     = extractAttr(tag, "LICENSE_NMBR");
@@ -259,25 +265,30 @@ async function resolveVehicleIdDirect(
 
     if (!parsed.err && parsed.vehicleId) return { vid: parsed.vehicleId, innerId: parsed.innerId ?? null, clientId: parsed.clientId ?? null, clientDescr: parsed.clientDescr ?? null };
 
-    // session expired → força relogin e tenta mais 1x
-    if (parsed.err === "unauthorized_or_vhcls_error" && attempt === 1) {
+    // session expired ou datasource vazio → força relogin e tenta mais 1x
+    if ((parsed.err === "unauthorized_or_vhcls_error" || parsed.err === "empty_datasource") && attempt === 1) {
       try {
         // invalida sessão no jar para forçar relogin completo
-        const { readJarCookie: _unused, ...rest } = await import("./html5Session");
-        // usa fs diretamente: lê, remove ASP + TFL, reescreve
         const raw = fs.existsSync(cfg.cookieJarPath)
           ? fs.readFileSync(cfg.cookieJarPath, "utf8")
           : "{}";
-        let m: Record<string, string> = {};
+        let m: Record<string, any> = {};
         try { m = JSON.parse(raw); } catch { /* ignora */ }
         delete m["TFL_SESSION"];
         delete m["ASP.NET_SessionId"];
+        // formato canônico {cookie:"A=1; B=2"}: remove as chaves de sessão da string
+        if (typeof m.cookie === "string") {
+          m.cookie = m.cookie.split(";").map((s: string) => s.trim())
+            .filter((s: string) => !s.startsWith("TFL_SESSION=") && !s.startsWith("ASP.NET_SessionId="))
+            .join("; ");
+        }
         const tmp = `${cfg.cookieJarPath}.tmp.${Date.now()}`;
         fs.writeFileSync(tmp, JSON.stringify(m), "utf8");
         fs.renameSync(tmp, cfg.cookieJarPath);
       } catch { /* não bloqueia */ }
 
-      console.log(`[vhclsService] ${lk}: session expired → relogin → retry`);
+      const reason = parsed.err === "empty_datasource" ? "datasource vazio (sessão stale)" : "session expired";
+      console.log(`[vhclsService] ${lk}: ${reason} → relogin → retry`);
       await ensureHtml5Session(cfg, "VHCLS_DIRECT_RETRY").catch(() => {});
       continue;
     }
@@ -438,19 +449,25 @@ export async function resolveByPlate(
 
     console.log(`[vhclsService] [${tag}] attempt=${attempt} http=${status} len=${text.length} loginNeg=${loginNeg ? 1 : 0} head=${headSafe}`);
 
-    // session expirada na primeira tentativa → relogin + retry
-    if (parsed.err === "unauthorized_or_vhcls_error" && attempt === 1) {
+    // session expirada ou datasource vazio → relogin + retry
+    if ((parsed.err === "unauthorized_or_vhcls_error" || parsed.err === "empty_datasource") && attempt === 1) {
       try {
         const raw = fs.existsSync(cfg.cookieJarPath) ? fs.readFileSync(cfg.cookieJarPath, "utf8") : "{}";
-        let m: Record<string, string> = {};
+        let m: Record<string, any> = {};
         try { m = JSON.parse(raw); } catch { /* ignora */ }
         delete m["TFL_SESSION"];
         delete m["ASP.NET_SessionId"];
+        if (typeof m.cookie === "string") {
+          m.cookie = m.cookie.split(";").map((s: string) => s.trim())
+            .filter((s: string) => !s.startsWith("TFL_SESSION=") && !s.startsWith("ASP.NET_SessionId="))
+            .join("; ");
+        }
         const tmp = `${cfg.cookieJarPath}.tmp.${Date.now()}`;
         fs.writeFileSync(tmp, JSON.stringify(m), "utf8");
         fs.renameSync(tmp, cfg.cookieJarPath);
       } catch { /* não bloqueia */ }
-      console.log(`[vhclsService] [${tag}] session expirada → relogin → retry`);
+      const reason = parsed.err === "empty_datasource" ? "datasource vazio (sessão stale)" : "session expirada";
+      console.log(`[vhclsService] [${tag}] ${reason} → relogin → retry`);
       await ensureHtml5Session(cfg, `${tag}_RETRY`).catch(() => {});
       continue;
     }
