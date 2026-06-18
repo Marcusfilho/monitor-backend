@@ -113,10 +113,12 @@ async function processJob(job: any): Promise<void> {
 
   console.log(`[maint-no-swap-rw] job=${jobId} resolved plate=${plate} vehicle_id=${vehicleId}`);
 
-  // Completa com monitor_skip=1 — backend enfileira CAN/snapshot
+  // vehicle_id no nível raiz para que complete-maint e start-can o encontrem
   await completeJob(jobId, {
-    ok:      true,
-    service: "MAINT_NO_SWAP",
+    ok:           true,
+    service:      "MAINT_NO_SWAP",
+    vehicle_id:   vehicleId,
+    monitor_skip: 1,
     meta: {
       service:      "MAINT_NO_SWAP",
       plate,

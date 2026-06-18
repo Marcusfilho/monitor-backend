@@ -271,7 +271,7 @@ router.post("/:id/approve-can", (req: Request, res: Response) => {
 // POST /api/installations/:jobId/actions/complete-maint
 // ---------------------------------------------------------------------------
 
-router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
+router.post("/:jobId/complete-maint", (req: Request, res: Response) => {
   const jobId = String(req.params.jobId);
   const body  = req.body || {};
 
@@ -290,7 +290,9 @@ router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
     return;
   }
 
-  if (job.status === "completed" || job.status === "error") {
+  // Rejeita só se já foi confirmado por este endpoint (não pelo worker)
+  const alreadyConfirmed = (job.result as any)?.status === "maint_no_swap_skip";
+  if (alreadyConfirmed || job.status === "error") {
     res.status(409).json({
       ok    : false,
       error : "job_ja_finalizado",
@@ -299,9 +301,10 @@ router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
     return;
   }
 
-  // Campos para o SB — vindos do body da rota ou do payload original do job
+  // Campos para o SB — vindos do body da rota, resultado do worker, ou payload original do job
   const jobPayload       = job.payload || {};
-  const vehicleId        = String(body.vehicle_id         ?? jobPayload.vehicle_id         ?? jobPayload.vehicleId         ?? "").trim();
+  const jobResult        = job.result  || {};
+  const vehicleId        = String(body.vehicle_id         ?? jobPayload.vehicle_id         ?? jobPayload.vehicleId         ?? jobResult.vehicle_id ?? "").trim();
   const clientId         = String(body.client_id          ?? jobPayload.client_id          ?? jobPayload.clientId          ?? "").trim();
   const clientName       = String(body.client_name        ?? jobPayload.client_name        ?? jobPayload.clientName        ?? jobPayload.client_descr  ?? jobPayload.clientDescr  ?? "").trim();
   const vehicleSettingId = String(body.vehicle_setting_id ?? jobPayload.vehicle_setting_id ?? jobPayload.vehicleSettingId  ?? "").trim();
@@ -339,6 +342,52 @@ router.post("/:jobId/actions/complete-maint", (req: Request, res: Response) => {
   }
 
   res.json({ ok: true, job_id: jobId, status: "completed", sb_queued: sbQueued });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/installations/:id/start-can  — técnico escolheu "Testar CAN" no MAINT_NO_SWAP
+// ---------------------------------------------------------------------------
+
+router.post("/:id/start-can", (req: Request, res: Response) => {
+  const { randomUUID } = require("crypto");
+  const rootId  = String(req.params.id);
+  const root    = getJob(rootId);
+
+  if (!root) {
+    res.status(404).json({ ok: false, error: "job_not_found" });
+    return;
+  }
+  if (!isMaintNoSwap(root.type)) {
+    res.status(400).json({ ok: false, error: "job_type_invalido", detail: `Tipo inválido: "${root.type}"` });
+    return;
+  }
+  if (root.status !== "completed") {
+    res.status(409).json({ ok: false, error: "job_nao_concluido", detail: `Job ${rootId} está em status "${root.status}" — aguardar resolução do vehicle_id` });
+    return;
+  }
+
+  const vehicleId = String(
+    (root.result as any)?.vehicle_id ??
+    root.payload?.vehicle_id ??
+    root.payload?.vehicleId ??
+    ""
+  ).trim();
+
+  if (!vehicleId) {
+    res.status(422).json({ ok: false, error: "vehicle_id_ausente", detail: "Worker ainda não resolveu o vehicle_id" });
+    return;
+  }
+
+  const canJob = createJob("monitor_can_snapshot", {
+    ...root.payload,
+    ...(root.result ?? {}),
+    vehicle_id:         vehicleId,
+    _from:              rootId,
+    installation_token: randomUUID(),
+  });
+
+  console.log(`[installations] start-can root=${rootId} → can=${canJob.id} vehicle_id=${vehicleId}`);
+  res.json({ ok: true, job_id: rootId, can_job_id: canJob.id });
 });
 
 // ---------------------------------------------------------------------------

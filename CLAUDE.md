@@ -59,11 +59,14 @@ Jobs chain automatically via `dispatchPipeline()` in `src/routes/jobRoutes.ts` w
 ```
 html5_install        → scheme_builder (or monitor_can_snapshot if SKIP_SB)
 html5_uninstall      → save_snapshot
-html5_maint_no_swap  → monitor_can_snapshot
+html5_maint_no_swap  → (no-op) — frontend auto-avança via _wantsCan:
+  [Sim] frontend→ POST /start-can → monitor_can_snapshot → waiting_approval → approve-can → save_snapshot
+  [Não] frontend→ POST /complete-maint → (SB silencioso em background) → tela finalização
 html5_maint_with_swap→ scheme_builder (or monitor_can_snapshot if SKIP_SB)
 scheme_builder       → monitor_can_snapshot
-monitor_can_snapshot → waiting_approval (INSTALL/MAINT_WITH_SWAP) or save_snapshot
-  [after approve-can]→ gs_calibration → save_snapshot
+monitor_can_snapshot → waiting_approval (INSTALL/MAINT_WITH_SWAP/MAINT_NO_SWAP) or save_snapshot (UNINSTALL)
+  [after approve-can]→ gs_calibration → save_snapshot  (INSTALL/MAINT_WITH_SWAP)
+  [after approve-can]→ save_snapshot                   (MAINT_NO_SWAP — sem GS)
 save_snapshot        → end
 ```
 
@@ -139,7 +142,6 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 ### 🟡 Backlog
 
 - **Verificação do fluxo completo pós-instalação**: acompanhar se CAN está coletando parâmetros e se exportação para SharePoint está correta para todas as instalações recentes (ex: TAW0D75 em waiting_approval, 9BSG6X400T4123745 snapshot enviado). Usuário fará o acompanhamento manualmente.
-- **Manutenção sem troca — fluxo não funciona**: ao cadastrar manutenção sem troca, deve perguntar "Deseja testar CAN?". **Não** → pula HTML5, pula CAN, vai direto para tela de finalização + envia SB silencioso. **Sim** → pula HTML5, vai para CAN e segue processo normal (approve-can → GS → save_snapshot). Em ambos os casos o `vehicle_id` deve vir do resolve da placa (não do payload direto).
 - **Botão "Reprocessar HTML5" não está funcionando**: endpoint implementado e testado via curl, mas o botão no app não surte efeito — investigar se o problema é no frontend (estado da UI, `installation_id` incorreto) ou se o job não está sendo repegado pelo worker após o reset.
 - **Melhorias no painel admin (admin.html) — gestão de jobs**: (1) Corrigir exibição de jobs ativos: atualmente só mostra 1 instalação ativa mesmo com múltiplas em paralelo — investigar filtro/query em `/api/admin/jobs`; (2) Botão Retry (↺) em jobs com status `error` — endpoint `POST /api/jobs/:id/retry` já existe; (3) Botão Encerrar (✕) em qualquer job independente do status, não só os ativos; (4) Remover link do painel admin do menu lateral do `app.html` e reposicionar — sugestão: ícone discreto no rodapé do app (ex: engrenagem ⚙ canto inferior direito) visível apenas para usuários admin.
 
@@ -150,6 +152,7 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 - Fix SB av=1 sem process_id: quando `associate call_num=1` retorna `av=1` (scheme já associado de tentativa anterior) e `get_vcls_action_review_opr` não devolve `process_id`, fecha WS e retorna como ok — avança pipeline para CAN sem falhar com "process_id nao retornado"
 - Upload de fotos para SharePoint: `POST /api/photos/upload` (multer memoryStorage 15MB) → `sharepointPhotoUploader.ts` → Graph API drive PUT. Estrutura `Fotos Instalações/{cliente}/{placa}/TipoN.ext`. Modal no app com 7 tipos (Cabeamento, Local, Veículo, Equipamento, Placa, Chassi, Documento), upload imediato ao selecionar, feedback por foto, reset no `doReset()`
 - Endpoint genérico `POST /api/jobs/:id/retry` em `jobRoutes.ts` — reseta qualquer job `error` ou `processing` → `pending`; usado para reprocessar SB/CAN/etc. sem intervenção manual
+- Fix MAINT_NO_SWAP (fluxo completo refeito): modal "Deseja testar CAN?" exibido antes da criação do job. "Sim" → job criado com `vehicle_id` no payload (worker completa instantaneamente) → poll auto-dispara `start-can` → fase CAN → `waiting_approval` → Validar CAN → `save_snapshot`. "Não" → poll auto-dispara `complete-maint` → tela de finalização imediata. `state._wantsCan` + `state._maintAutoTriggered` controlam a auto-progressão sem cliques intermediários. Pipeline `html5_maint_no_swap` não cria mais `monitor_can_snapshot` automaticamente. `monitor_can_snapshot` para MAINT_NO_SWAP agora vai para `waiting_approval` (igual INSTALL). Novo endpoint `POST /api/installations/:id/start-can`. Fix URL `complete-maint` (era `/:jobId/actions/complete-maint`). Fix guard que rejeitava status `completed` no `complete-maint`. `maintNoSwapWorker` expõe `vehicle_id` no nível raiz do result. `canApprove` removeu exclusão de MAINT_NO_SWAP.
 - Fix login `index.html`: `r.json()` substituído por `r.text()` + `JSON.parse()` com fallback — evita crash `Unexpected token '<'` quando backend ou proxy retorna HTML em vez de JSON
 - Resiliência a latência Traffilog: `HTTP_TIMEOUT_MS=60000` no `.env`; postcheck (`mwsPostcheck`) timeout por AbortError agora é não-fatal no installWorker — continua com `dial=saveFields.DIAL_NUMBER` em vez de falhar o job
 - Botão "Reprocessar HTML5" / "Reenviar cadastro": endpoint `POST /api/installations/:id/retry-html5` implementado em `installationsRoutes.ts` — reseta job HTML5 (`error` ou `processing`) para `pending`, worker reprocessa automaticamente no próximo poll (~4s)

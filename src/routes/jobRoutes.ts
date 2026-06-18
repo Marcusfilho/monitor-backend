@@ -56,11 +56,7 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
       break;
 
     case "html5_maint_no_swap":
-      // monitor_skip=1 já está no payload (definido pelo worker)
-      createJob("monitor_can_snapshot", {
-        ...job.payload, ...result, plate, _from: job.id,
-        installation_token: randomUUID(),
-      });
+      // vehicle_id resolvido — aguarda decisão do técnico via barMaint (Testar CAN / Confirmar sem CAN)
       break;
 
     case "html5_maint_with_swap": {
@@ -88,16 +84,17 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
     // GS_PIPELINE_V1: CAN decide se enfileira gs_calibration ou save_snapshot
     case "monitor_can_snapshot": {
       const service = String(job.payload?.service ?? job.payload?.flow ?? "").toUpperCase();
-      const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
+      const needsGs  = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);
+      // MAINT_NO_SWAP não tem GS mas aguarda aprovação manual (técnico vê os dados e valida)
+      const needsApproval = needsGs || service === "MAINT_NO_SWAP";
 
-      // INSTALL e MAINT_WITH_SWAP aguardam aprovação manual do técnico (approve-can)
-      if (needsGs) {
+      if (needsApproval) {
         updateJob(job.id, { status: "waiting_approval" as any });
-        console.log(`[pipeline] monitor_can_snapshot → waiting_approval plate=${plate}`);
+        console.log(`[pipeline] monitor_can_snapshot → waiting_approval plate=${plate} service=${service}`);
         break;
       }
 
-      // Serviços sem GS (UNINSTALL, MAINT_NO_SWAP) → save_snapshot direto
+      // UNINSTALL → save_snapshot direto
       createJob("save_snapshot", { ...job.payload, ...result, plate, _from: job.id });
       break;
     }

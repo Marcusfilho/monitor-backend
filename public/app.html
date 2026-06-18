@@ -514,7 +514,8 @@
     <button id="btnRefresh" class="btn-secondary" disabled style="flex:0 0 auto;padding:12px 18px">Atualizar CAN</button>
   </div>
   <div class="inner hidden" id="barMaint">
-    <button id="btnCompleteMaint" style="flex:1;background:#16a34a">Confirmar manutenção sem troca</button>
+    <button id="btnTestCan" class="btn-secondary" style="flex:0 0 auto;padding:12px 18px">Testar CAN</button>
+    <button id="btnCompleteMaint" style="flex:1;background:#16a34a">Confirmar manutenção</button>
   </div>
 </div>
 
@@ -555,6 +556,7 @@ const state={
   inst:null,lastSnapshot:null,pollTimer:null,pollMs:5000,
   debug:false,technician:null,_html5Start:null,
   _serialInUse:false,_serialCheckPending:false,
+  _wantsCan:null,_maintAutoTriggered:false,
 };
 
 // ─── toast ───────────────────────────────────────────────────────────────────
@@ -595,7 +597,12 @@ async function api(path,{method="GET",json=null,headers={}}={}){
   if(!token){dot.style.background="var(--bad)";txt.textContent="sem sessão";return}
   api("/api/auth/session?token="+encodeURIComponent(token)).then(r=>{
     if(r.ok&&r.data?.ok){
-      dot.style.background="var(--good)";txt.textContent="sessão ativa";
+      if(r.data.html5_ok===false){
+        dot.style.background="var(--warn)";txt.textContent="HTML5 reconectando…";
+        setTimeout(initSession,6000);
+      }else{
+        dot.style.background="var(--good)";txt.textContent="sessão ativa";
+      }
     }else{
       dot.style.background="var(--bad)";txt.textContent="sessão expirada";
       sessionStorage.clear();
@@ -857,27 +864,44 @@ async function _doLookup(plate){
     const r=await api("/api/installations/vhcls-lookup?plate="+encodeURIComponent(plate),{
       headers:token?{"X-Session-Token":token}:{}
     });
+    const svc=$("service").value;
+    const isInstall=svc==="INSTALL";
     if(r.ok&&r.data?.ok){
-      dot.textContent="✓";dot.style.color="var(--good)";
       if(r.data.vehicle_id)state._vehicleId=r.data.vehicle_id;
       state._innerIdFromLookup=r.data.inner_id||null;
       state._clientIdFromLookup=r.data.client_id||null;
       state._clientDescrFromLookup=r.data.client_descr||null;
-      // MAINT_WITH_SWAP / UNINSTALL — exibe serial atual para confirmação visual
-      const svc=$("service").value;
-      if((svc==="MAINT_WITH_SWAP"||svc==="UNINSTALL")&&state._innerIdFromLookup){
-        $("plateLookupTitle").textContent="Serial atual do veículo";
-        $("plateLookupDetail").textContent="Confirme: "+state._innerIdFromLookup;
-        $("plateLookupBanner").style.display="flex";
+      if(isInstall){
+        // INSTALL: placa já existe → alerta vermelho (veículo já cadastrado)
+        dot.textContent="✗";dot.style.color="var(--bad)";
+        $("plateLookupBanner").style.cssText="border-color:#5b2424;background:#2a1010;display:flex";
+        $("plateLookupTitle").style.color="#f87171";$("plateLookupDetail").style.color="#fca5a5";
+        $("plateLookupTitle").textContent="Placa já cadastrada no sistema";
+        $("plateLookupDetail").textContent="Este veículo já existe no HTML5. Confira se a placa está correta.";
       }else{
-        $("plateLookupBanner").style.display="none";
+        // Outros serviços: placa encontrada → verde (esperado)
+        dot.textContent="✓";dot.style.color="var(--good)";
+        if((svc==="MAINT_WITH_SWAP"||svc==="UNINSTALL")&&state._innerIdFromLookup){
+          $("plateLookupBanner").style.cssText="border-color:#1e3a5f;background:#091624;display:flex";
+          $("plateLookupTitle").style.color="#7dd3fc";$("plateLookupDetail").style.color="#93c5fd";
+          $("plateLookupTitle").textContent="Serial atual do veículo";
+          $("plateLookupDetail").textContent="Confirme: "+state._innerIdFromLookup;
+        }else{
+          $("plateLookupBanner").style.display="none";
+        }
       }
     }else{
-      // placa não encontrada — mostrar banner orientando serial
+      // placa não encontrada
+      if(isInstall){
+        // INSTALL: não encontrada → verde (instalação nova, caminho esperado)
+        dot.textContent="✓";dot.style.color="var(--good)";
+      }else{
+        dot.textContent="✗";dot.style.color="var(--warn)";
+      }
+      $("plateLookupBanner").style.cssText="border-color:#1e3a5f;background:#091624;display:flex";
+      $("plateLookupTitle").style.color="#7dd3fc";$("plateLookupDetail").style.color="#93c5fd";
       $("plateLookupTitle").textContent="Placa não encontrada no HTML5";
       $("plateLookupDetail").textContent="Use o serial do equipamento a instalar no campo abaixo.";
-      $("plateLookupBanner").style.display="flex";
-      dot.textContent="✗";dot.style.color="var(--warn)";
       state._vehicleId=null;
       state._innerIdFromLookup=null;
       state._clientIdFromLookup=null;
@@ -999,7 +1023,7 @@ function buildPayload(){
     if(!body.client_id&&state._clientIdFromLookup)body.client_id=Number(state._clientIdFromLookup);
     if(!body.client_descr&&state._clientDescrFromLookup)body.client_descr=state._clientDescrFromLookup;
   }
-  if(svc==="MAINT_NO_SWAP")body.serial="";
+  if(svc==="MAINT_NO_SWAP"){body.serial="";if(state._vehicleId)body.vehicle_id=state._vehicleId;}
   return body;
 }
 function validatePayload(p){
@@ -1049,9 +1073,9 @@ $("btnReset").addEventListener("click",()=>{
   }else{doReset()}
 });
 function doReset(){
-  stopPoll();saveLs("","");state.inst=null;state.lastSnapshot=null;state._html5Start=null;
+  stopPoll();saveLs("","");state.inst=null;state.lastSnapshot=null;state._html5Start=null;state._wantsCan=null;state._maintAutoTriggered=false;
   _photoState.counts={};_photoState.uploading=new Set();_photoUpdateFlag();
-  $("btnCreate").disabled=false;$("btnApprove").disabled=true;$("btnRefresh").disabled=true;
+  $("btnCreate").disabled=false;$("btnApprove").disabled=true;$("btnRefresh").disabled=true;$("btnTestCan").disabled=false;$("btnCompleteMaint").disabled=false;
   $("plate_real").value="";$("fleet").value="";$("serial").value="";
   $("comment").value="";$("extraCor").value="";$("extraChassi").value="";$("extraLocal").value="";
   $("extraAno").selectedIndex=0;
@@ -1067,10 +1091,7 @@ function doReset(){
 }
 
 // ─── criar job ────────────────────────────────────────────────────────────────
-$("btnCreate").addEventListener("click",async()=>{
-  const p=buildPayload();
-  const errs=validatePayload(p);
-  if(errs.length){showAlert("Dados incompletos",errs.join("\n"));return}
+async function _doCreateJob(p){
   $("btnCreate").disabled=true;setSubline("Criando...");
   try{
     const token=sessionStorage.getItem("html5_session_token")||"";
@@ -1083,12 +1104,40 @@ $("btnCreate").addEventListener("click",async()=>{
     saveLs(id,tok);
     $("cardForm").classList.add("hidden");
     $("cardCan").classList.remove("hidden");
-    if(p.service==="MAINT_NO_SWAP")showBarMaint();else showBarCan();
+    if(p.service==="MAINT_NO_SWAP")setSubline("Aguardando...");else showBarCan();
     startPoll(id,tok);
   }catch(e){
     showToast(e.message||"Erro desconhecido","bad");
     $("btnCreate").disabled=false;setSubline("Pronto");
+    state._wantsCan=null;state._maintAutoTriggered=false;
   }
+}
+
+$("btnCreate").addEventListener("click",()=>{
+  const p=buildPayload();
+  const errs=validatePayload(p);
+  if(errs.length){showAlert("Dados incompletos",errs.join("\n"));return}
+  if(p.service==="MAINT_NO_SWAP"){
+    $("confirmTitle").textContent="Manutenção sem troca";
+    $("confirmMsg").textContent="Deseja testar a CAN?";
+    $("confirmOk").textContent="Sim, testar CAN";
+    $("confirmCancel").textContent="Não, confirmar";$("confirmCancel").style.display="";
+    $("confirmModal").classList.add("open");
+    $("confirmOk").onclick=()=>{
+      $("confirmModal").classList.remove("open");
+      $("confirmOk").textContent="Sim";$("confirmCancel").textContent="Não";
+      state._wantsCan=true;state._maintAutoTriggered=false;
+      _doCreateJob(p);
+    };
+    $("confirmCancel").onclick=()=>{
+      $("confirmModal").classList.remove("open");
+      $("confirmOk").textContent="Sim";$("confirmCancel").textContent="Não";
+      state._wantsCan=false;state._maintAutoTriggered=false;
+      _doCreateJob(p);
+    };
+    return;
+  }
+  _doCreateJob(p);
 });
 
 // ─── VALIDAR CAN ──────────────────────────────────────────────────────────────
@@ -1158,23 +1207,38 @@ $("btnRetryHtml5Slow").addEventListener("click",retryHtml5);
 $("btnNewFromCompletion").addEventListener("click",doReset);
 
 // ─── MAINT_NO_SWAP: confirmar manutenção sem troca ───────────────────────────
-$("btnCompleteMaint").addEventListener("click",()=>{
+$("btnCompleteMaint").addEventListener("click",async()=>{
   const inst=state.inst;
   const id=inst?.installation_id||inst?.id||"";
-  const tok=inst?.installation_token||inst?.token||"";
-  if(!id||!tok){showToast("Sem instalação ativa","bad");return}
-  const plate=inst?.plate_real||inst?.plateReal||"—";
-  confirmAction("Confirmar manutenção?",`Confirma conclusão da manutenção sem troca para ${plate}?`,async()=>{
-    $("btnCompleteMaint").disabled=true;setSubline("Concluindo manutenção...");
-    try{
-      const token=sessionStorage.getItem("html5_session_token")||"";
-      const r=await api(`/api/installations/${id}/complete-maint`,{method:"POST",
-        json:{installation_token:tok},
-        headers:token?{"X-Session-Token":token}:{}});
-      if(!r.ok)throw new Error(r.data?.error||"Falha ao concluir");
-      showToast("Manutenção concluída!","good");startPoll(id,tok);
-    }catch(e){showToast(e.message||"Erro","bad");$("btnCompleteMaint").disabled=false;setSubline("")}
-  });
+  if(!id){showToast("Sem instalação ativa","bad");return}
+  $("btnCompleteMaint").disabled=true;setSubline("Concluindo manutenção...");
+  try{
+    const token=sessionStorage.getItem("html5_session_token")||"";
+    const r=await api(`/api/installations/${id}/complete-maint`,{method:"POST",
+      json:{},headers:token?{"X-Session-Token":token}:{}});
+    if(!r.ok)throw new Error(r.data?.error||"Falha ao concluir");
+    showToast("Manutenção concluída!","good");startPoll(id,"");
+  }catch(e){showToast(e.message||"Erro","bad");$("btnCompleteMaint").disabled=false;setSubline("")}
+});
+
+// ─── MAINT_NO_SWAP: iniciar CAN ──────────────────────────────────────────────
+$("btnTestCan").addEventListener("click",async()=>{
+  const inst=state.inst;
+  const id=inst?.installation_id||inst?.id||"";
+  if(!id){showToast("Sem instalação ativa","bad");return}
+  $("btnTestCan").disabled=true;setSubline("Iniciando CAN...");
+  try{
+    const token=sessionStorage.getItem("html5_session_token")||"";
+    const r=await api(`/api/installations/${id}/start-can`,{method:"POST",
+      json:{},headers:token?{"X-Session-Token":token}:{}});
+    if(!r.ok)throw new Error(r.data?.error||"Falha ao iniciar CAN");
+    showToast("CAN iniciado","good");
+    showBarCan();
+    fetchInst(id,"");
+  }catch(e){
+    showToast(e.message||"Erro","bad");
+    $("btnTestCan").disabled=false;setSubline("");
+  }
 });
 
 // ─── confirm modal ───────────────────────────────────────────────────────────
@@ -1467,7 +1531,7 @@ function renderAll(inst){
   const status=inst?.status||"";
   const isMns=String(inst?.payload?.service||inst?.service||"").toUpperCase()==="MAINT_NO_SWAP";
   const rawSt=String(status||"").toUpperCase();
-  const st=(isMns&&rawSt==="HTML5_DONE")?"CAN_RUNNING":rawSt;
+  const st=rawSt;
 
   setSubline(statusToLabel(st));
 
@@ -1492,22 +1556,58 @@ function renderAll(inst){
   // erro
   const err=extractLastError(inst);
   const isErr=!!(err&&(st.includes("ERROR")));
+  if(isErr&&st.includes("HTML5_ERROR")){
+    stopPoll();saveLs("","");state.inst=null;
+    $("cardCan").classList.add("hidden");$("cardForm").classList.remove("hidden");
+    showBarForm();setSubline("Pronto");
+    showAlert(err.title||"Erro no cadastro HTML5",err.message||"Falha no cadastro");
+    return;
+  }
   const errRow=$("errRow");
   if(isErr){errRow.classList.add("show");$("errTitle").textContent=err.title||"ERRO";$("errMsg").textContent=" "+(err.message||"");const canRetry=st.includes("HTML5_ERROR");$("btnRetryHtml5").classList.toggle("hidden",!canRetry)}else{errRow.classList.remove("show")}
 
   // botões — decidir qual barra mostrar
   const id=inst?.installation_id||inst?.id||"",tok=inst?.installation_token||inst?.token||"";
-  const canApprove=!!(id&&tok)&&(st==="SB_DONE"||st.includes("WAITING")||(st.includes("CAN")&&!isMns)||st.includes("GS")); // FIX_APPROVE_AFTER_SB_V1
+  const canApprove=!!(id&&tok)&&(st==="SB_DONE"||st.includes("WAITING")||st.includes("CAN")||st.includes("GS"));
   $("btnApprove").disabled=!canApprove;
   const canRefresh=!!(id&&tok)&&(st==="SB_DONE"||st.includes("CAN")||st.includes("WAITING_REBOOT")||st.includes("GS"))&&!(st.includes("CAN_RUNNING")||st.includes("SB_RUNNING"));
   $("btnRefresh").disabled=!canRefresh;
 
-  // MAINT_NO_SWAP em HTML5_DONE → mostra barra de confirmação
+  // MAINT_NO_SWAP em HTML5_DONE → auto-avança baseado na escolha do modal
   const rawStatus=String(inst?.status||"").toUpperCase();
   if(isMns&&rawStatus==="HTML5_DONE"){
     $("cardForm").classList.add("hidden");$("cardCan").classList.remove("hidden");
-    $("btnCompleteMaint").disabled=false;
-    showBarMaint();
+    if(state._wantsCan!==null&&!state._maintAutoTriggered){
+      state._maintAutoTriggered=true;
+      const token=sessionStorage.getItem("html5_session_token")||"";
+      if(state._wantsCan){
+        // Sim → inicia CAN automaticamente
+        api(`/api/installations/${id}/start-can`,{method:"POST",json:{},headers:token?{"X-Session-Token":token}:{}})
+          .then(r=>{
+            if(r.ok){showBarCan();fetchInst(id,"");}
+            else{showToast(r.data?.error||"Falha ao iniciar CAN","bad");state._maintAutoTriggered=false;}
+          }).catch(()=>{state._maintAutoTriggered=false;});
+      }else{
+        // Não → confirma manutenção automaticamente
+        api(`/api/installations/${id}/complete-maint`,{method:"POST",json:{},headers:token?{"X-Session-Token":token}:{}})
+          .then(r=>{
+            if(r.ok){
+              const plate=inst?.payload?.plate_real||inst?.payload?.plate||"—";
+              $("completedPlate").textContent=plate;
+              $("completedSerial").textContent="Manutenção sem troca";
+              $("completedTitle").textContent="Manutenção realizada!";
+              $("completedIcon").textContent="🔧";
+              $("btnNewFromCompletion").textContent="+ Nova operação";
+              $("cardCan").classList.add("hidden");$("cardCompleted").classList.remove("hidden");
+              hideBar();stopPoll();
+            }else{showToast(r.data?.error||"Falha ao confirmar","bad");state._maintAutoTriggered=false;}
+          }).catch(()=>{state._maintAutoTriggered=false;});
+      }
+    }else if(state._wantsCan===null){
+      // Fallback (reload de página): mostra barMaint para decisão manual
+      $("btnCompleteMaint").disabled=false;$("btnTestCan").disabled=false;
+      showBarMaint();
+    }
   }else if(st.includes("CAN")||st.includes("SB_")||st.includes("GS")||st.includes("HTML5")||st.includes("WAITING")){
     $("cardForm").classList.add("hidden");$("cardCan").classList.remove("hidden");
     showBarCan();
