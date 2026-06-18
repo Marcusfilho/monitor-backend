@@ -122,3 +122,7 @@ Todos seguem: poll loop → `pollNextJob()` → `processJob()` → `completeJob(
 ## Anotações rápidas
 
 Quando eu disser "anota no backlog", "melhoria futura" ou similar: adicionar em 🟡 Backlog e confirmar. Será commitado no próximo `/marco`.
+
+## Encerramento de sessão
+
+Quando eu disser "fecha marco", "feche o marco", "fecha sessão" ou similar: invocar a skill `/marco` imediatamente, sem fazer perguntas.
