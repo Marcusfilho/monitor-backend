@@ -7,7 +7,8 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import * as https from "https";
 import * as http from "http";
-import { saveJar, configFromEnv } from "../core/html5Session";
+import * as fs from "fs";
+import { saveJar, configFromEnv, readJarCookie } from "../core/html5Session";
 
 const router = Router();
 
@@ -392,7 +393,15 @@ router.get("/session", (req, res) => {
     return res.status(401).json({ ok: false, reason: "expired_or_invalid" });
   }
 
-  return res.json({ ok: true, username: session.username });
+  // verifica se o jar HTML5 tem cookies de sessão ativos
+  let html5_ok = false;
+  try {
+    const cfg = configFromEnv();
+    const ck = readJarCookie(cfg.cookieJarPath);
+    html5_ok = ck.includes("TFL_SESSION=") && ck.includes("ASP.NET_SessionId=");
+  } catch { /* não bloqueia */ }
+
+  return res.json({ ok: true, username: session.username, html5_ok });
 });
 
 export default router;

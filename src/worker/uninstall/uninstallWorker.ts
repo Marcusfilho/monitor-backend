@@ -294,7 +294,8 @@ async function saveCmdt(
   newVehicleId  : number,
   serialOld     : string,
   clientId      : string,
-  payload       : any
+  payload       : any,
+  origFields    : Record<string, string> = {}
 ): Promise<{ ok: boolean; error?: string }> {
   // Carrega baseline do novo vehicle_id
   let baseline;
@@ -315,6 +316,30 @@ async function saveCmdt(
   // campos obrigatórios que o vehicle novo (vazio) não tem preenchidos
   baseline.fields.MILAGE_SOURCE_ID  = "5067";
   baseline.fields.WARRANTY_PERIOD_ID = "1";
+
+  // herda FIELD_IDS/ASSET_TYPE/etc. do veículo original (se capturado com sucesso)
+  if (origFields.FIELD_IDS)        baseline.fields.FIELD_IDS        = origFields.FIELD_IDS;
+  if (origFields.ASSET_TYPE)       baseline.fields.ASSET_TYPE       = origFields.ASSET_TYPE;
+  if (origFields.UNIT_TYPE_ID)     baseline.fields.UNIT_TYPE_ID     = origFields.UNIT_TYPE_ID;
+  if (origFields.FIRMWARE_TYPE_ID) baseline.fields.FIRMWARE_TYPE_ID = origFields.FIRMWARE_TYPE_ID;
+  if (origFields.GROUP_ID)         baseline.fields.GROUP_ID         = origFields.GROUP_ID;
+
+  // SEMPRE reconstrói FIELD_VALUE com o serial antigo — usa FIELD_IDS de origFields
+  // ou do baseline do novo veículo (o cliente já provisiona FIELD_IDS no veículo de estoque)
+  const fids = origFields.FIELD_IDS || baseline.fields.FIELD_IDS || "";
+  if (fids) {
+    const ids = fids.split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (ids.length) {
+      baseline.fields.FIELD_IDS   = fids;
+      baseline.fields.FIELD_VALUE = ids.map(id => `${id}:${serialOld}`).join(",");
+    }
+  }
+
+  console.log(
+    `[uninstall-rw] job=${jobId} CMDT fields:` +
+    ` FIELD_IDS=${baseline.fields.FIELD_IDS||"?"} FIELD_VALUE=${baseline.fields.FIELD_VALUE||"?"}` +
+    ` ASSET_TYPE=${baseline.fields.ASSET_TYPE||"?"}`
+  );
 
   const saveResult = await mwsSave(
     cfg,
@@ -380,7 +405,21 @@ async function processJob(job: any): Promise<void> {
   const clientId   = String(payload.client_id   || payload.CLIENT_ID   || "").trim();
   const clientDescr = String(payload.client_descr || payload.CLIENT_DESCR || "").trim();
 
-  // 2. DEACTIVATE_VEHICLE_HIST
+  // 2a. Carrega baseline do veículo original para herdar FIELD_IDS/FIELD_VALUE/ASSET_TYPE
+  //     Deve ocorrer ANTES do DEACTIVATE — após a desativação os dados podem não estar acessíveis
+  const origFields: Record<string, string> = {};
+  try {
+    const origBaseline = await mwsLoadBaseline(cfg, vehicleId, `${jobId}_orig`);
+    for (const k of ["FIELD_IDS","FIELD_VALUE","ASSET_TYPE","UNIT_TYPE_ID","FIRMWARE_TYPE_ID","GROUP_ID"]) {
+      const v = String(origBaseline.fields[k] || "").trim();
+      if (v) origFields[k] = v;
+    }
+    console.log(`[uninstall-rw] job=${jobId} origFields: ASSET_TYPE=${origFields.ASSET_TYPE||"?"} FIELD_IDS=${origFields.FIELD_IDS||"?"}`);
+  } catch (e: any) {
+    console.log(`[uninstall-rw] job=${jobId} baseline orig load failed (non-blocking): ${e?.message || e}`);
+  }
+
+  // 2b. DEACTIVATE_VEHICLE_HIST
   let deResult;
   try {
     deResult = await deactivate(jobId, vehicleId, plate, payload);
@@ -451,7 +490,7 @@ async function processJob(job: any): Promise<void> {
   }
 
   // 5. SAVE_VHCL_ACTIVATION_NEW — serial volta para estoque com placa CMDT
-  const cmdtResult = await saveCmdt(jobId, newVehicleId, serialOld, clientId, payload);
+  const cmdtResult = await saveCmdt(jobId, newVehicleId, serialOld, clientId, payload, origFields);
   if (!cmdtResult.ok) {
     await failJob(jobId, "save_cmdt_failed", {
       new_vehicle_id: newVehicleId,

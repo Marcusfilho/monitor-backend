@@ -21,7 +21,7 @@
 import fs from "fs";
 
 import { configFromEnv }                    from "../../core/html5Session";
-import { ensureVehicleId }                  from "../../core/vhclsService";
+import { ensureVehicleId, resolveByPlate }  from "../../core/vhclsService";
 import { checkAndFreeSerial }               from "../../core/cmdtService";
 import { mwsLoadBaseline, mwsSave, mwsPostcheck, mwsExtractActivationAttrs } from "../../core/mwsService";
 import { executeChangeCompany }             from "../../core/changeCompanyService";
@@ -160,27 +160,27 @@ async function resolveVehicleIdWithPath(
   }
 
   // -- Tentativa 2: por serial (Caminho B) --
+  // B-INNER: CMDT com INNER_ID=serial (plate="CMDT") — preferencial
+  // B-LICENSE: CMDT com plate=serial e INNER_ID vazio — fallback
   if (serial) {
-    const payloadBySerial = { ...payload, service: "INSTALL" };
-    // força busca por serial
-    payloadBySerial.plate   = serial;  // ensureVehicleId usa plate como chave primária para INSTALL
-    payloadBySerial.license = serial;
-    payloadBySerial.lookup_license = serial;
+    const byInner = await resolveByPlate(cfg, serial, "PATH_B_INNER", jobId, true).catch(() => null);
+    const byLicense = !byInner?.vehicleId
+      ? await resolveByPlate(cfg, serial, "PATH_B_LICENSE", jobId, false).catch(() => null)
+      : null;
+    const match = byInner?.vehicleId ? byInner : byLicense;
+    const vid = match?.vehicleId ?? null;
 
-    const vid = await ensureVehicleId(cfg, { jobId, log: console.log }, payloadBySerial);
     if (vid) {
-      console.log(`[install-rw] job=${jobId} Caminho B: serial="${serial}" → vehicle_id=${vid}`);
+      const tag = byInner?.vehicleId ? "INNER_ID" : "LICENSE_NMBR";
+      console.log(`[install-rw] job=${jobId} Caminho B (${tag}): serial="${serial}" → vehicle_id=${vid} plate="${match?.licensePlate||"?"}"`);
 
-      // Verifica client_mismatch para CHANGE_COMPANY
-      // Lê CLIENT_ID do snapshot XML que resolveVehicleIdDirect salva em /tmp.
-      // Elimina dependência de client_id_found no payload do app.
-      let clientIdFound = Number(payload.client_id_found ?? payload.clientIdFound ?? 0);
+      // client_mismatch: CLIENT_ID da resposta VHCLS vs cliente do cadastro
+      let clientIdFound = match?.clientId ? Number(match.clientId) : 0;
       if (!clientIdFound) {
         try {
           const snapFiles = fs.readdirSync("/tmp")
             .filter((f: string) => f.startsWith(`vhcls_raw_${jobId}_`) && f.endsWith(".xml"))
-            .sort()
-            .reverse();
+            .sort().reverse();
           if (snapFiles.length) {
             const xml = fs.readFileSync(`/tmp/${snapFiles[0]}`, "utf8");
             const m   = xml.match(/CLIENT_ID="(\d+)"/i);
@@ -315,6 +315,21 @@ function buildInstallFields(payload: any): Record<string, string> {
     if (ss === "undefined" || ss === "null") fields[k] = "";
   }
 
+  // Reconstrói FIELD_VALUE com o serial quando baseline tem valores vazios (ex: "2:,6:")
+  // Traffilog rejeita custom fields com valores em branco
+  const fids = String(fields.FIELD_IDS || "");
+  const fval = String(fields.FIELD_VALUE || "");
+  if (fids && serial) {
+    const ids = fids.split(",").map((s: string) => s.trim()).filter(Boolean);
+    const allEmpty = !fval || ids.every(id => {
+      const part = fval.split(",").find(p => p.startsWith(`${id}:`));
+      return !part || part === `${id}:`;
+    });
+    if (allEmpty && ids.length) {
+      fields.FIELD_VALUE = ids.map(id => `${id}:${serial}`).join(",");
+    }
+  }
+
   return fields;
 }
 
@@ -377,32 +392,31 @@ async function processJob(job: any): Promise<void> {
   payload.VEHICLE_ID = vehicleId;
   payload.vehicleId  = vehicleId;
 
-  // 3. Verifica/libera serial CMDT
+  // 3+4. Verifica serial CMDT e carrega baseline em paralelo (independentes — ambos só precisam de vehicleId)
   const serial = String(payload.serial || payload.inner_id || payload.INNER_ID || "").trim();
-  if (serial) {
-    try {
-      const installerName = String(
-        payload.installer_name || payload.installer || payload.INSTALLER_NAME || "installer"
-      );
-      const cmdtResult = await checkAndFreeSerial(cfg, serial, jobId, installerName);
+  const installerName = String(payload.installer_name || payload.installer || payload.INSTALLER_NAME || "installer");
 
-      if (cmdtResult.freed) {
-        console.log(`[install-rw] job=${jobId} CMDT freed: serial=${serial} was in vid=${cmdtResult.vid_freed} plate="${cmdtResult.plate_freed}"`);
-        // re-resolve vehicle_id após liberação CMDT se ainda não temos
-        if (!vehicleId) {
-          const vid = await ensureVehicleId(cfg, { jobId, log: console.log }, payload).catch(() => null);
-          if (vid) vehicleId = vid;
-        }
-      } else if (cmdtResult.blocked) {
+  const [cmdtSettled, baselineSettled] = await Promise.allSettled([
+    serial ? checkAndFreeSerial(cfg, serial, jobId, installerName) : Promise.resolve(null),
+    mwsLoadBaseline(cfg, vehicleId, jobId),
+  ]);
+
+  // --- resultado CMDT ---
+  if (serial) {
+    if (cmdtSettled.status === "fulfilled" && cmdtSettled.value !== null) {
+      const cr = cmdtSettled.value;
+      if (cr.freed) {
+        console.log(`[install-rw] job=${jobId} CMDT freed: serial=${serial} was in vid=${cr.vid_freed} plate="${cr.plate_freed}"`);
+      } else if (cr.blocked) {
         await failJob(jobId, "serial_in_use", {
-          detail: `serial already linked to vehicle_id=${cmdtResult.vid_blocked} plate="${cmdtResult.plate_blocked}"`,
+          detail: `serial already linked to vehicle_id=${cr.vid_blocked} plate="${cr.plate_blocked}"`,
         });
         return;
-      } else if ("error" in cmdtResult && cmdtResult.error) {
-        console.log(`[install-rw] job=${jobId} CMDT check failed (non-blocking): ${cmdtResult.error}`);
+      } else if ("error" in cr && cr.error) {
+        console.log(`[install-rw] job=${jobId} CMDT check failed (non-blocking): ${cr.error}`);
       }
-    } catch (e: any) {
-      console.log(`[install-rw] job=${jobId} CMDT check exception (non-blocking): ${e?.message || e}`);
+    } else if (cmdtSettled.status === "rejected") {
+      console.log(`[install-rw] job=${jobId} CMDT check exception (non-blocking): ${(cmdtSettled as any).reason?.message || (cmdtSettled as any).reason}`);
     }
   }
 
@@ -414,10 +428,10 @@ async function processJob(job: any): Promise<void> {
     return;
   }
 
-  // 4. Carrega baseline
+  // --- resultado baseline ---
   let baselineRawText = "";
-  try {
-    const baseline = await mwsLoadBaseline(cfg, vehicleId, jobId);
+  if (baselineSettled.status === "fulfilled") {
+    const baseline = baselineSettled.value;
     baselineRawText = baseline.rawText;
 
     const idsNow = String(payload.FIELD_IDS || payload.fieldIds || "").trim();
@@ -432,13 +446,11 @@ async function processJob(job: any): Promise<void> {
     }
     console.log(`[install-rw] job=${jobId} baseline loaded keys=${Object.keys(baseline.fields).length}`);
 
-    // SKIP_SB_V1: verifica se SB pode ser pulado
-    // Condição: schemeId já cadastrado == schemeId do cliente && asset_type já cadastrado == asset_type do cadastro
-    const assignedSchemeId = String(baseline.fields.ASSIGNED_VEHICLE_SETTING_ID || "").trim();
+    // SKIP_SB_V1: schemeId cadastrado == schemeId do cliente && asset_type cadastrado == asset_type do cadastro
+    const assignedSchemeId  = String(baseline.fields.ASSIGNED_VEHICLE_SETTING_ID || "").trim();
     const assignedAssetType = String(baseline.fields.ASSET_TYPE || "").trim();
-    const targetSchemeId = getSelectedSchemeId(payload.client_id) ?? String(payload.vehicle_setting_id || payload.vehicleSettingId || "").trim();
-    const targetAssetType = String(payload.assetType ?? payload.asset_type ?? payload.ASSET_TYPE ?? "").trim();
-
+    const targetSchemeId    = getSelectedSchemeId(payload.client_id) ?? String(payload.vehicle_setting_id || payload.vehicleSettingId || "").trim();
+    const targetAssetType   = String(payload.assetType ?? payload.asset_type ?? payload.ASSET_TYPE ?? "").trim();
     const schemeMatch = !!(assignedSchemeId && targetSchemeId && assignedSchemeId === targetSchemeId);
     const assetMatch  = !!(assignedAssetType && targetAssetType && assignedAssetType === targetAssetType);
     const skipSb = schemeMatch && assetMatch;
@@ -451,8 +463,8 @@ async function processJob(job: any): Promise<void> {
     );
 
     if (skipSb) payload._skip_sb = true;
-  } catch (e: any) {
-    console.log(`[install-rw] job=${jobId} baseline load failed (non-blocking): ${e?.message || e}`);
+  } else {
+    console.log(`[install-rw] job=${jobId} baseline load failed (non-blocking): ${(baselineSettled as any).reason?.message || (baselineSettled as any).reason}`);
   }
 
   // 5. Constrói fields do SAVE
@@ -469,6 +481,7 @@ async function processJob(job: any): Promise<void> {
   );
 
   // 6. SAVE_VHCL_ACTIVATION_NEW
+  console.log(`[install-rw] PRE_SAVE job=${jobId} FIELD_IDS=${saveFields.FIELD_IDS||"?"} FIELD_VALUE=${saveFields.FIELD_VALUE||"?"} serial=${saveFields.DIAL_NUMBER||"?"}`);
   const fakeBaseline = { fields: saveFields, rawText: baselineRawText };
   const doSave = () => mwsSave(
     cfg, jobId, vehicleId,

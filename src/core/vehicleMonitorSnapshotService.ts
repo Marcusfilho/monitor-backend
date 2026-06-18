@@ -221,11 +221,22 @@ class TraffilogWsMux {
         return;
       }
 
+      // DEBUG: loga mensagens não-pending e não-refresh (vehicle_subscribe responses, pushes inesperados)
+      if (process.env.VM_WS_DEBUG === "1") {
+        const { appendFileSync } = require("fs") as typeof import("fs");
+        const snippet = { an: actionName, ds: props?.data_source, dataLen: Array.isArray(props?.data) ? props.data.length : "?", keys: Object.keys(props).join(","), raw: text.slice(0, 400) };
+        appendFileSync("/tmp/vm_ws_debug.log", JSON.stringify(snippet) + "\n");
+      }
+
       if (actionName === "refresh") {
         for (const h of this.refreshHandlers) {
           try { h(props); } catch {}
         }
+        return;
       }
+
+      // Mensagens com action_name diferente de "refresh" e não correlacionadas a pending
+      // são ignoradas por ora — VM_WS_DEBUG=1 captura o conteúdo para análise
     });
   }
 
@@ -304,6 +315,8 @@ export async function collectVehicleMonitorSnapshot(opts: {
   const waitAfterCmdMs      = opts.waitAfterCmdMs ?? Number(process.env.VM_WAIT_AFTER_CMD_MS      ?? 2_000);
   // Tempo de silêncio após último UNIT_PARAMETERS para encerrar (default 5s)
   const waitAfterLastParamMs = Number(process.env.VM_WAIT_AFTER_LAST_PARAM_MS ?? 5_000);
+  // Intervalo de resubscription quando ainda não chegou nenhum dado (default 30s)
+  const resubscribeIntervalMs = Number(process.env.VM_RESUBSCRIBE_INTERVAL_MS ?? 30_000);
 
   const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
 
@@ -336,39 +349,54 @@ export async function collectVehicleMonitorSnapshot(opts: {
   });
   const isConnectedRaw = redis?.data?.[0]?.is_connected;
   const isConnected    = isConnectedRaw == null ? null : Number(isConnectedRaw);
+  console.log(`[vm] vehicleId=${opts.vehicleId} is_connected=${isConnected ?? "null"}${isConnected === 0 ? " ⚠️ OFFLINE — dados podem demorar" : ""}`);
 
-  // ── 3. Module State (antes dos subscribes — garante dado no primeiro partial) ───────
-  let ms: any = null;
-  try {
-    ms = await mux.sendAction<any>("get_monitor_module_state", {
-      tag: "loading_screen",
-      filter: "",
-      vehicle_id: String(opts.vehicleId),
-      ...(header.client_id != null ? { client_id: String(header.client_id) } : {}),
-    });
-    console.log(`[vm-ms] OK data=${ms?.data?.length ?? "null"} av=${ms?.action_value ?? "?"} keys=${Object.keys(ms ?? {}).join(",")}`);
-    if ((ms?.data?.length ?? 0) === 0) console.log(`[vm-ms] raw=${JSON.stringify(ms)}`);
-  } catch (msErr: any) {
-    console.log(`[vm-ms] ERRO: ${msErr?.message || String(msErr)}`);
-  }
-  const moduleState: VmModuleStateRow[] = (ms?.data ?? []).map((r: any) => ({
-    id:               String(r?.id ?? ""),
-    module:           String(r?.module_descr ?? ""),
-    sub:              String(r?.sub_module_descr ?? ""),
-    last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-    active:           asBool01(r?.active),
-    was_ok:           asBool01(r?.was_ok),
-    ok:               asBool01(r?.ok),
-    error:            asBool01(r?.error),
-    error_descr:      r?.error_descr != null ? String(r.error_descr) : null,
-  }));
-  // ── 3. Subscribes ─────────────────────────────────────────────────────────
-  // FIX: subscribe/unsubscribe são fire-and-forget — o Traffilog não retorna
-  // mtkn correlacionável nessas respostas. Sem delays, igual ao Monitor.
+  // ── 3. Subscribes — ANTES do module state (servidor precisa de subscription ativa) ───
   mux.fireAndForget("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" });
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_MESSAGES" });
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
+
+  // ── 4. Module State (após subscribes + 500ms para servidor registrar) ─────
+  await sleep(500);
+  let ms: any = null;
+  try {
+    // Tentativa A: com client_id
+    const [msA, msB] = await Promise.all([
+      mux.sendAction<any>("get_monitor_module_state", {
+        tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
+        ...(header.client_id != null ? { client_id: String(header.client_id) } : {}),
+      }),
+      // Tentativa B: sem client_id (fallback — DB pode não filtrar por cliente)
+      mux.sendAction<any>("get_monitor_module_state", {
+        tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
+      }),
+    ]);
+    const lenA = msA?.data?.length ?? 0;
+    const lenB = msB?.data?.length ?? 0;
+    console.log(`[vm-ms] A(com client_id)=data:${lenA} B(sem client_id)=data:${lenB} av=${msA?.action_value}`);
+    ms = lenA > 0 ? msA : (lenB > 0 ? msB : msA);
+    if ((ms?.data?.length ?? 0) === 0) console.log(`[vm-ms] raw=${JSON.stringify(ms)}`);
+  } catch (msErr: any) {
+    console.log(`[vm-ms] ERRO: ${msErr?.message || String(msErr)}`);
+  }
+
+  function parseMsData(data: any[]): VmModuleStateRow[] {
+    return data.map((r: any) => ({
+      id:               String(r?.id ?? ""),
+      module:           String(r?.module_descr ?? ""),
+      sub:              String(r?.sub_module_descr ?? ""),
+      last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+      active:           asBool01(r?.active),
+      was_ok:           asBool01(r?.was_ok),
+      ok:               asBool01(r?.ok),
+      error:            asBool01(r?.error),
+      error_descr:      r?.error_descr != null ? String(r.error_descr) : null,
+    }));
+  }
+
+  const moduleState: VmModuleStateRow[] = parseMsData(ms?.data ?? []);
+  let moduleStateRetried = false;
 
   // ── 4. opr + metadata ─────────────────────────────────────────────────────
   const opr = await mux.sendAction<any>("get_unit_parameters_opr", {
@@ -407,6 +435,12 @@ export async function collectVehicleMonitorSnapshot(opts: {
 
   const off = mux.onRefresh((props) => {
     const ds = String(props?.data_source ?? "");
+
+    // Log diagnóstico: data_source não tratado (inclui ds="" para capturar pushes inesperados)
+    if (ds !== "UNIT_PARAMETERS" && ds !== "UNIT_MESSAGES" && ds !== "unit_connection_status") {
+      const dlen = Array.isArray(props?.data) ? props.data.length : "?";
+      console.log(`[vm] vehicleId=${opts.vehicleId} refresh ds="${ds}" (não tratado) data_len=${dlen} an=${props?.action_name ?? "?"}`);
+    }
 
     if (ds === "UNIT_PARAMETERS") {
       unitParametersEvents++;
@@ -466,6 +500,23 @@ export async function collectVehicleMonitorSnapshot(opts: {
       // FIX: atualiza controle reativo
       lastParamAt       = Date.now();
       collectionStarted = true;
+
+      // Retry module state no primeiro evento, se ainda vazio após subscribe
+      if (unitParametersEvents === 1 && moduleState.length === 0 && !moduleStateRetried) {
+        moduleStateRetried = true;
+        mux.sendAction<any>("get_monitor_module_state", {
+          tag: "loading_screen",
+          filter: "",
+          vehicle_id: String(opts.vehicleId),
+          ...(header.client_id != null ? { client_id: String(header.client_id) } : {}),
+        }).then(msR => {
+          const rows = parseMsData(msR?.data ?? []);
+          if (rows.length > 0) {
+            console.log(`[vm-ms] retry OK data=${rows.length}`);
+            moduleState.splice(0, moduleState.length, ...rows);
+          }
+        }).catch(() => {});
+      }
 
       if (opts.onPartialParams) {
         try {
@@ -566,15 +617,32 @@ export async function collectVehicleMonitorSnapshot(opts: {
     // FIX_CAN_RETRY_V1: reenvio periódico a cada 5s enquanto faltam parâmetros alvo
     const RETRY_INTERVAL_MS = 5_000;
     const retryTimer = setInterval(() => {
-      if (!header.unit_key) return; // sem unit_key não há como reenviar
+      if (!header.unit_key) return;
       if (hasAllTargets()) return;
       fireQuickCommand().catch(() => {});
     }, RETRY_INTERVAL_MS);
+
+    // FIX_CAN_RESUBSCRIBE_V1: se nenhum UNIT_PARAMETERS chegou ainda, refaz subscribe completo
+    // Cobre o caso de dispositivo que voltou online após o subscribe inicial (ex: reboot pós-SB)
+    let resubCount = 0;
+    const resubTimer = setInterval(() => {
+      if (collectionStarted) return; // já chegaram dados — sem necessidade
+      resubCount++;
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
+      console.log(`[vm] vehicleId=${opts.vehicleId} resubscribe #${resubCount} em ${elapsed}s — sem UNIT_PARAMETERS até agora`);
+      mux.fireAndForget("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" });
+      mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_MESSAGES" });
+      mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
+      mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
+      if (header.unit_key) fireQuickCommand().catch(() => {});
+    }, resubscribeIntervalMs);
+
     function cleanup() {
       clearTimeout(hardDeadline);
       clearInterval(quietChecker);
       clearInterval(progressTimer);
       clearInterval(retryTimer);
+      clearInterval(resubTimer);
     }
   });
 

@@ -25,9 +25,7 @@ import { getTrafflogToken } from "../../core/traffilogAuth.js";
 const BASE      = (process.env.API_BASE_URL || "").replace(/\/$/, "");
 const KEY       = (process.env.WORKER_KEY   || "").trim();
 const WORKER_ID = process.env.WORKER_ID     || "gs-rw";
-const POLL_MS   = Number(process.env.POLL_INTERVAL_MS || "4000");
-const MAX_IDLE  = Number(process.env.GS_MAX_IDLE_MS   || "60000");
-const BACKOFF   = 1.6;
+const POLL_MS   = Number(process.env.POLL_INTERVAL_MS || "3000");
 
 const TRAFFILOG_API_BASE_URL = (
   process.env.TRAFFILOG_API_BASE_URL ||
@@ -355,20 +353,14 @@ async function processJob(job: any): Promise<void> {
 
 async function loop(): Promise<void> {
   console.log(`[gs-rw] iniciando poll BASE=${BASE} POLL_MS=${POLL_MS}`);
-  let pollMs = POLL_MS;
   while (true) {
     try {
       const job = await pollNextJob();
-      if (job) {
-        pollMs = POLL_MS;
-        await processJob(job);
-      } else {
-        pollMs = Math.min(MAX_IDLE, Math.round(pollMs * BACKOFF));
-      }
+      if (job) await processJob(job);
     } catch (err: any) {
       console.error("[gs-rw] poll erro:", err?.message || String(err));
     }
-    await new Promise(r => setTimeout(r, pollMs));
+    await new Promise(r => setTimeout(r, POLL_MS));
   }
 }
 

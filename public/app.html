@@ -553,7 +553,7 @@ function esc(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").
 
 // ─── state ───────────────────────────────────────────────────────────────────
 const state={
-  inst:null,lastSnapshot:null,pollTimer:null,pollMs:5000,
+  inst:null,lastSnapshot:null,pollTimer:null,pollMs:2000,
   debug:false,technician:null,_html5Start:null,
   _serialInUse:false,_serialCheckPending:false,
   _wantsCan:null,_maintAutoTriggered:false,
@@ -591,7 +591,7 @@ async function api(path,{method="GET",json=null,headers={}}={}){
 }
 
 // ─── session check ───────────────────────────────────────────────────────────
-(function initSession(){
+function checkSession(){
   const dot=$("sessionDot"),txt=$("sessionTxt");
   const token=sessionStorage.getItem("html5_session_token");
   if(!token){dot.style.background="var(--bad)";txt.textContent="sem sessão";return}
@@ -599,7 +599,7 @@ async function api(path,{method="GET",json=null,headers={}}={}){
     if(r.ok&&r.data?.ok){
       if(r.data.html5_ok===false){
         dot.style.background="var(--warn)";txt.textContent="HTML5 reconectando…";
-        setTimeout(initSession,6000);
+        setTimeout(checkSession,6000);
       }else{
         dot.style.background="var(--good)";txt.textContent="sessão ativa";
       }
@@ -608,8 +608,9 @@ async function api(path,{method="GET",json=null,headers={}}={}){
       sessionStorage.clear();
       setTimeout(()=>window.location.href="/index.html",1500);
     }
-  }).catch(()=>{dot.style.background="var(--bad)";txt.textContent="servidor offline";setTimeout(initSession,8000)});
-})();
+  }).catch(()=>{dot.style.background="var(--bad)";txt.textContent="servidor offline";setTimeout(checkSession,8000)});
+}
+checkSession();
 
 // ─── técnico ─────────────────────────────────────────────────────────────────
 (function loadTech(){
@@ -1088,6 +1089,7 @@ function doReset(){
   $("cardCan").classList.add("hidden");$("cardCompleted").classList.add("hidden");
   $("cardForm").classList.remove("hidden");
   showBarForm();setSubline("Pronto");
+  checkSession();
 }
 
 // ─── criar job ────────────────────────────────────────────────────────────────

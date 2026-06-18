@@ -38,6 +38,8 @@ const CONFIG_DIR       = path.resolve(__dirname, "../../config");
 const ASSET_TYPES_PATH = path.join(CONFIG_DIR, "asset_types_active.json");
 const SCHEMES_PATH                = path.join(CONFIG_DIR, "schemes_selection.json");
 const ASSET_TYPES_BY_CLIENT_PATH  = path.join(CONFIG_DIR, "asset_types_by_client.json");
+const PUBLIC_DIR                  = path.resolve(__dirname, "../../public");
+const ASSET_TYPES_BY_CLIENT_PUBLIC = path.join(PUBLIC_DIR, "asset_types_by_client.json");
 
 // catalog_vehicle_type.json — lista dos modelos que a Questar usa (já filtrado)
 const CATALOG_PATH = path.resolve(__dirname, "../../public/catalog_vehicle_type.json");
@@ -368,10 +370,10 @@ router.post("/asset-types/sync", async (_req, res) => {
     }
     console.log(`[admin] asset-types sync: ${usedPairs.size} pares distintos`);
 
-    // 5. Filtrar catálogo pelos pares em uso (mesma normalização)
-    const matched = catalog.filter(c =>
-      usedPairs.has(c.manufacturer.trim().toLowerCase() + "|" + c.model.trim().toLowerCase())
-    );
+    // 5. Filtrar catálogo pelos pares em uso (mesma normalização) e normalizar campos
+    const matched = catalog
+      .filter(c => usedPairs.has(c.manufacturer.trim().toLowerCase() + "|" + c.model.trim().toLowerCase()))
+      .map(c => ({ ...c, manufacturer: c.manufacturer.trim(), model: c.model.trim() }));
     const fallback: typeof matched = [];
     const finalList = [...matched, ...fallback].sort((a, b) => {
       const mfg = a.manufacturer.localeCompare(b.manufacturer);
@@ -621,7 +623,9 @@ async function syncAssetTypesByClient(): Promise<void> {
     by_client:     byClientSerialized,
   };
   ensureConfigDir();
-  fs.writeFileSync(ASSET_TYPES_BY_CLIENT_PATH, JSON.stringify(output, null, 2), "utf8");
+  const outputStr = JSON.stringify(output, null, 2);
+  fs.writeFileSync(ASSET_TYPES_BY_CLIENT_PATH, outputStr, "utf8");
+  fs.writeFileSync(ASSET_TYPES_BY_CLIENT_PUBLIC, outputStr, "utf8");
   console.log(`[admin] syncAssetTypesByClient — salvo: ${Object.keys(byClientSerialized).length} clientes em ${ASSET_TYPES_BY_CLIENT_PATH}`);
 }
 

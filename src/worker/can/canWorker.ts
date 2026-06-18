@@ -20,11 +20,17 @@ import {
 // ---------------------------------------------------------------------------
 // Configuração
 // ---------------------------------------------------------------------------
-const BASE     = (process.env.API_BASE_URL  || "").trim().replace(/\/+$/, "");
-const KEY      = (process.env.WORKER_KEY    || "").trim();
-const GUID     = (process.env.MONITOR_WS_GUID || "").trim();
-const WS_ORIGIN = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
-const POLL_MS  = Number(process.env.POLL_INTERVAL_MS || "5000");
+const BASE          = (process.env.API_BASE_URL  || "").trim().replace(/\/+$/, "");
+const KEY           = (process.env.WORKER_KEY    || "").trim();
+const GUID          = (process.env.MONITOR_WS_GUID || "").trim();
+const WS_ORIGIN     = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
+const POLL_MS       = Number(process.env.POLL_INTERVAL_MS || "5000");
+// Delay após SB antes de abrir WS: dá tempo ao equipamento de reconectar após aplicar o scheme
+const POST_SB_WARMUP_MS = Number(process.env.POST_SB_WARMUP_MS ?? "20000");
+// Tentativas de coleta quando não chega nenhum UNIT_PARAMETERS
+const CAN_MAX_ATTEMPTS  = Number(process.env.CAN_MAX_ATTEMPTS  ?? "3");
+// Janela de coleta por tentativa (ms) — menor que VM_WINDOW_MS padrão de 300s
+const CAN_ATTEMPT_WINDOW_MS = Number(process.env.CAN_ATTEMPT_WINDOW_MS ?? "120000");
 
 if (!BASE) throw new Error("[can-rw] API_BASE_URL não definido");
 if (!KEY)  throw new Error("[can-rw] WORKER_KEY não definido");
@@ -92,6 +98,16 @@ function openWs(token: string): WsLike {
   return ws as unknown as WsLike;
 }
 
+async function openWsAndWait(token: string): Promise<WsLike> {
+  const ws = openWs(token);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("[can-rw] WS open timeout 15s")), 15000);
+    (ws as any).once("open",  () => { clearTimeout(timer); resolve(); });
+    (ws as any).once("error", (e: any) => { clearTimeout(timer); invalidateTrafflogToken(); reject(e); });
+  });
+  return ws;
+}
+
 // ---------------------------------------------------------------------------
 // Processamento de job
 // ---------------------------------------------------------------------------
@@ -100,71 +116,108 @@ async function processJob(job: any): Promise<void> {
   const p         = job.payload ?? job;
   const vehicleId = Number(p.vehicle_id || p.vehicleId || 0);
   const clientId  = p.client_id  || p.clientId  || null;
+  const fromJob   = p._from; // presente quando dispatched pelo pipeline (ex: após SB)
 
-  console.log(`[can-rw] job=${jobId} vehicleId=${vehicleId}`);
+  console.log(`[can-rw] job=${jobId} vehicleId=${vehicleId} fromJob=${fromJob ?? "direct"}`);
 
   if (!vehicleId) {
     await failJob(jobId, "missing_vehicle_id");
     return;
   }
 
-  let sessionToken: string;
-  try {
-    sessionToken = await getTrafflogToken();
-  } catch (e: any) {
-    console.error(`[can-rw] job=${jobId} falha ao obter token: ${e?.message || e}`);
-    await failJob(jobId, "token_unavailable", e?.message);
-    return;
+  // Quando vem do pipeline (ex: após SB), o token cacheado foi usado pela sessão WS do SB.
+  // O Traffilog invalida esse token ao fechar a sessão → vehicle_subscribe retorna 406.
+  // Invalidar agora força novo login antes de abrir a sessão CAN.
+  if (fromJob) {
+    invalidateTrafflogToken();
+    console.log(`[can-rw] job=${jobId} fromJob — token SB invalidado, auth fresca para sessão CAN`);
   }
 
-  const ws = openWs(sessionToken);
+  // Warmup: aguarda o dispositivo reconectar após aplicar o scheme
+  if (fromJob && POST_SB_WARMUP_MS > 0) {
+    console.log(`[can-rw] job=${jobId} POST_SB_WARMUP ${POST_SB_WARMUP_MS}ms`);
+    await new Promise(r => setTimeout(r, POST_SB_WARMUP_MS));
+  }
 
-  // Aguarda WS abrir antes de passar para o service
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("[can-rw] WS open timeout 15s")), 15000);
-    (ws as any).once("open",  () => { clearTimeout(timer); resolve(); });
-    (ws as any).once("error", (e: any) => { clearTimeout(timer); invalidateTrafflogToken(); reject(e); });
-  });
-
-  try {
-    const snapshot = await collectVehicleMonitorSnapshot({
-      ws,
-      sessionToken,
-      vehicleId,
-      clientId,
-      onPartialParams: (params, counts, header, moduleState) => {
-        updateJob(jobId, {
-          result: {
-            ok: false,
-            partial: true,
-            snapshot: {
-              vehicleId,
-              header,
-              parameters:  params,
-              moduleState,
-              isConnected: null,
-              canSummary:  buildCanSummary(moduleState),
-              counts,
-            },
-          },
-        });
+  // Partial update helper
+  const onPartialParams = (params: any, counts: any, header: any, moduleState: any) => {
+    updateJob(jobId, {
+      result: {
+        ok: false,
+        partial: true,
+        snapshot: { vehicleId, header, parameters: params, moduleState,
+          isConnected: null, canSummary: buildCanSummary(moduleState), counts },
       },
     });
+  };
 
-    console.log(
-      `[can-rw] job=${jobId} OK params=${snapshot.parameters.length}` +
-      ` moduleState=${snapshot.moduleState.length}` +
-      ` can0_ok=${snapshot.canSummary.can0_ok}` +
-      ` can1_ok=${snapshot.canSummary.can1_ok}`
-    );
+  // Loop de tentativas: se não chegar nenhum UNIT_PARAMETERS, reabre WS com token fresco
+  let lastSnapshot: any = null;
 
-    await completeJob(jobId, { ok: true, snapshot });
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    console.error(`[can-rw] job=${jobId} FALHOU: ${msg}`);
-    await failJob(jobId, "can_flow_error", msg);
-  } finally {
-    try { (ws as any).terminate(); } catch {}
+  for (let attempt = 1; attempt <= CAN_MAX_ATTEMPTS; attempt++) {
+    let sessionToken: string;
+    try {
+      sessionToken = await getTrafflogToken();
+    } catch (e: any) {
+      console.error(`[can-rw] job=${jobId} tentativa ${attempt} falha ao obter token: ${e?.message || e}`);
+      await failJob(jobId, "token_unavailable", e?.message);
+      return;
+    }
+
+    let ws: WsLike | null = null;
+    try {
+      ws = await openWsAndWait(sessionToken);
+
+      console.log(`[can-rw] job=${jobId} tentativa ${attempt}/${CAN_MAX_ATTEMPTS} WS aberto`);
+
+      const snapshot = await collectVehicleMonitorSnapshot({
+        ws,
+        sessionToken,
+        vehicleId,
+        clientId,
+        windowMs: CAN_ATTEMPT_WINDOW_MS,
+        onPartialParams,
+      });
+
+      lastSnapshot = snapshot;
+      const events = snapshot.rawCounts.unitParametersEvents;
+
+      console.log(
+        `[can-rw] job=${jobId} tentativa ${attempt} concluída` +
+        ` params=${snapshot.parameters.length} events=${events}` +
+        ` can0_ok=${snapshot.canSummary.can0_ok} can1_ok=${snapshot.canSummary.can1_ok}`
+      );
+
+      if (events > 0 || attempt === CAN_MAX_ATTEMPTS) {
+        // Dados recebidos OU última tentativa — aceita o que temos
+        await completeJob(jobId, { ok: true, snapshot });
+        return;
+      }
+
+      // Sem dados — tenta de novo com token e WS novos
+      console.log(`[can-rw] job=${jobId} tentativa ${attempt} sem UNIT_PARAMETERS — invalidando token e reabrindo WS`);
+      invalidateTrafflogToken();
+      await new Promise(r => setTimeout(r, 10_000)); // 10s entre tentativas
+
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      console.error(`[can-rw] job=${jobId} tentativa ${attempt} FALHOU: ${msg}`);
+      if (attempt === CAN_MAX_ATTEMPTS) {
+        await failJob(jobId, "can_flow_error", msg);
+        return;
+      }
+      invalidateTrafflogToken();
+      await new Promise(r => setTimeout(r, 10_000));
+    } finally {
+      if (ws) { try { (ws as any).terminate(); } catch {} }
+    }
+  }
+
+  // Segurança: se saiu do loop sem retornar
+  if (lastSnapshot) {
+    await completeJob(jobId, { ok: true, snapshot: lastSnapshot });
+  } else {
+    await failJob(jobId, "can_no_data", "nenhuma tentativa retornou snapshot");
   }
 }
 

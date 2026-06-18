@@ -141,12 +141,18 @@ Required variables (see `worker_secrets.env` for names, `worker_secrets_rw.env` 
 
 ### 🟡 Backlog
 
+- **🔴 PRIORIDADE — Jobs "processing orphan" pós-restart**: quando o servidor reinicia, jobs em `processing` ficam presos pois o novo processo de worker só pega `pending`. Solução: no `jobStore` ou em um health-check periódico, resetar para `pending` qualquer job em `processing` há mais de N minutos sem atualização de `updatedAt` (sugestão: 10 min).
+- **SB: resiliência a session_token_unavailable**: quando `getTrafflogToken()` falha após 3 tentativas, SB agora reseta job para `pending` (auto-retry) em vez de `error` permanente. Monitorar se causa loop infinito em falhas persistentes — adicionar contador de retries no payload.
 - **Verificação do fluxo completo pós-instalação**: acompanhar se CAN está coletando parâmetros e se exportação para SharePoint está correta para todas as instalações recentes (ex: TAW0D75 em waiting_approval, 9BSG6X400T4123745 snapshot enviado). Usuário fará o acompanhamento manualmente.
 - **Botão "Reprocessar HTML5" não está funcionando**: endpoint implementado e testado via curl, mas o botão no app não surte efeito — investigar se o problema é no frontend (estado da UI, `installation_id` incorreto) ou se o job não está sendo repegado pelo worker após o reset.
 - **Melhorias no painel admin (admin.html) — gestão de jobs**: (1) Corrigir exibição de jobs ativos: atualmente só mostra 1 instalação ativa mesmo com múltiplas em paralelo — investigar filtro/query em `/api/admin/jobs`; (2) Botão Retry (↺) em jobs com status `error` — endpoint `POST /api/jobs/:id/retry` já existe; (3) Botão Encerrar (✕) em qualquer job independente do status, não só os ativos; (4) Remover link do painel admin do menu lateral do `app.html` e reposicionar — sugestão: ícone discreto no rodapé do app (ex: engrenagem ⚙ canto inferior direito) visível apenas para usuários admin.
 
 
 ### ✅ Feito recentemente
+- Performance pipeline/app (medição via logs): (1) GS worker — removido backoff exponencial (era `1.6×` até `MAX_IDLE=60s`; pickup chegava a 22s); agora poll fixo 3s → pickup máx 3s; (2) SB silence max wait — reduzido de 300s para 90s (veículo offline: fase SB cai de 5m30s para ~2min); (3) Frontend poll — `pollMs` reduzido de 5000ms para 2000ms, atualizações chegam ao app 2.5× mais rápido
+- checkSession ao retornar ao formulário: `initSession` IIFE convertido para função nomeada `checkSession()`; chamada no final de `doReset()` para revalidar sessão HTML5 antes do próximo serviço
+- HTML5 phase parallelization: CMDT check + baseline load agora em `Promise.allSettled` paralelo → economiza ~1-2s por instalação
+- Fix SB handshake timeout: `processJob` agora tem loop de 2 tentativas; em timeout de handshake WS, invalida token e reabre sessão com token fresco após 5s — resolve `Opening handshake has timed out` que falhava sem retry
 - Fix VHCLS sessão stale silenciosa: quando `DATASOURCE` vazio (sem `login=-1`), `vhclsService` detecta `empty_datasource`, invalida TFL_SESSION do cookiejar e força relogin automático antes do retry — resolve instalações travando com `vehicle_id_not_found` após sessão HTML5 expirar silenciosamente
 - Fix SB handshake timeout: `processJob` agora tem loop de 2 tentativas; em timeout de handshake WS, invalida token e reabre sessão com token fresco após 5s — resolve `Opening handshake has timed out` que falhava sem retry
 - Fix SB av=1 sem process_id: quando `associate call_num=1` retorna `av=1` (scheme já associado de tentativa anterior) e `get_vcls_action_review_opr` não devolve `process_id`, fecha WS e retorna como ok — avança pipeline para CAN sem falhar com "process_id nao retornado"

@@ -215,7 +215,7 @@ async function runSbFlow(params: {
   function waitSbCompleted(): Promise<{ status: string; progress: string }> {
     const SB_MAX_WAIT_MS         = 720000; // 12min
     const SB_SILENCE_TIMEOUT_MS  = 30000;  // 30s sem frame → silence
-    const SB_SILENCE_MAX_WAIT_MS = 300000; // espera até 5min pelo retorno
+    const SB_SILENCE_MAX_WAIT_MS = 90000;  // espera até 90s (veículo offline: evita 5min de espera)
     const SB_DISCONNECTED = ["Disconnected Unit", "Disconnected", "Retry", "Batch Timeout", "Internal Timeout"];
 
     return new Promise((resolve, reject) => {
@@ -518,11 +518,26 @@ async function processJob(job: any): Promise<void> {
   }
 
   if (!sessionToken) {
-    try { sessionToken = await getTrafflogToken(); }
-    catch (e: any) { console.log(`[sb-rw] falha ao obter session_token: ${e?.message || e}`); }
+    // até 3 tentativas com backoff para absorver falhas transitórias de rede
+    for (let t = 1; t <= 3 && !sessionToken; t++) {
+      try { sessionToken = await getTrafflogToken(); }
+      catch (e: any) {
+        console.log(`[sb-rw] falha ao obter session_token tentativa ${t}/3: ${e?.message || e}`);
+        if (t < 3) await new Promise(r => setTimeout(r, 8000 * t));
+      }
+    }
   }
 
-  if (!sessionToken) { await failJob(jobId, "session_token_unavailable"); return; }
+  if (!sessionToken) {
+    // falha transitória de autenticação — reseta para pending em vez de error permanente
+    console.log(`[sb-rw] job=${jobId} session_token_unavailable → resetando para pending (retry automático)`);
+    await fetch(`${BASE}/api/jobs/${jobId}/retry`, {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({ worker_key: KEY }),
+    }).catch(() => {});
+    return;
+  }
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {

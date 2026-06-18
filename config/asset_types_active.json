@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-06-08T18:51:18.293Z",
+  "generated_at": "2026-06-16T14:33:35.132Z",
   "total_matched": 270,
   "total_vhcls_ids": 265,
   "total_catalog": 9464,
@@ -762,16 +762,154 @@
       "sub_model": "HQC42503SWEV11"
     },
     {
+      "id": 23871,
+      "manufacturer": "Scania",
+      "model": "G370A-DC13.116-R-4x2",
+      "sub_model": "G370A-DC13.116-R-4x2"
+    },
+    {
+      "id": 8404,
+      "manufacturer": "Scania",
+      "model": "G380LA-DC12.17-M-EG-4x2",
+      "sub_model": "G380LA-DC12.17-M-EG-4x2"
+    },
+    {
+      "id": 8549,
+      "manufacturer": "Scania",
+      "model": "G400LA-DC12.113-R-PTO.EG-6x2",
+      "sub_model": "G400LA-DC12.113-R-PTO.EG-6x2"
+    },
+    {
+      "id": 8391,
+      "manufacturer": "Scania",
+      "model": "G420LA-DC12.06-M-EG-4x2",
+      "sub_model": "G420LA-DC12.06-M-EG-4x2"
+    },
+    {
+      "id": 8403,
+      "manufacturer": "Scania",
+      "model": "G420LA-DC13-M-EG-6x2",
+      "sub_model": "G420LA-DC13-M-EG-6x2"
+    },
+    {
+      "id": 21159,
+      "manufacturer": "Scania",
+      "model": "G450JA-DC13.164-R-PTO.EG-6X2",
+      "sub_model": "G450JA-DC13.164-R-PTO.EG-6X2"
+    },
+    {
+      "id": 19078,
+      "manufacturer": "Scania",
+      "model": "G450LA-DC13.148-R-PTO.EG-6X2",
+      "sub_model": "G450LA-DC13.148-R-PTO.EG-6X2"
+    },
+    {
+      "id": 23697,
+      "manufacturer": "Scania",
+      "model": "G460-DC9GNL-R-UP-6x2-E6",
+      "sub_model": "G460-DC9GNL-R-UP-6x2-E6"
+    },
+    {
+      "id": 23698,
+      "manufacturer": "Scania",
+      "model": "G460-DC9GNV-R-UP-6X2-E6",
+      "sub_model": "G460-DC9GNV-R-UP-6X2-E6"
+    },
+    {
+      "id": 23692,
+      "manufacturer": "Scania",
+      "model": "G460-R-6x2",
+      "sub_model": "G460-R-6x2"
+    },
+    {
+      "id": 24328,
+      "manufacturer": "Scania",
+      "model": "G500-B8X4-XT-CS-R-E6",
+      "sub_model": "G500-B8X4-XT-CS-R-E6"
+    },
+    {
+      "id": 8718,
+      "manufacturer": "Scania",
+      "model": "K-440-DC13.112-A-8x2-E5",
+      "sub_model": "K-440-DC13.112-A-8x2-E5"
+    },
+    {
+      "id": 19124,
+      "manufacturer": "Scania",
+      "model": "K360-DC13114-M-4x2-E6",
+      "sub_model": "K360-DC13114-M-4x2-E6"
+    },
+    {
+      "id": 24304,
+      "manufacturer": "Scania",
+      "model": "K360B-M-4x2-E5",
+      "sub_model": "K360B-M-4x2-E5"
+    },
+    {
+      "id": 24293,
+      "manufacturer": "Scania",
+      "model": "K370C-DC13-R-4x2-E6",
+      "sub_model": "K370C-DC13-R-4x2-E6"
+    },
+    {
+      "id": 24294,
+      "manufacturer": "Scania",
+      "model": "K400-DC13-R-6x2-E6",
+      "sub_model": "K400-DC13-R-6x2-E6"
+    },
+    {
+      "id": 22885,
+      "manufacturer": "Scania",
+      "model": "K410-DC13.115-R-4x2-E6",
+      "sub_model": "K410-DC13.115-R-4x2-E6"
+    },
+    {
+      "id": 8688,
+      "manufacturer": "Scania",
+      "model": "K440-DC13.112-R-6X2-E6",
+      "sub_model": "K440-DC13.112-R-6X2-E6"
+    },
+    {
       "id": 161,
       "manufacturer": "Scania",
       "model": "P124",
       "sub_model": "P124"
     },
     {
+      "id": 20475,
+      "manufacturer": "Scania",
+      "model": "P280LA-DC07.280-R-6X2",
+      "sub_model": "P280LA-DC07.280-R-6X2"
+    },
+    {
       "id": 9071,
       "manufacturer": "Scania",
       "model": "P320DB-DC9.133-R-PTO.EG-6X2 E6",
       "sub_model": "P320DB-DC9.133-R-PTO.EG-6X2 E6"
+    },
+    {
+      "id": 6117,
+      "manufacturer": "Scania",
+      "model": "P340LB-DC13-M-4x2",
+      "sub_model": "P340LB-DC13-M-4x2"
+    },
+    {
+      "id": 8386,
+      "manufacturer": "Scania",
+      "model": "P340LB-DC13-M-EG-6x2",
+      "sub_model": "P340LB-DC13-M-EG-6x2"
+    },
+    {
+      "id": 8322,
+      "manufacturer": "Scania",
+      "model": "P360LA-DC13.114-R-6X2",
+      "sub_model": "P360LA-DC13.114-R-6X2"
+    },
+    {
+      "id": 8456,
+      "manufacturer": "Scania",
+      "model": "P360LA-DC13.114-R-PTO.EG-4X2",
+      "sub_model": "P360LA-DC13.114-R-PTO.EG-4X2"
     },
     {
       "id": 4445,
@@ -784,6 +922,12 @@
       "manufacturer": "Scania",
       "model": "P360LB-DC13.06-R-EG-6X2P",
       "sub_model": "P360LB-DC13.06-R-G-6X2P"
+    },
+    {
+      "id": 748,
+      "manufacturer": "Scania",
+      "model": "P370-R-6x2",
+      "sub_model": "P370-R-6x2"
     },
     {
       "id": 2941,
@@ -804,236 +948,92 @@
       "sub_model": "R124LA-4x2NA-M-420"
     },
     {
+      "id": 929,
+      "manufacturer": "Scania",
+      "model": "R340",
+      "sub_model": "R340"
+    },
+    {
+      "id": 23103,
+      "manufacturer": "Scania",
+      "model": "R410-DC9GNL-R-UP-6x2-E6",
+      "sub_model": "R410-DC9GNL-R-UP-6x2-E6"
+    },
+    {
+      "id": 22537,
+      "manufacturer": "Scania",
+      "model": "R410-DC9GNV-R-UP-6x2-E6",
+      "sub_model": "R410-DC9GNV-R-UP-6x2-E6"
+    },
+    {
+      "id": 21231,
+      "manufacturer": "Scania",
+      "model": "R410B-DC13.141-R-EG-6X2",
+      "sub_model": "R410B-DC13.141-R-EG-6X2"
+    },
+    {
+      "id": 6510,
+      "manufacturer": "Scania",
+      "model": "R410CB-DC13.115-R-PTO.EG-6X2",
+      "sub_model": "R410CB-DC13.115-R-PTO.EG-6X2"
+    },
+    {
+      "id": 23561,
+      "manufacturer": "Scania",
+      "model": "R420LA-DC13.10-M-EG-6x4TP",
+      "sub_model": "R420LA-DC13.10-M-EG-6x4TP"
+    },
+    {
       "id": 4035,
       "manufacturer": "Scania",
       "model": "R420LA-DC13.10-R-EG-6x4TP",
       "sub_model": "R420LA-DC13.10-R-EG-6x4TP"
     },
     {
-      "id": 23871,
-      "manufacturer": "Scania ",
-      "model": "G370A-DC13.116-R-4x2",
-      "sub_model": "G370A-DC13.116-R-4x2"
-    },
-    {
-      "id": 8404,
-      "manufacturer": "Scania ",
-      "model": "G380LA-DC12.17-M-EG-4x2",
-      "sub_model": "G380LA-DC12.17-M-EG-4x2"
-    },
-    {
-      "id": 8549,
-      "manufacturer": "Scania ",
-      "model": "G400LA-DC12.113-R-PTO.EG-6x2",
-      "sub_model": "G400LA-DC12.113-R-PTO.EG-6x2"
-    },
-    {
-      "id": 8391,
-      "manufacturer": "Scania ",
-      "model": "G420LA-DC12.06-M-EG-4x2",
-      "sub_model": "G420LA-DC12.06-M-EG-4x2"
-    },
-    {
-      "id": 8403,
-      "manufacturer": "Scania ",
-      "model": "G420LA-DC13-M-EG-6x2",
-      "sub_model": "G420LA-DC13-M-EG-6x2"
-    },
-    {
-      "id": 21159,
-      "manufacturer": "Scania ",
-      "model": "G450JA-DC13.164-R-PTO.EG-6X2",
-      "sub_model": "G450JA-DC13.164-R-PTO.EG-6X2"
-    },
-    {
-      "id": 19078,
-      "manufacturer": "Scania ",
-      "model": "G450LA-DC13.148-R-PTO.EG-6X2",
-      "sub_model": "G450LA-DC13.148-R-PTO.EG-6X2"
-    },
-    {
-      "id": 23697,
-      "manufacturer": "Scania ",
-      "model": "G460-DC9GNL-R-UP-6x2-E6",
-      "sub_model": "G460-DC9GNL-R-UP-6x2-E6"
-    },
-    {
-      "id": 23698,
-      "manufacturer": "Scania ",
-      "model": "G460-DC9GNV-R-UP-6X2-E6",
-      "sub_model": "G460-DC9GNV-R-UP-6X2-E6"
-    },
-    {
-      "id": 23692,
-      "manufacturer": "Scania ",
-      "model": "G460-R-6x2",
-      "sub_model": "G460-R-6x2"
-    },
-    {
-      "id": 24328,
-      "manufacturer": "Scania ",
-      "model": "G500-B8X4-XT-CS-R-E6",
-      "sub_model": "G500-B8X4-XT-CS-R-E6"
-    },
-    {
-      "id": 8718,
-      "manufacturer": "Scania ",
-      "model": "K-440-DC13.112-A-8x2-E5",
-      "sub_model": "K-440-DC13.112-A-8x2-E5"
-    },
-    {
-      "id": 19124,
-      "manufacturer": "Scania ",
-      "model": "K360-DC13114-M-4x2-E6",
-      "sub_model": "K360-DC13114-M-4x2-E6"
-    },
-    {
-      "id": 24304,
-      "manufacturer": "Scania ",
-      "model": "K360B-M-4x2-E5",
-      "sub_model": "K360B-M-4x2-E5"
-    },
-    {
-      "id": 24293,
-      "manufacturer": "Scania ",
-      "model": "K370C-DC13-R-4x2-E6",
-      "sub_model": "K370C-DC13-R-4x2-E6"
-    },
-    {
-      "id": 24294,
-      "manufacturer": "Scania ",
-      "model": "K400-DC13-R-6x2-E6",
-      "sub_model": "K400-DC13-R-6x2-E6"
-    },
-    {
-      "id": 22885,
-      "manufacturer": "Scania ",
-      "model": "K410-DC13.115-R-4x2-E6",
-      "sub_model": "K410-DC13.115-R-4x2-E6"
-    },
-    {
-      "id": 8688,
-      "manufacturer": "Scania ",
-      "model": "K440-DC13.112-R-6X2-E6",
-      "sub_model": "K440-DC13.112-R-6X2-E6"
-    },
-    {
-      "id": 20475,
-      "manufacturer": "Scania ",
-      "model": "P280LA-DC07.280-R-6X2",
-      "sub_model": "P280LA-DC07.280-R-6X2"
-    },
-    {
-      "id": 6117,
-      "manufacturer": "Scania ",
-      "model": "P340LB-DC13-M-4x2",
-      "sub_model": "P340LB-DC13-M-4x2"
-    },
-    {
-      "id": 8386,
-      "manufacturer": "Scania ",
-      "model": "P340LB-DC13-M-EG-6x2",
-      "sub_model": "P340LB-DC13-M-EG-6x2"
-    },
-    {
-      "id": 8322,
-      "manufacturer": "Scania ",
-      "model": "P360LA-DC13.114-R-6X2",
-      "sub_model": "P360LA-DC13.114-R-6X2"
-    },
-    {
-      "id": 8456,
-      "manufacturer": "Scania ",
-      "model": "P360LA-DC13.114-R-PTO.EG-4X2",
-      "sub_model": "P360LA-DC13.114-R-PTO.EG-4X2"
-    },
-    {
-      "id": 748,
-      "manufacturer": "Scania ",
-      "model": "P370-R-6x2",
-      "sub_model": "P370-R-6x2"
-    },
-    {
-      "id": 929,
-      "manufacturer": "Scania ",
-      "model": "R340",
-      "sub_model": "R340"
-    },
-    {
-      "id": 23103,
-      "manufacturer": "Scania ",
-      "model": "R410-DC9GNL-R-UP-6x2-E6",
-      "sub_model": "R410-DC9GNL-R-UP-6x2-E6"
-    },
-    {
-      "id": 22537,
-      "manufacturer": "Scania ",
-      "model": "R410-DC9GNV-R-UP-6x2-E6",
-      "sub_model": "R410-DC9GNV-R-UP-6x2-E6"
-    },
-    {
-      "id": 21231,
-      "manufacturer": "Scania ",
-      "model": "R410B-DC13.141-R-EG-6X2",
-      "sub_model": "R410B-DC13.141-R-EG-6X2"
-    },
-    {
-      "id": 6510,
-      "manufacturer": "Scania ",
-      "model": "R410CB-DC13.115-R-PTO.EG-6X2",
-      "sub_model": "R410CB-DC13.115-R-PTO.EG-6X2"
-    },
-    {
-      "id": 23561,
-      "manufacturer": "Scania ",
-      "model": "R420LA-DC13.10-M-EG-6x4TP",
-      "sub_model": "R420LA-DC13.10-M-EG-6x4TP"
-    },
-    {
       "id": 6464,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R440LA-DC13.112-R-6x4",
       "sub_model": "R440LA-DC13.112-R-6x4"
     },
     {
       "id": 21153,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R450JA-DC13.164-R-EG-6X4",
       "sub_model": "R450JA-DC13.164-R-EG-6X4"
     },
     {
       "id": 21154,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R450JB-DC13.164-R-6X2",
       "sub_model": "R450JB-DC13.164-R-6X2"
     },
     {
       "id": 23682,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R460-R-6x2",
       "sub_model": "R460-R-6x2"
     },
     {
       "id": 23849,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R460-R-6x2-GNL",
       "sub_model": "R460-R-6x2-GNL"
     },
     {
       "id": 21223,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R500LA-DC13.155-R-PTO.EG-4X2",
       "sub_model": "R500LA-DC13.155-R-PTO.EG-4X2"
     },
     {
       "id": 23159,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R540LA-DC13.166-AT-6x2",
       "sub_model": "R540LA-DC13.166-AT-6x2"
     },
     {
       "id": 23680,
-      "manufacturer": "Scania ",
+      "manufacturer": "Scania",
       "model": "R560-R-6x4",
       "sub_model": "R560-R-6x4"
     },
