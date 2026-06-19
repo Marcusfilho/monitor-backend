@@ -216,7 +216,7 @@ async function runSbFlow(params: {
     const SB_MAX_WAIT_MS         = 720000; // 12min
     const SB_SILENCE_TIMEOUT_MS  = 30000;  // 30s sem frame → silence
     const SB_SILENCE_MAX_WAIT_MS = 90000;  // espera até 90s (veículo offline: evita 5min de espera)
-    const SB_DISCONNECTED = ["Disconnected Unit", "Disconnected", "Retry", "Batch Timeout", "Internal Timeout"];
+    const SB_DISCONNECTED = ["Disconnected Unit", "Disconnected", "No Response", "Retry", "Batch Timeout", "Internal Timeout"];
 
     return new Promise((resolve, reject) => {
       let lastStatus   = "";

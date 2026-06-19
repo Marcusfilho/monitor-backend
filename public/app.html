@@ -1517,6 +1517,7 @@ function statusToLabel(s){
 
 // ─── ERROS ───────────────────────────────────────────────────────────────────
 const ERROR_MESSAGES=[
+  {match:"vehicle_id_not_found",friendly:"Serial não cadastrado no Traffilog. Verifique se o equipamento está ativo na plataforma antes de instalar."},
   {match:"Editing unit number is not allowed",friendly:"Veículo já possui rastreador. Faça o UNINSTALL primeiro."},
   {match:"not found",friendly:"Veículo não encontrado no Monitor. Verifique o serial."},
   {match:"job_exception_or_timeout",friendly:"Falha na comunicação. Verifique a sessão VPN."},
@@ -1525,7 +1526,7 @@ const ERROR_MESSAGES=[
   {match:"timeout",friendly:"Tempo esgotado. Verifique a conexão VPN e tente novamente."},
 ];
 function friendlyError(msg){if(!msg)return"Erro desconhecido";const l=String(msg).toLowerCase();for(const e of ERROR_MESSAGES)if(l.includes(e.match.toLowerCase()))return e.friendly;return String(msg).slice(0,240)}
-function extractLastError(inst){const e=inst?.last_error||inst?.lastError||inst?.html5?.last_error||null;if(!e)return null;if(typeof e==="string")return{title:"ERRO",message:friendlyError(e)};if(typeof e==="object"){const rawDetail=e.detail??e.error??e.message??e.head??e.reason??"";const msg=typeof rawDetail==="object"?JSON.stringify(rawDetail):String(rawDetail||"");return{title:e.job_type?String(e.job_type).toUpperCase():"ERRO",message:friendlyError(msg||e.reason||"job_failed")}}return{title:"ERRO",message:friendlyError(String(e))}}
+function extractLastError(inst){const e=inst?.last_error||inst?.lastError||inst?.html5?.last_error||null;if(!e)return null;if(typeof e==="string")return{title:"ERRO",message:friendlyError(e)};if(typeof e==="object"){const reason=String(e.reason||"");const rawDetail=e.detail??e.error??e.message??e.head??"";const msg=typeof rawDetail==="object"?reason:String(rawDetail||reason);return{title:e.job_type?String(e.job_type).toUpperCase():"ERRO",message:friendlyError(msg||reason||"job_failed")}}return{title:"ERRO",message:friendlyError(String(e))}}
 
 // ─── RENDER ALL ───────────────────────────────────────────────────────────────
 function renderAll(inst){
@@ -1561,6 +1562,7 @@ function renderAll(inst){
   if(isErr&&st.includes("HTML5_ERROR")){
     stopPoll();saveLs("","");state.inst=null;
     $("cardCan").classList.add("hidden");$("cardForm").classList.remove("hidden");
+    $("btnCreate").disabled=false;
     showBarForm();setSubline("Pronto");
     showAlert(err.title||"Erro no cadastro HTML5",err.message||"Falha no cadastro");
     return;
