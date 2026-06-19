@@ -108,6 +108,9 @@ Todos seguem: poll loop → `pollNextJob()` → `processJob()` → `completeJob(
 - **Melhorias admin.html**: (1) exibe só 1 instalação ativa mesmo com múltiplas em paralelo; (2) botão Retry (↺) em jobs `error`; (3) botão Encerrar (✕) independente de status; (4) mover link admin para ícone discreto no rodapé (⚙), visível só para admin.
 
 ### ✅ Feito recentemente
+- Fix SB "No Response": status adicionado à lista `SB_DISCONNECTED` — avança para CAN em vez de falhar (equipamento offline durante apply do scheme).
+- Fix frontend HTML5_ERROR: `btnCreate` re-habilitado no handler de erro — antes travava o formulário após clicar "Entendi".
+- Fix modal `vehicle_id_not_found`: `extractLastError` agora usa `e.reason` quando `detail` é objeto; mensagem específica orienta técnico a verificar cadastro no Traffilog.
 - Performance pipeline/app: GS poll fixo 3s (era backoff ×1.6 até 60s, pickup chegava a 22s); SB silence max wait 300s→90s (offline: 5m30s→~2min); frontend pollMs 5000→2000ms.
 - checkSession ao retornar ao formulário: sessão HTML5 revalidada em `doReset()`.
 - HTML5 parallelization: CMDT check + baseline em `Promise.allSettled` (-1-2s por instalação).
