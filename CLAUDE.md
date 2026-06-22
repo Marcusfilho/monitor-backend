@@ -1,5 +1,70 @@
 # CLAUDE.md
 
+## Diretrizes Comportamentais
+
+> **Tradeoff**: Estas diretrizes priorizam cautela na *abordagem de codificação* — não em performance de runtime (ver "Premissa: Performance" na seção seguinte). Para tarefas triviais, use bom senso.
+
+### 1. Pense Antes de Codificar
+
+Não assuma. Não esconda confusão. Exponha os tradeoffs.
+
+Antes de implementar:
+
+- Declare suas suposições explicitamente. Se houver incerteza, pergunte.
+- Se existirem múltiplas interpretações, apresente-as — não escolha silenciosamente.
+- Se existir uma abordagem mais simples, diga isso. Questione quando for o caso.
+- Se algo não estiver claro, pare. Nomeie o que está confuso. Pergunte.
+
+### 2. Simplicidade Primeiro
+
+O mínimo de código que resolve o problema. Nada especulativo.
+
+- Nenhuma funcionalidade além do que foi pedido.
+- Nenhuma abstração para código de uso único.
+- Nenhuma "flexibilidade" ou "configurabilidade" que não foi solicitada.
+- Nenhum tratamento de erro para cenários impossíveis.
+- Se você escrever 200 linhas e poderia ser 50, reescreva.
+
+Pergunte a si mesmo: "Um engenheiro sênior diria que isso está complicado demais?" Se sim, simplifique.
+
+### 3. Mudanças Cirúrgicas
+
+Toque apenas no que for necessário. Limpe apenas a sua própria bagunça.
+
+Ao editar código existente:
+
+- Não "melhore" código, comentários ou formatação adjacentes.
+- Não refatore o que não está quebrado.
+- Combine com o estilo existente, mesmo que você fizesse diferente.
+- Se notar código morto não relacionado, mencione — não exclua.
+
+Quando suas mudanças criam órfãos:
+
+- Remova imports/variáveis/funções que SUAS mudanças tornaram inutilizados.
+- Não remova código morto pré-existente, a menos que solicitado.
+
+O teste: Toda linha alterada deve remeter diretamente ao pedido do usuário.
+
+### 4. Execução Orientada a Metas
+
+Defina critérios de sucesso. Repita até verificar.
+
+Transforme tarefas em metas verificáveis antes de começar:
+
+- "Corrigir o bug X" → reproduza o comportamento errado primeiro, depois corrija, depois confirme que sumiu.
+- "Adicionar funcionalidade Y" → declare o comportamento esperado, implemente, valide manualmente.
+- Para refatorações: confirme que o comportamento externo não mudou (logs, resposta HTTP, payloads WS).
+
+Para tarefas com múltiplas etapas, declare um breve plano:
+
+1. [Etapa] → verificar: [checagem]
+2. [Etapa] → verificar: [checagem]
+3. [Etapa] → verificar: [checagem]
+
+> **Nota sobre testes**: Este projeto não tem testes automatizados. Substitua "escrever testes" por validação manual com `test_can*.js` / `test_opr*.js` / `test_full.js` ou por logs de diagnóstico diretos no worker.
+
+---
+
 ## Diretrizes de Desenvolvimento
 
 ### Premissa: Performance acima de tudo
@@ -103,11 +168,13 @@ Todos seguem: poll loop → `pollNextJob()` → `processJob()` → `completeJob(
 - P3: HTML5_INSTALL com instalação ativa — requer reprodução controlada.
 
 ### 🟡 Backlog
+- **MAINT_NO_SWAP "não testar CAN" sem snapshot/export**: esse caminho não coleta CAN e o SB é terminal, então não há `save_snapshot` nem export para o SharePoint — só aplica o scheme e fecha como `maint_no_swap_skip`. Avaliar se precisa de registro/export mesmo sem CAN.
 - **🔴 Jobs "processing orphan" pós-restart**: resetar para `pending` qualquer job em `processing` há mais de 10min sem atualização de `updatedAt` (no `jobStore` ou health-check periódico).
 - **Botão "Reprocessar HTML5" no frontend**: endpoint `POST /api/installations/:id/retry-html5` funciona via curl, mas botão no app não aciona — investigar frontend (`installation_id` incorreto ou estado da UI).
 - **Melhorias admin.html**: (1) exibe só 1 instalação ativa mesmo com múltiplas em paralelo; (2) botão Retry (↺) em jobs `error`; (3) botão Encerrar (✕) independente de status; (4) mover link admin para ícone discreto no rodapé (⚙), visível só para admin.
 
 ### ✅ Feito recentemente
+- SB silencioso no MAINT_NO_SWAP (ambos os caminhos): `complete-maint` ("não testar") e `approve-can` ("validar CAN") enfileiram `scheme_builder` após a finalização, sem GS. SB é terminal (`_terminal`) — aplica o scheme e encerra, sem cascata para novo CAN. Corrige guard do `complete-maint` que exigia `vehicle_setting_id` (frontend nunca envia) → scheme resolvido via `getSelectedSchemeId(client_id)`. `comment` do SB usa o comentário da tela de cadastro; fallback `MAINT_NO_SWAP_SKIP` só quando vazio.
 - Fix SB "No Response": status adicionado à lista `SB_DISCONNECTED` — avança para CAN em vez de falhar (equipamento offline durante apply do scheme).
 - Fix frontend HTML5_ERROR: `btnCreate` re-habilitado no handler de erro — antes travava o formulário após clicar "Entendi".
 - Fix modal `vehicle_id_not_found`: `extractLastError` agora usa `e.reason` quando `detail` é objeto; mensagem específica orienta técnico a verificar cadastro no Traffilog.
