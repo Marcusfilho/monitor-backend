@@ -259,6 +259,32 @@ router.post("/:id/approve-can", (req: Request, res: Response) => {
     } else {
       createJob("save_snapshot", base);
     }
+  } else if (service === "MAINT_NO_SWAP") {
+    // Caminho "validar CAN": salva o CAN validado e aplica o scheme silenciosamente.
+    // SB é terminal (não recoleta CAN) — fluxo: CAN > finaliza > SB silencioso.
+    createJob("save_snapshot", base);
+    const clientId   = String(job.payload?.client_id ?? job.payload?.clientId ?? "").trim();
+    const clientName = String(job.payload?.client_name ?? job.payload?.client_descr ?? "").trim();
+    const vehicleId  = String(base.vehicle_id ?? "").trim();
+    const schemeId   = getSelectedSchemeId(clientId) ?? "";
+    if (vehicleId && clientId && schemeId) {
+      const sbJob = createJob("scheme_builder", {
+        ...job.payload,
+        vehicle_id         : vehicleId,
+        vehicle_setting_id : schemeId,
+        client_id          : clientId,
+        client_name        : clientName,
+        _terminal          : true,
+        origin             : `maint_no_swap_can:${job.id}`,
+        _from              : job.id,
+      });
+      console.log(`[installations] approve-can MAINT_NO_SWAP → SB silencioso job=${sbJob.id} vehicle_id=${vehicleId}`);
+    } else {
+      console.log(
+        `[installations] approve-can MAINT_NO_SWAP job=${job.id} — SB não enfileirado ` +
+        `(faltam: vehicle_id=${vehicleId || "?"} client_id=${clientId || "?"} scheme_id=${schemeId || "?"})`
+      );
+    }
   } else {
     createJob("save_snapshot", base);
   }
@@ -308,7 +334,10 @@ router.post("/:jobId/complete-maint", (req: Request, res: Response) => {
   const clientId         = String(body.client_id          ?? jobPayload.client_id          ?? jobPayload.clientId          ?? "").trim();
   const clientName       = String(body.client_name        ?? jobPayload.client_name        ?? jobPayload.clientName        ?? jobPayload.client_descr  ?? jobPayload.clientDescr  ?? "").trim();
   const vehicleSettingId = String(body.vehicle_setting_id ?? jobPayload.vehicle_setting_id ?? jobPayload.vehicleSettingId  ?? "").trim();
-  const comment          = String(body.comment ?? "MAINT_NO_SWAP_SKIP").trim();
+  // Comentário do SB: usa o comentário da tela de cadastro (jobPayload.comment) quando houver;
+  // só cai no marcador "MAINT_NO_SWAP_SKIP" quando o cadastro não tem comentário.
+  const regComment       = String(body.comment ?? jobPayload.comment ?? "").trim();
+  const comment          = regComment || "MAINT_NO_SWAP_SKIP";
 
   // 1. Marca job como completed
   completeJob(jobId, "completed", {
@@ -320,16 +349,21 @@ router.post("/:jobId/complete-maint", (req: Request, res: Response) => {
   console.log(`[installations] complete-maint job=${jobId} vehicle_id=${vehicleId}`);
 
   // 2. Enfileira SB — fire-and-forget (SB_PARALLEL_V1)
-  //    Sem await: retorna ao app imediatamente, SB corre em paralelo no worker
-  const sbQueued = !!(vehicleId && vehicleSettingId && clientId);
+  //    Sem await: retorna ao app imediatamente, SB corre em paralelo no worker.
+  //    O scheme vem de getSelectedSchemeId(clientId) — o frontend não envia vehicle_setting_id.
+  //    Payload completo (...jobPayload) preserva comment/technician; _terminal encerra o SB
+  //    sem coletar CAN (caminho "não testar" não gera snapshot).
+  const schemeId = getSelectedSchemeId(clientId) ?? vehicleSettingId ?? "";
+  const sbQueued = !!(vehicleId && clientId && schemeId);
   if (sbQueued) {
-    const schemeId = getSelectedSchemeId(clientId) ?? vehicleSettingId ?? "";
     const sbJob = createJob("scheme_builder", {
+      ...jobPayload,
       vehicle_id         : vehicleId,
       vehicle_setting_id : schemeId,
       client_id          : clientId,
       client_name        : clientName,
       comment,
+      _terminal          : true,
       origin             : `maint_no_swap_skip:${jobId}`,
       _from              : jobId,
     });
@@ -337,7 +371,7 @@ router.post("/:jobId/complete-maint", (req: Request, res: Response) => {
   } else {
     console.log(
       `[installations] complete-maint job=${jobId} — SB não enfileirado ` +
-      `(faltam: vehicle_id=${vehicleId || "?"} vehicle_setting_id=${vehicleSettingId || "?"} client_id=${clientId || "?"})`
+      `(faltam: vehicle_id=${vehicleId || "?"} client_id=${clientId || "?"} scheme_id=${schemeId || "?"})`
     );
   }
 

@@ -75,6 +75,12 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
     }
 
     case "scheme_builder":
+      // SB silencioso do MAINT_NO_SWAP é terminal: aplica o scheme e encerra, sem nova
+      // coleta de CAN (o snapshot, quando há, já foi salvo no fluxo de finalização).
+      if (job.payload?._terminal === true) {
+        console.log(`[pipeline] scheme_builder terminal (maint_no_swap) — sem cascata plate=${plate}`);
+        break;
+      }
       createJob("monitor_can_snapshot", {
         ...job.payload, ...result, plate, _from: job.id,
         installation_token: randomUUID(),
