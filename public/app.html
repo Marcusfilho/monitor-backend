@@ -882,7 +882,7 @@ async function _doLookup(plate){
       }else{
         // Outros serviços: placa encontrada → verde (esperado)
         dot.textContent="✓";dot.style.color="var(--good)";
-        if((svc==="MAINT_WITH_SWAP"||svc==="UNINSTALL")&&state._innerIdFromLookup){
+        if((svc==="MAINT_WITH_SWAP"||svc==="UNINSTALL"||svc==="MAINT_NO_SWAP")&&state._innerIdFromLookup){
           $("plateLookupBanner").style.cssText="border-color:#1e3a5f;background:#091624;display:flex";
           $("plateLookupTitle").style.color="#7dd3fc";$("plateLookupDetail").style.color="#93c5fd";
           $("plateLookupTitle").textContent="Serial atual do veículo";
@@ -1024,7 +1024,7 @@ function buildPayload(){
     if(!body.client_id&&state._clientIdFromLookup)body.client_id=Number(state._clientIdFromLookup);
     if(!body.client_descr&&state._clientDescrFromLookup)body.client_descr=state._clientDescrFromLookup;
   }
-  if(svc==="MAINT_NO_SWAP"){body.serial="";if(state._vehicleId)body.vehicle_id=state._vehicleId;}
+  if(svc==="MAINT_NO_SWAP"){body.serial=state._innerIdFromLookup||"";if(state._vehicleId)body.vehicle_id=state._vehicleId;}
   return body;
 }
 function validatePayload(p){

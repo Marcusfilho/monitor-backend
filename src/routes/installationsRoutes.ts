@@ -375,7 +375,23 @@ router.post("/:jobId/complete-maint", (req: Request, res: Response) => {
     );
   }
 
-  res.json({ ok: true, job_id: jobId, status: "completed", sb_queued: sbQueued });
+  // 3. Enfileira save_snapshot — registra o serviço no SQLite e exporta p/ SharePoint.
+  //    "Não testar CAN" não coleta CAN: snapshot sem can/gsensor/veículo — só cadastro
+  //    (cliente, serial, placa+frota, serviço, data, técnico). Campos ausentes saem
+  //    em branco no export. Usa regComment (não o marcador) p/ não poluir a coluna Obs.
+  const snapJob = createJob("save_snapshot", {
+    ...jobPayload,
+    service     : "MAINT_NO_SWAP",
+    vehicle_id  : vehicleId    || jobPayload.vehicle_id,
+    client_id   : clientId     || jobPayload.client_id,
+    client_descr: clientName   || jobPayload.client_descr,
+    plate       : jobPayload.plate_real ?? jobPayload.plate ?? "",
+    comment     : regComment || null,
+    _from       : jobId,
+  });
+  console.log(`[installations] complete-maint job=${jobId} → save_snapshot job=${snapJob.id}`);
+
+  res.json({ ok: true, job_id: jobId, status: "completed", sb_queued: sbQueued, snapshot_job: snapJob.id });
 });
 
 // ---------------------------------------------------------------------------
