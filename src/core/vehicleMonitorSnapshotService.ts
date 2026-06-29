@@ -357,29 +357,10 @@ export async function collectVehicleMonitorSnapshot(opts: {
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
 
-  // ── 4. Module State (após subscribes + 500ms para servidor registrar) ─────
-  await sleep(500);
-  let ms: any = null;
-  try {
-    // Tentativa A: com client_id
-    const [msA, msB] = await Promise.all([
-      mux.sendAction<any>("get_monitor_module_state", {
-        tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
-        ...(header.client_id != null ? { client_id: String(header.client_id) } : {}),
-      }),
-      // Tentativa B: sem client_id (fallback — DB pode não filtrar por cliente)
-      mux.sendAction<any>("get_monitor_module_state", {
-        tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
-      }),
-    ]);
-    const lenA = msA?.data?.length ?? 0;
-    const lenB = msB?.data?.length ?? 0;
-    console.log(`[vm-ms] A(com client_id)=data:${lenA} B(sem client_id)=data:${lenB} av=${msA?.action_value}`);
-    ms = lenA > 0 ? msA : (lenB > 0 ? msB : msA);
-    if ((ms?.data?.length ?? 0) === 0) console.log(`[vm-ms] raw=${JSON.stringify(ms)}`);
-  } catch (msErr: any) {
-    console.log(`[vm-ms] ERRO: ${msErr?.message || String(msErr)}`);
-  }
+  // ── 4. Module State: consultado APÓS a janela de params (FIX_MODULE_STATE_TIMING_V1)
+  // get_monitor_module_state só reflete o link CAN/J1708 ao vivo depois que a unidade
+  // respondeu com frames (igual ao internal-tools). Consulta precoce (t≈0.5s) voltava
+  // data:0/av=0. A re-consulta está no fim da coleta (seção 7b).
 
   function parseMsData(data: any[]): VmModuleStateRow[] {
     return data.map((r: any) => ({
@@ -395,8 +376,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
     }));
   }
 
-  const moduleState: VmModuleStateRow[] = parseMsData(ms?.data ?? []);
-  let moduleStateRetried = false;
+  const moduleState: VmModuleStateRow[] = [];
 
   // ── 4. opr + metadata ─────────────────────────────────────────────────────
   const opr = await mux.sendAction<any>("get_unit_parameters_opr", {
@@ -500,23 +480,6 @@ export async function collectVehicleMonitorSnapshot(opts: {
       // FIX: atualiza controle reativo
       lastParamAt       = Date.now();
       collectionStarted = true;
-
-      // Retry module state no primeiro evento, se ainda vazio após subscribe
-      if (unitParametersEvents === 1 && moduleState.length === 0 && !moduleStateRetried) {
-        moduleStateRetried = true;
-        mux.sendAction<any>("get_monitor_module_state", {
-          tag: "loading_screen",
-          filter: "",
-          vehicle_id: String(opts.vehicleId),
-          ...(header.client_id != null ? { client_id: String(header.client_id) } : {}),
-        }).then(msR => {
-          const rows = parseMsData(msR?.data ?? []);
-          if (rows.length > 0) {
-            console.log(`[vm-ms] retry OK data=${rows.length}`);
-            moduleState.splice(0, moduleState.length, ...rows);
-          }
-        }).catch(() => {});
-      }
 
       if (opts.onPartialParams) {
         try {
@@ -648,6 +611,20 @@ export async function collectVehicleMonitorSnapshot(opts: {
 
   off();
 
+  // ── 7b. Module state APÓS a janela de params (FIX_MODULE_STATE_TIMING_V1) ──
+  // Subscription ainda ativa e a unidade já respondeu frames → agora reflete o link
+  // CAN/J1708 ao vivo. Sem client_id (igual ao internal-tools, que funciona).
+  try {
+    const msFinal = await mux.sendAction<any>("get_monitor_module_state", {
+      tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
+    });
+    const rows = parseMsData(msFinal?.data ?? []);
+    console.log(`[vm-ms] final data=${rows.length} av=${msFinal?.action_value}`);
+    if (rows.length > 0) moduleState.splice(0, moduleState.length, ...rows);
+  } catch (e: any) {
+    console.log(`[vm-ms] final ERRO: ${e?.message || String(e)}`);
+  }
+
   await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => {});
 
   // ── 8. canSummary ─────────────────────────────────────────────────────────
@@ -659,10 +636,13 @@ export async function collectVehicleMonitorSnapshot(opts: {
     ` events=${unitParametersEvents} can0_ok=${canSummary.can0_ok} can1_ok=${canSummary.can1_ok}`
   );
 
+  // FIX_IS_CONNECTED_LIVE_V1: tráfego real ao vivo supera o snapshot único do redis (t≈0).
+  const isConnectedLive = unitParametersEvents > 0 ? 1 : isConnected;
+
   return {
     capturedAt:  new Date().toISOString(),
     vehicleId:   opts.vehicleId,
-    isConnected,
+    isConnected: isConnectedLive,
     header,
     parameters:  Array.from(latest.values()),
     moduleState,
@@ -685,9 +665,9 @@ export function buildCanSummary(moduleState: VmModuleStateRow[]): CanSummary {
     can0,
     can1,
     j1708,
-    can0_ok:  !!(can0  && can0.ok  && can0.active),
-    can1_ok:  !!(can1  && can1.ok  && can1.active),
-    j1708_ok: !!(j1708 && j1708.ok && j1708.active),
+    can0_ok:  !!(can0  && (can0.ok  || can0.was_ok)  && can0.active),
+    can1_ok:  !!(can1  && (can1.ok  || can1.was_ok)  && can1.active),
+    j1708_ok: !!(j1708 && (j1708.ok || j1708.was_ok) && j1708.active),
   };
 }
 
