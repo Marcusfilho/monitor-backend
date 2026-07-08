@@ -531,6 +531,7 @@
   </div>
 </div>
 <input type="file" id="photoFileInput" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="photoFileInputGallery" accept="image/*" style="display:none">
 
 <!-- Modal confirmar -->
 <div class="confirm-modal" id="confirmModal">
@@ -1406,7 +1407,7 @@ function canFindModule(msRows,names){
     return all.some(nk=>keys.some(k=>nk.includes(k)));
   })||null;
 }
-function canStrictOk(row){if(!row)return false;const a=canToBool01(row.active),o=canToBool01(row.ok??row.is_ok??row.isOk),w=canToBool01(row.was_ok??row.wasOk);return a===true&&o===true&&w===true}
+function canStrictOk(row){if(!row)return false;const a=canToBool01(row.active),o=canToBool01(row.ok??row.is_ok??row.isOk),w=canToBool01(row.was_ok??row.wasOk);return a===true&&(o===true||w===true)}
 function canPickErr(row){if(!row)return null;for(const v of[row.message,row.msg,row.error_descr,row.error,row.err,row.error_code,row.code]){if(v!=null&&String(v).trim())return String(v).trim()}return null}
 
 function renderModuleState(snapshot){
@@ -1718,17 +1719,29 @@ function _photoRenderGrid(){
       : count>0
         ? `<span style="font-size:10px;background:#0d2d1a;color:#6dbf6d;padding:2px 6px;border-radius:10px">✓ ${count}</span>`
         : `<span style="font-size:10px;background:#1a1a2a;color:#5a7a9a;padding:2px 6px;border-radius:10px">—</span>`;
-    return `<button type="button" onclick="_photoPickFile('${t.slug}')"
+    return `<div
       style="background:#0d1520;border:1px solid #2a3a52;border-radius:10px;padding:10px 8px;
-        cursor:pointer;text-align:left;color:var(--text);font-size:13px;display:flex;
-        align-items:center;justify-content:space-between;gap:6px;${loading?"opacity:0.6;pointer-events:none":""}">
-      <span>${t.label}</span>${badge}
-    </button>`;
+        color:var(--text);font-size:13px;display:flex;align-items:center;
+        justify-content:space-between;gap:6px;${loading?"opacity:0.6;pointer-events:none":""}">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.label}</span>
+      ${badge}
+      <button type="button" onclick="_photoPickFile('${t.slug}')" title="Tirar foto"
+        style="background:none;border:none;cursor:pointer;font-size:17px;padding:2px 4px;line-height:1">📷</button>
+      <button type="button" onclick="_photoPickGallery('${t.slug}')" title="Carregar do telefone"
+        style="background:none;border:none;cursor:pointer;font-size:17px;padding:2px 4px;line-height:1">🖼️</button>
+    </div>`;
   }).join("");
 }
 
 function _photoPickFile(slug){
   const inp=$("photoFileInput");
+  inp.setAttribute("data-type",slug);
+  inp.value="";
+  inp.click();
+}
+
+function _photoPickGallery(slug){
+  const inp=$("photoFileInputGallery");
   inp.setAttribute("data-type",slug);
   inp.value="";
   inp.click();
@@ -1776,11 +1789,13 @@ async function _photoUpload(file,slug){
   }
 }
 
-$("photoFileInput").addEventListener("change",function(){
+function _photoOnInputChange(){
   const file=this.files?.[0];
   const slug=this.getAttribute("data-type");
   if(file&&slug)_photoUpload(file,slug);
-});
+}
+$("photoFileInput").addEventListener("change",_photoOnInputChange);
+$("photoFileInputGallery").addEventListener("change",_photoOnInputChange);
 
 $("btnOpenPhotos").addEventListener("click",()=>{
   const clientVal=($("clientSelect")?.value||"").split("|");

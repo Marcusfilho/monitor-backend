@@ -133,7 +133,7 @@ function _buildFields(p: SnapshotPayload): Record<string, any> {
   return {
     Title                  : c.plate_real               ?? "",   // Placa
     "Servi_x00e7_o"        : SERVICE_PT[String(c.service ?? "").toUpperCase()] ?? c.service ?? "",
-    Serial                 : p.serial                   ?? "",
+    Serial                 : p.serial                   || null,   // coluna numérica: "" é inválido
     Modelo                 : c.vehicle?.model            ?? "",
     Etiqueta               : etiqueta,
     Chicote                : chicote,
@@ -172,17 +172,26 @@ function _formatCan(can: any): string {
     if (active.length) parts.push(`MOD:${active.join(",")}`);
   }
 
+  // Coluna CAN no SharePoint é texto de linha única (limite 255). Mantém
+  // IGN/KEY/MOD e adiciona params só até caber; sinaliza quantos ficaram de fora.
   const params = snap?.parameters ?? null;
   if (Array.isArray(params)) {
+    let len = parts.join(" | ").length;
+    let dropped = 0;
     for (const param of params) {
       const val = param.value ?? param.raw_value;
       if (!val || val === "00000000" || val === "0") continue;
       const name = (param.name || param.id || "?").replace(/\s+/g, "_").substring(0, 12);
-      parts.push(`${name}:${val}`);
+      const piece = `${name}:${val}`;
+      const add = (parts.length ? 3 : 0) + piece.length;   // " | " + piece
+      if (len + add > 248) { dropped++; continue; }         // reserva p/ "+N" sob o cap 255
+      parts.push(piece);
+      len += add;
     }
+    if (dropped) parts.push(`+${dropped}`);
   }
 
-  return parts.join(" | ");
+  return parts.join(" | ").slice(0, 255);   // guard final
 }
 
 // ─── exportSnapshot (ponto de entrada) ───────────────────────────────────────
