@@ -531,7 +531,7 @@
   </div>
 </div>
 <input type="file" id="photoFileInput" accept="image/*" capture="environment" style="display:none">
-<input type="file" id="photoFileInputGallery" accept="image/*" style="display:none">
+<input type="file" id="photoFileInputGallery" accept="image/*" multiple style="display:none">
 
 <!-- Modal confirmar -->
 <div class="confirm-modal" id="confirmModal">
@@ -1274,7 +1274,17 @@ function canRowParamId(p){const v=p?.parameter_id??p?.param_id??p?.id??p?.paramI
 function canRowParamName(p){return p?.original_name??p?.name??p?.param_name??p?.paramName??p?.parameter?.name??""}
 function canRowParamRaw(p){return p?.raw_value??p?.rawValue??p?.raw??p?.parameter_raw_value??null}
 function canRowParamVal(p){return p?.value??p?.val??p?.param_value??p?.parameter_value??null}
+function canRowParamConv(p){const v=p?.converted_value??p?.convertedValue??null;return Number.isFinite(Number(v))&&v!==null&&v!==""?Number(v):null}
 function canDisplayVal(p){const raw=canRowParamRaw(p),val=canRowParamVal(p);if(canHasVal(raw))return canFmtAny(raw);if(canHasVal(val))return canFmtAny(val);return"—"}
+// Card dos params-chave: hexa + valor convertido (com unidade e casas decimais da regra).
+// Sem converted_value (ex.: Limpador), cai no formato antigo HEX (decimal).
+function canDisplayCardVal(p,rule){
+  const conv=canRowParamConv(p);
+  if(conv===null||rule?.decimals==null)return canDisplayVal(p);
+  const num=conv.toFixed(rule.decimals),txt=rule.unit?`${num} ${rule.unit}`:num;
+  const raw=canRowParamRaw(p);
+  return canHasVal(raw)&&canLooksHex(raw)?`${String(raw).trim()} (${txt})`:txt;
+}
 function canNormIdVariants(v){const out=new Set();if(v==null)return out;let s=String(v).trim();let u=s.toUpperCase().replace(/^0X/,"");out.add(u);if(/^[0-9A-F]+$/.test(u)){const n=parseInt(u,16);if(Number.isFinite(n)){out.add(n.toString(16).toUpperCase().padStart(8,"0"));if(/^[0-9]+$/.test(u)){const m=parseInt(u,10);if(Number.isFinite(m))out.add(m.toString(16).toUpperCase().padStart(8,"0"))}}};const no0=u.replace(/^0+/,"")||"0";out.add(no0);return out}
 
 function canUnwrapSnapshot(x){
@@ -1430,16 +1440,19 @@ function renderModuleState(snapshot){
 }
 
 // ─── KEY PARAMS ───────────────────────────────────────────────────────────────
+// decimals/unit: formatação do converted_value vindo do backend. unit null = não exibe unidade
+// (combustível: tipo varia entre diesel/gás/elétrico, então não afirmamos a unidade).
 const CAN_PARAM_RULES=[
-  {key:"fuel_level",label:"Nível combustível",ids:["00000032","000000C3","0000879F","00002717"],aliases:["sysparamfuellevel","fuellevel"]},
-  {key:"fuel_rate",label:"Consumo instantâneo",ids:["0000003C","00002718"],aliases:["sysparamfuelrate","enginefuelrate","fuelrate"]},
-  {key:"fuel_used",label:"Combustível usado",ids:["00000031","000000C5","00002719"],aliases:["sysparamtotalfuelused","enginetotalfuelused","fuelused"]},
-  {key:"distance",label:"Odômetro",ids:["00002714"],aliases:["sysparamvehicledistance","vehicledistance","distance","odometer"]},
-  {key:"rpm",label:"RPM",ids:["000000AD","0000003A","00002715"],aliases:["sysparamrpm","enginerpm","rpm"]},
-  {key:"oil_pressure",label:"Pressão do óleo",ids:["00000024","0000010D","00002723"],aliases:["sysparamoilpressure","engineoilpressure","oilpressure"]},
-  {key:"air_pressure",label:"Pressão do ar",ids:[],aliases:["sysparambrake1airpressurebar","airpressure"]},
-  {key:"coolant_temp",label:"Temp. coolant",ids:["0000002F","0000010E","0000271F"],aliases:["sysparamcoolanttemp","enginecoolanttemperature","coolanttemp"]},
-  {key:"oil_temp",label:"Temp. óleo",ids:["0000168E","0000271E"],aliases:["sysparamoiltemp","engineoiltemperature1","oiltemp"]},
+  {key:"fuel_level",label:"Nível combustível",ids:["00000032","000000C3","0000879F","00002717"],aliases:["sysparamfuellevel","fuellevel"],decimals:0,unit:"%"},
+  {key:"fuel_rate",label:"Consumo instantâneo",ids:["0000003C","00002718"],aliases:["sysparamfuelrate","enginefuelrate","fuelrate"],decimals:4,unit:null},
+  {key:"fuel_used",label:"Combustível usado",ids:["00000031","000000C5","00002719"],aliases:["sysparamtotalfuelused","enginetotalfuelused","fuelused"],decimals:3,unit:null},
+  {key:"distance",label:"Odômetro",ids:["00002714"],aliases:["sysparamvehicledistance","vehicledistance","distance","odometer"],decimals:3,unit:"Km"},
+  {key:"rpm",label:"RPM",ids:["000000AD","0000003A","00002715"],aliases:["sysparamrpm","enginerpm","rpm"],decimals:0,unit:"RPM"},
+  {key:"oil_pressure",label:"Pressão do óleo",ids:["00000024","0000010D","00002723"],aliases:["sysparamoilpressure","engineoilpressure","oilpressure"],decimals:3,unit:"kPa"},
+  // alias genérico "airpressure" removido: casava com "Scheme Output 534 - Air pressure less than 7 bar" (booleano)
+  {key:"air_pressure",label:"Pressão do ar",ids:["0000711F"],aliases:["sysparambrake1airpressurebar"],decimals:3,unit:"kPa"},
+  {key:"coolant_temp",label:"Temp. coolant",ids:["0000002F","0000010E","0000271F"],aliases:["sysparamcoolanttemp","enginecoolanttemperature","coolanttemp"],decimals:3,unit:"°C"},
+  {key:"oil_temp",label:"Temp. óleo",ids:["0000168E","0000271E"],aliases:["sysparamoiltemp","engineoiltemperature1","oiltemp"],decimals:3,unit:"°C"},
   {key:"wiper",label:"Limpador",ids:[],aliases:["sysparamwiperstatus","wiperstatus","wiper"]},
 ];
 
@@ -1470,7 +1483,7 @@ function renderKeyParams(inst,snapshot){
   host.appendChild(sumRow);
   const grid=document.createElement("div");grid.className="param-grid";
   for(const rule of CAN_PARAM_RULES){
-    const found=canFindParam(x.params,rule),shown=found?canDisplayVal(found):null,hasV=!!(shown&&shown!=="—");
+    const found=canFindParam(x.params,rule),shown=found?canDisplayCardVal(found,rule):null,hasV=!!(shown&&shown!=="—");
     const card=document.createElement("div");card.className="param-card"+(hasV?" has-val":"");
     card.innerHTML=`<div class="p-label">${esc(rule.label)}</div><div class="p-val${hasV?"":" awaiting"}">${hasV?esc(shown):"aguardando..."}</div>`;
     grid.appendChild(card);
@@ -1727,7 +1740,7 @@ function _photoRenderGrid(){
       ${badge}
       <button type="button" onclick="_photoPickFile('${t.slug}')" title="Tirar foto"
         style="background:none;border:none;cursor:pointer;font-size:17px;padding:2px 4px;line-height:1">📷</button>
-      <button type="button" onclick="_photoPickGallery('${t.slug}')" title="Carregar do telefone"
+      <button type="button" onclick="_photoPickGallery('${t.slug}')" title="Carregar do telefone (várias)"
         style="background:none;border:none;cursor:pointer;font-size:17px;padding:2px 4px;line-height:1">🖼️</button>
     </div>`;
   }).join("");
@@ -1789,10 +1802,13 @@ async function _photoUpload(file,slug){
   }
 }
 
-function _photoOnInputChange(){
-  const file=this.files?.[0];
+async function _photoOnInputChange(){
+  const files=Array.from(this.files||[]);   // galeria permite múltiplas
   const slug=this.getAttribute("data-type");
-  if(file&&slug)_photoUpload(file,slug);
+  if(!slug||!files.length)return;
+  // sequencial: _nextNumber (backend) lê a pasta para numerar; em paralelo
+  // todos leriam o mesmo número e sobrescreveriam.
+  for(const f of files) await _photoUpload(f,slug);
 }
 $("photoFileInput").addEventListener("change",_photoOnInputChange);
 $("photoFileInputGallery").addEventListener("change",_photoOnInputChange);

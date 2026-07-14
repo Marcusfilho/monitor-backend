@@ -12,7 +12,11 @@
  * FIX_SS_JOB_WRAP_V1: extrai job de { ok, job }
  */
 
+import WebSocket from "ws";
+
 import { saveSnapshot } from "../../services/snapshotStore";
+import { getTrafflogToken } from "../../core/traffilogAuth";
+import { fetchModuleState, buildCanSummary, WsLike } from "../../core/vehicleMonitorSnapshotService";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -24,6 +28,12 @@ const WORKER_ID = process.env.WORKER_ID     || "snapshot-rw";
 const POLL_MS   = Number(process.env.POLL_INTERVAL_MS     || "8000");
 const MAX_IDLE  = Number(process.env.POLL_INTERVAL_MS     || "60000");
 const BACKOFF   = 1.6;
+
+// Backfill do module state (FIX_MODULE_STATE_POLL_V1)
+const WS_GUID       = (process.env.MONITOR_WS_GUID   || "").trim();
+const WS_ORIGIN     = (process.env.MONITOR_WS_ORIGIN || "https://operation.traffilog.com").trim();
+const MS_MAX_WAIT   = Number(process.env.SNAPSHOT_MS_MAX_WAIT_MS  || "60000");
+const MS_INTERVAL   = Number(process.env.SNAPSHOT_MS_INTERVAL_MS  || "15000");
 
 if (!BASE) throw new Error("[snapshot-rw] API_BASE_URL não definido");
 if (!KEY)  throw new Error("[snapshot-rw] WORKER_KEY não definido");
@@ -64,6 +74,64 @@ async function failJob(jobId: string, reason: string, detail?: any): Promise<voi
 }
 
 // ---------------------------------------------------------------------------
+// Backfill do module state (FIX_MODULE_STATE_POLL_V1)
+//
+// A captura CAN roda ~20s após a ativação do veículo, e nessa janela o servidor
+// Traffilog ainda não materializou o registro de module state (responde av=0 com
+// data=[]). Aqui — já depois da aprovação do técnico — tentamos de novo antes de
+// gravar/exportar. Falha é não-fatal: o snapshot é salvo com o que houver.
+// ---------------------------------------------------------------------------
+
+async function backfillModuleState(jobId: string, can: any, vehicleId: number): Promise<void> {
+  if (!WS_GUID) {
+    console.log(`[snapshot-rw] job=${jobId} backfill pulado — MONITOR_WS_GUID não definido`);
+    return;
+  }
+
+  let ws: WebSocket | null = null;
+  try {
+    const token = await getTrafflogToken();
+    ws = new WebSocket(`wss://websocket.traffilog.com:8182/${WS_GUID}/${token}/json?defragment=1`, {
+      headers: {
+        "Pragma"         : "no-cache",
+        "Cache-Control"  : "no-cache",
+        "User-Agent"     : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+      },
+      origin           : WS_ORIGIN,
+      handshakeTimeout : 15000,
+      perMessageDeflate: { clientMaxWindowBits: 15 },
+    });
+
+    const sock = ws;
+    await new Promise<void>((resolve, reject) => {
+      sock.once("open", () => resolve());
+      sock.once("error", reject);
+    });
+
+    const rows = await fetchModuleState(sock as unknown as WsLike, token, vehicleId, {
+      maxWaitMs : MS_MAX_WAIT,
+      intervalMs: MS_INTERVAL,
+    });
+
+    if (rows.length > 0) {
+      can.moduleState = rows;
+      can.canSummary  = buildCanSummary(rows);
+      console.log(
+        `[snapshot-rw] job=${jobId} backfill OK módulos=${rows.length}` +
+        ` can0_ok=${can.canSummary.can0_ok} can1_ok=${can.canSummary.can1_ok}`
+      );
+    } else {
+      console.log(`[snapshot-rw] job=${jobId} backfill vazio — snapshot vai sem module state`);
+    }
+  } catch (e: any) {
+    console.log(`[snapshot-rw] job=${jobId} backfill FALHOU (non-fatal): ${e?.message || String(e)}`);
+  } finally {
+    try { ws?.close(); } catch { /* ignore */ }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Processamento
 // ---------------------------------------------------------------------------
 
@@ -83,6 +151,12 @@ async function processJob(job: any): Promise<void> {
       typeof p.technician === "object"
         ? (p.technician?.nick ?? p.technician?.id ?? null)
         : (p.technician ?? null);
+
+    const can       = (p.can && typeof p.can === "object") ? p.can : null;
+    const vehicleId = Number(can?.vehicleId ?? p.vehicle_id ?? p.vehicleId ?? 0);
+    if (can && vehicleId && (can.moduleState?.length ?? 0) === 0) {
+      await backfillModuleState(jobId, can, vehicleId);
+    }
 
     await saveSnapshot({
       job_id             : jobId,

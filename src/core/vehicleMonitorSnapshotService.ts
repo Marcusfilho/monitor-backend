@@ -75,6 +75,7 @@ const PARAM_META: Record<string, ParamMeta> = {
   "0000003C": { name: "engine_fuel_rate",            multiplier: 0.05,    offset: 0,    min: 0,    max: 3212.75,  unit: "L/h" },
   "00002723": { name: "engine_oil_pressure",         multiplier: 0.01,    offset: 0,    min: 0,    max: 20,       unit: "kPa" },
   "00000024": { name: "engine_oil_pressure",         multiplier: 0.04,    offset: 0,    min: 0,    max: 10,       unit: "kPa" },
+  "0000711F": { name: "sys_param_brake1_air_pressure", multiplier: 0.05,  offset: 0,    min: 0,    max: 20,       unit: "kPa" },
   "0000271E": { name: "engine_oil_temperature",      multiplier: 1.0,     offset: -273, min: -273, max: 2000,     unit: "°C"  },
   "0000271F": { name: "engine_coolant_temperature",  multiplier: 1.0,     offset: -273, min: -273, max: 250,      unit: "°C"  },
   "0000002F": { name: "engine_coolant_temperature",  multiplier: 1.0,     offset: -40,  min: -40,  max: 210,      unit: "°C"  },
@@ -293,6 +294,84 @@ class TraffilogWsMux {
   }
 }
 
+// ─── Module state ────────────────────────────────────────────────────────────
+
+function parseMsData(data: any[]): VmModuleStateRow[] {
+  return data.map((r: any) => ({
+    id:               String(r?.id ?? ""),
+    module:           String(r?.module_descr ?? ""),
+    sub:              String(r?.sub_module_descr ?? ""),
+    last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
+    active:           asBool01(r?.active),
+    was_ok:           asBool01(r?.was_ok),
+    ok:               asBool01(r?.ok),
+    error:            asBool01(r?.error),
+    error_descr:      r?.error_descr != null ? String(r.error_descr) : null,
+  }));
+}
+
+/**
+ * FIX_MODULE_STATE_POLL_V1
+ *
+ * O servidor só materializa o registro de module state minutos DEPOIS da ativação do
+ * veículo — antes disso responde av=0 com data=[] (sucesso, lista vazia). Consulta única
+ * logo após a instalação sempre voltava vazia. Aqui insistimos até o deadline.
+ *
+ * av≠0 (ex.: 6666 = pool de conexões esgotado no Traffilog) devolve uma linha de ERRO
+ * dentro de data — nunca tratar como módulo.
+ */
+async function pollModuleState(
+  mux: TraffilogWsMux,
+  vehicleId: number | string,
+  maxWaitMs: number,
+  intervalMs: number,
+): Promise<VmModuleStateRow[]> {
+  const deadline = Date.now() + maxWaitMs;
+
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await mux.sendAction<any>("get_monitor_module_state", {
+        tag: "loading_screen", filter: "", vehicle_id: String(vehicleId),
+      });
+      const av = String(res?.action_value ?? "");
+
+      if (av !== "0") {
+        const desc = String(res?.error_description ?? res?.data?.[0]?.error_description ?? "");
+        console.log(`[vm-ms] veh=${vehicleId} #${attempt} av=${av} ${desc.slice(0, 70)}`);
+      } else {
+        const rows = parseMsData(res?.data ?? []);
+        if (rows.length > 0) {
+          console.log(`[vm-ms] veh=${vehicleId} #${attempt} OK data=${rows.length}`);
+          return rows;
+        }
+        console.log(`[vm-ms] veh=${vehicleId} #${attempt} data=0 av=0 — registro ainda não existe`);
+      }
+    } catch (e: any) {
+      console.log(`[vm-ms] veh=${vehicleId} #${attempt} ERRO: ${e?.message || String(e)}`);
+    }
+
+    if (Date.now() + intervalMs >= deadline) {
+      console.log(`[vm-ms] veh=${vehicleId} desiste após ${Math.round(maxWaitMs / 1000)}s — module state vazio`);
+      return [];
+    }
+    await sleep(intervalMs);
+  }
+}
+
+/**
+ * Consulta module state numa conexão avulsa (sem coletar params).
+ * Usado pelo saveSnapshotWorker para preencher o que a captura não pegou.
+ */
+export async function fetchModuleState(
+  ws: WsLike,
+  sessionToken: string,
+  vehicleId: number | string,
+  opts: { maxWaitMs?: number; intervalMs?: number; urlEncode?: boolean } = {},
+): Promise<VmModuleStateRow[]> {
+  const mux = new TraffilogWsMux(ws, sessionToken, opts.urlEncode ?? true);
+  return pollModuleState(mux, vehicleId, opts.maxWaitMs ?? 30_000, opts.intervalMs ?? 10_000);
+}
+
 // ─── collectVehicleMonitorSnapshot ───────────────────────────────────────────
 
 export async function collectVehicleMonitorSnapshot(opts: {
@@ -317,6 +396,9 @@ export async function collectVehicleMonitorSnapshot(opts: {
   const waitAfterLastParamMs = Number(process.env.VM_WAIT_AFTER_LAST_PARAM_MS ?? 5_000);
   // Intervalo de resubscription quando ainda não chegou nenhum dado (default 30s)
   const resubscribeIntervalMs = Number(process.env.VM_RESUBSCRIBE_INTERVAL_MS ?? 30_000);
+  // Poll do module state após a janela de params (FIX_MODULE_STATE_POLL_V1)
+  const msMaxWaitMs       = Number(process.env.VM_MS_MAX_WAIT_MS       ?? 90_000);
+  const msPollIntervalMs  = Number(process.env.VM_MS_POLL_INTERVAL_MS  ?? 15_000);
 
   const mux = new TraffilogWsMux(opts.ws, opts.sessionToken, opts.urlEncode ?? true);
 
@@ -357,24 +439,7 @@ export async function collectVehicleMonitorSnapshot(opts: {
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_CONFIG_STATUS", value: "" });
   mux.fireAndForget("vehicle_subscribe",   { vehicle_id: String(opts.vehicleId), object_type: "UNIT_PARAMETERS" });
 
-  // ── 4. Module State: consultado APÓS a janela de params (FIX_MODULE_STATE_TIMING_V1)
-  // get_monitor_module_state só reflete o link CAN/J1708 ao vivo depois que a unidade
-  // respondeu com frames (igual ao internal-tools). Consulta precoce (t≈0.5s) voltava
-  // data:0/av=0. A re-consulta está no fim da coleta (seção 7b).
-
-  function parseMsData(data: any[]): VmModuleStateRow[] {
-    return data.map((r: any) => ({
-      id:               String(r?.id ?? ""),
-      module:           String(r?.module_descr ?? ""),
-      sub:              String(r?.sub_module_descr ?? ""),
-      last_update_date: r?.last_update_date ? safeDecodeURIComponent(String(r.last_update_date)) : null,
-      active:           asBool01(r?.active),
-      was_ok:           asBool01(r?.was_ok),
-      ok:               asBool01(r?.ok),
-      error:            asBool01(r?.error),
-      error_descr:      r?.error_descr != null ? String(r.error_descr) : null,
-    }));
-  }
+  // ── 4. Module State: consultado APÓS a janela de params, com poll (seção 7b) ──
 
   const moduleState: VmModuleStateRow[] = [];
 
@@ -611,19 +676,11 @@ export async function collectVehicleMonitorSnapshot(opts: {
 
   off();
 
-  // ── 7b. Module state APÓS a janela de params (FIX_MODULE_STATE_TIMING_V1) ──
-  // Subscription ainda ativa e a unidade já respondeu frames → agora reflete o link
-  // CAN/J1708 ao vivo. Sem client_id (igual ao internal-tools, que funciona).
-  try {
-    const msFinal = await mux.sendAction<any>("get_monitor_module_state", {
-      tag: "loading_screen", filter: "", vehicle_id: String(opts.vehicleId),
-    });
-    const rows = parseMsData(msFinal?.data ?? []);
-    console.log(`[vm-ms] final data=${rows.length} av=${msFinal?.action_value}`);
-    if (rows.length > 0) moduleState.splice(0, moduleState.length, ...rows);
-  } catch (e: any) {
-    console.log(`[vm-ms] final ERRO: ${e?.message || String(e)}`);
-  }
+  // ── 7b. Module state APÓS a janela de params, com poll (FIX_MODULE_STATE_POLL_V1) ──
+  // Em instalação nova o registro ainda não existe no servidor: insiste até msMaxWaitMs.
+  // Se estourar, o saveSnapshotWorker tenta de novo antes de exportar.
+  const msRows = await pollModuleState(mux, opts.vehicleId, msMaxWaitMs, msPollIntervalMs);
+  if (msRows.length > 0) moduleState.splice(0, moduleState.length, ...msRows);
 
   await mux.sendAction("vehicle_unsubscribe", { vehicle_id: String(opts.vehicleId), object_type: "" }).catch(() => {});
 
