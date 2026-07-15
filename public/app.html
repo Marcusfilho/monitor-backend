@@ -929,6 +929,12 @@ function _clearSerialInUse(){
   state._serialInUse=false;state._serialCheckPending=false;
   $("serialInUseBanner").style.display="none";
 }
+// alterna o estilo do banner de serial: azul (informativo, CMDT) x vermelho (bloqueio)
+function _setSerialBannerStyle(blue){
+  const b=$("serialInUseBanner"),t=b.querySelector(".be-title"),m=b.querySelector(".be-msg");
+  if(blue){b.style.borderColor="#1e3a5f";b.style.background="#091624";t.style.color="#7dd3fc";m.style.color="#93c5fd"}
+  else{b.style.borderColor="";b.style.background="";t.style.color="";m.style.color=""}
+}
 async function _checkSerial(serial){
   state._serialCheckPending=true;
   const token=sessionStorage.getItem("html5_session_token")||"";
@@ -939,9 +945,17 @@ async function _checkSerial(serial){
     const d=r.data;
     if(r.ok&&d?.ok&&d.vehicle_id){
       const lic=(d.license_nmbr||"").toUpperCase().trim();
-      const isFree=!lic||lic==="CMDT"||normLicKey(lic)===normLicKey(serial);
-      if(!isFree){
+      const isCmdt=/CMDT/.test(lic);            // placeholder de bancada — backend libera o serial (cmdtService)
+      const isFree=!lic||normLicKey(lic)===normLicKey(serial);
+      if(isCmdt){
+        // veículo placeholder: aviso informativo (azul), instalação liberada
+        state._serialInUse=false;
+        _setSerialBannerStyle(true);
+        $("serialInUseDetail").textContent="Vinculado à placa "+lic+(d.client_descr?" ("+d.client_descr+")":"");
+        $("serialInUseBanner").style.display="flex";
+      }else if(!isFree){
         state._serialInUse=true;
+        _setSerialBannerStyle(false);
         $("serialInUseDetail").textContent="Vinculado à placa "+lic+(d.client_descr?" ("+d.client_descr+")":"");
         $("serialInUseBanner").style.display="flex";
       }else{_clearSerialInUse()}
