@@ -131,6 +131,12 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
     return { vehicleId: null, innerId: null, licensePlate: null, clientId: null, clientDescr: null, err: "empty_datasource" };
   }
 
+  // Coleta todos os candidatos: exatos têm precedência sobre substring.
+  // Dentro de cada grupo, MENOR vehicle_id vence — o cadastro pré-existente, não a
+  // duplicata criada depois (ex.: placeholder CMDT renomeado com a placa real).
+  const exact  : VhclsParseResult[] = [];
+  const partial: VhclsParseResult[] = [];
+
   for (const tag of dataTags) {
     const licRaw     = extractAttr(tag, "LICENSE_NMBR");
     const lic        = normLicenseKey(licRaw);
@@ -139,13 +145,33 @@ function parseVehicleIdFromVhclsXml(xml: string, licenseKey: string): VhclsParse
     const clientId   = extractAttr(tag, "CLIENT_ID")   || null;
     const clientDescr = extractAttr(tag, "CLIENT_DESCR") || null;
 
-    const licMatch   = !!(lic && vid && lic === lk);
-    const innerMatch = !!(innerId && vid && innerIdMatch(innerId, lk));
+    const n = Number(vid);
+    if (!(n > 0)) continue;
 
-    if (licMatch || innerMatch) {
-      const n = Number(vid);
-      return { vehicleId: n > 0 ? n : null, innerId: innerId || null, licensePlate: licRaw || null, clientId, clientDescr, err: null };
+    const licMatch   = !!(lic && lic === lk);
+    const innerMatch = !!(innerId && innerIdMatch(innerId, lk));
+    // substring: espelha o filtro do próprio VHCLS (ex.: busca "QZB8F00" acha "604 - QZB8F00")
+    const licPartial = !!(lic && lk && lic.includes(lk));
+
+    if (licMatch || innerMatch || licPartial) {
+      const hit: VhclsParseResult = {
+        vehicleId: n, innerId: innerId || null, licensePlate: licRaw || null, clientId, clientDescr, err: null,
+      };
+      (licMatch || innerMatch ? exact : partial).push(hit);
     }
+  }
+
+  const group = exact.length ? exact : partial;
+  if (group.length) {
+    group.sort((a, b) => (a.vehicleId ?? 0) - (b.vehicleId ?? 0));
+    if (group.length > 1) {
+      console.warn(
+        `[vhclsService] chave "${licenseKey}" casou com ${group.length} veículos ` +
+        `(${group.map(g => g.vehicleId).join(", ")}) — usando o menor VEHICLE_ID=${group[0].vehicleId}. ` +
+        `Possível duplicata no Traffilog.`
+      );
+    }
+    return group[0];
   }
 
   // resultado único sem match de placa — aceita o único registro
@@ -220,7 +246,10 @@ async function resolveVehicleIdDirect(
   ctx       : VhclsContext | null | undefined,
   licenseKey: string
 ): Promise<{ vid: number; innerId: string | null; clientId: string | null; clientDescr: string | null } | null> {
-  const lk = normLicenseKey(licenseKey);
+  // q = chave CRUA enviada ao VHCLS (o filtro é substring do LICENSE_NMBR gravado);
+  // lk = versão normalizada, só para validar não-vazio.
+  const q  = String(licenseKey || "").trim().toUpperCase();
+  const lk = normLicenseKey(q);
   if (!lk) return null;
 
   // garante sessão antes do primeiro request
@@ -235,12 +264,12 @@ async function resolveVehicleIdDirect(
         cfg.actionUrl,
         process.env.HTML5_BASE_URL || "",
         cookieHeader,
-        lk,
+        q,
         cfg.httpTimeoutMs
       ));
     } catch (e: any) {
       if (String(e?.message || "").includes("fetch failed") && attempt === 1) {
-        console.log(`[vhclsService] ${lk}: fetch failed → retry em 2s`);
+        console.log(`[vhclsService] ${q}: fetch failed → retry em 2s`);
         await new Promise(r => setTimeout(r, 2000));
         continue;
       }
@@ -258,10 +287,10 @@ async function resolveVehicleIdDirect(
 
     // snapshot pro ctx
     try {
-      if (ctx) ctx.__vhcls_last = { licenseKey: lk, status, len: text.length, head: safeSnippet(text, 280) };
+      if (ctx) ctx.__vhcls_last = { licenseKey: q, status, len: text.length, head: safeSnippet(text, 280) };
     } catch { /* ignora */ }
 
-    const parsed = parseVehicleIdFromVhclsXml(text, lk);
+    const parsed = parseVehicleIdFromVhclsXml(text, q);
 
     if (!parsed.err && parsed.vehicleId) return { vid: parsed.vehicleId, innerId: parsed.innerId ?? null, clientId: parsed.clientId ?? null, clientDescr: parsed.clientDescr ?? null };
 
@@ -288,7 +317,7 @@ async function resolveVehicleIdDirect(
       } catch { /* não bloqueia */ }
 
       const reason = parsed.err === "empty_datasource" ? "datasource vazio (sessão stale)" : "session expired";
-      console.log(`[vhclsService] ${lk}: ${reason} → relogin → retry`);
+      console.log(`[vhclsService] ${q}: ${reason} → relogin → retry`);
       await ensureHtml5Session(cfg, "VHCLS_DIRECT_RETRY").catch(() => {});
       continue;
     }
@@ -336,7 +365,12 @@ export async function ensureVehicleId(
   const lookupRaw = String(payload.lookup_license || payload.lookupLicense || payload.lookupLicenseNmbr || "");
 
   const tries: string[] = [];
-  const pushTry = (v: string) => { const k = normLicenseKey(v); if (k) tries.push(k); };
+  // empurra o valor CRU (só trim+upper) — é a chave enviada ao VHCLS, que filtra por
+  // substring do LICENSE_NMBR gravado. normLicenseKey serve só como teste de vazio.
+  const pushTry = (v: string) => {
+    const raw = String(v || "").trim().toUpperCase();
+    if (normLicenseKey(raw)) tries.push(raw);
+  };
 
   if (service === "INSTALL") {
     pushTry(lookupRaw);
@@ -349,10 +383,10 @@ export async function ensureVehicleId(
     pushTry(serialRaw);
   }
 
-  // dedupe mantendo ordem
+  // dedupe mantendo ordem — compara normalizado, mas guarda a chave crua
   const seen = new Set<string>();
   const uniq: string[] = [];
-  for (const t of tries) { if (!seen.has(t)) { seen.add(t); uniq.push(t); } }
+  for (const t of tries) { const k = normLicenseKey(t); if (!seen.has(k)) { seen.add(k); uniq.push(t); } }
 
   if (!uniq.length) return null;
 
@@ -399,7 +433,9 @@ export async function resolveByPlate(
   jobId     = "",
   byInnerId = false
 ): Promise<VhclsResolveResult> {
-  const lk = normLicenseKey(plate);
+  // q = chave CRUA enviada ao VHCLS (filtro por substring); lk só valida não-vazio.
+  const q  = String(plate || "").trim().toUpperCase();
+  const lk = normLicenseKey(q);
 
   // garante cookie
   let cookieLen = 0;
@@ -417,7 +453,7 @@ export async function resolveByPlate(
     } catch { /* ignora */ }
   }
 
-  console.log(`[vhclsService] [${tag}] job=${jobId} plate=${lk} cookieLen=${cookieLen}`);
+  console.log(`[vhclsService] [${tag}] job=${jobId} plate=${q} cookieLen=${cookieLen}`);
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     const cookieHeader = ensureCookieDefaults(readJarCookie(cfg.cookieJarPath));
@@ -427,7 +463,7 @@ export async function resolveByPlate(
         cfg.actionUrl,
         process.env.HTML5_BASE_URL || "",
         cookieHeader,
-        lk,
+        q,
         cfg.httpTimeoutMs,
         byInnerId
       ));
@@ -440,7 +476,7 @@ export async function resolveByPlate(
       ({ status, text } = { status: 0, text: "" });
     }
 
-    const parsed   = parseVehicleIdFromVhclsXml(text, lk);
+    const parsed   = parseVehicleIdFromVhclsXml(text, q);
     const loginNeg = /login\s*=\s*"-1"/i.test(text);
     const head     = safeSnippet(text, 220);
     const headSafe = /ASP\.NET_SessionId=|TFL_SESSION=|AWSALB=/i.test(head)
@@ -473,7 +509,7 @@ export async function resolveByPlate(
     }
 
     return {
-      plate       : lk,
+      plate       : q,
       status,
       len         : text.length,
       loginNeg,
@@ -488,7 +524,7 @@ export async function resolveByPlate(
   }
 
   return {
-    plate: lk, status: 0, len: 0, loginNeg: false,
+    plate: q, status: 0, len: 0, loginNeg: false,
     vehicleId: null, innerId: null, licensePlate: null, clientId: null, clientDescr: null,
     jarFlags: "", head: "",
   };

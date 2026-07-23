@@ -159,9 +159,14 @@ async function processJob(job: any): Promise<void> {
     try {
       sessionToken = await getTrafflogToken();
     } catch (e: any) {
-      console.error(`[can-rw] job=${jobId} tentativa ${attempt} falha ao obter token: ${e?.message || e}`);
-      await failJob(jobId, "token_unavailable", e?.message);
-      return;
+      console.error(`[can-rw] job=${jobId} tentativa ${attempt}/${CAN_MAX_ATTEMPTS} falha ao obter token: ${e?.message || e}`);
+      if (attempt === CAN_MAX_ATTEMPTS) {
+        await failJob(jobId, "token_unavailable", e?.message);
+        return;
+      }
+      invalidateTrafflogToken();
+      await new Promise(r => setTimeout(r, 10_000));
+      continue;
     }
 
     let ws: WsLike | null = null;

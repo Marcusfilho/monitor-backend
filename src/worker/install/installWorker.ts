@@ -135,20 +135,33 @@ async function resolveVehicleIdWithPath(
 ): Promise<ResolveResult | null> {
   // Caminho A usa SEMPRE a placa real (plate_real/plateReal) — nunca o serial.
   // O frontend envia plate=serial para INSTALL, mas plate_real é a placa verdadeira.
-  const plateReal = String(payload.plate_real || payload.plateReal || "").trim()
-    .replace(/[^A-Z0-9_-]/gi, "").toUpperCase();
+  // NÃO remover espaços/pontuação: este valor é a chave de busca do VHCLS, que filtra por
+  // substring do LICENSE_NMBR gravado — "604 - QZB8F00" acha, "604-QZB8F00" retorna vazio.
+  const plateReal = String(payload.plate_real || payload.plateReal || "").trim().toUpperCase();
+  // placa sem o prefixo de frota ("604 - QZB8F00" → "QZB8F00"), para o caso inverso:
+  // cliente usa frota no app mas o Traffilog guarda só a placa.
+  const plateBare = plateReal.split(" - ").pop()!.trim();
   const serial = String(payload.serial || "").trim();
   const clientIdCadastro = Number(payload.client_id || 0);
 
   // -- Tentativa 1: por placa real (Caminho A) --
   if (plateReal) {
     const payloadByPlate = { ...payload, service: "INSTALL" };
-    // força busca pela placa real — sem serial para não contaminar
-    payloadByPlate.plate    = plateReal;
-    payloadByPlate.license  = plateReal;
-    payloadByPlate.serial   = "";
-    payloadByPlate.inner_id = "";
-    payloadByPlate.INNER_ID = "";
+    // ensureVehicleId tenta, nesta ordem para INSTALL: lookup_license, serial, plate_real, plate.
+    // Zera TODOS os aliases de serial/lookup — senão o Caminho A resolve pelo serial e ainda
+    // reporta resolvedBy:"plate", pulando o CHANGE_COMPANY.
+    payloadByPlate.plate_real      = plateReal;   // 1ª tentativa: placa cheia (casa exato)
+    payloadByPlate.plate           = plateBare;   // 2ª tentativa: placa sem frota
+    payloadByPlate.license         = plateReal;
+    payloadByPlate.serial          = "";
+    payloadByPlate.serie           = "";
+    payloadByPlate.innerId         = "";
+    payloadByPlate.SERIAL          = "";
+    payloadByPlate.inner_id        = "";
+    payloadByPlate.INNER_ID        = "";
+    payloadByPlate.lookup_license     = "";
+    payloadByPlate.lookupLicense      = "";
+    payloadByPlate.lookupLicenseNmbr  = "";
 
     const vid = await ensureVehicleId(cfg, { jobId, log: console.log }, payloadByPlate);
     if (vid) {

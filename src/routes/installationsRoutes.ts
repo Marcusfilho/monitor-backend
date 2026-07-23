@@ -25,11 +25,13 @@ const cfg    = configFromEnv();
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Não remove espaços/pontuação: o valor vai como chave de busca no VHCLS, que
+// filtra por substring do LICENSE_NMBR gravado (ex.: "604 - QZB8F00").
+// A normalização só vale para comparar/deduplicar (normLicenseKey no parse).
 function normPlate(raw: unknown): string {
   return String(raw || "")
     .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9_-]/g, "");
+    .toUpperCase();
 }
 
 function isMaintNoSwap(type: string): boolean {

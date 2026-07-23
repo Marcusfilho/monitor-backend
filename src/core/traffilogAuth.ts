@@ -31,6 +31,9 @@ function _loginOnce(loginName: string, password: string): Promise<string> {
       res.on("end", () => {
         if (res.statusCode !== 200)
           return reject(new Error(`[traffilogAuth] HTTP ${res.statusCode} body="${d.slice(0,200)}"`));
+        // corpo vazio com HTTP 200 acontece (blip de LB/túnel) — não é JSON malformado
+        if (!d.trim())
+          return reject(new Error(`[traffilogAuth] resposta vazia (HTTP ${res.statusCode})`));
         try {
           const props = JSON.parse(d)?.response?.properties;
           const tok = props?.session_token || props?.data?.[0]?.session_token;
@@ -38,7 +41,7 @@ function _loginOnce(loginName: string, password: string): Promise<string> {
             return reject(new Error(`[traffilogAuth] sem token av=${props?.action_value}`));
           resolve(String(tok).trim());
         } catch (e) {
-          reject(new Error(`[traffilogAuth] parse error: ${e}`));
+          reject(new Error(`[traffilogAuth] parse error: ${e} body="${d.slice(0,200)}"`));
         }
       });
     });
