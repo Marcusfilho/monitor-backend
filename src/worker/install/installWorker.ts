@@ -184,6 +184,24 @@ async function resolveVehicleIdWithPath(
     const vid = match?.vehicleId ?? null;
 
     if (vid) {
+      // GUARDA ANTI-DUPLICATA: o Path A pode devolver a placa falsamente vazia sob sessão
+      // degradada (a resposta VHCLS "válida vazia" é indistinguível de "não existe"). Sem esta
+      // reconfirmação, o Path B carimba a placa real num placeholder CMDT e cria uma DUPLICATA
+      // do cadastro. Reconsulta a placa (sem frota — query mais abrangente por substring) com
+      // sessão fresca: se a placa reaparece em outro vehicle_id, esse é o alvo correto → usa ele
+      // como Path A teria feito. Se continua vazia, a placa é nova de fato → Path B segue normal.
+      if (plateBare) {
+        const confirm = await resolveByPlate(cfg, plateBare, "ANTIDUP", jobId, false).catch(() => null);
+        const confirmVid = confirm?.vehicleId ? Number(confirm.vehicleId) : 0;
+        if (confirmVid && confirmVid !== vid) {
+          console.warn(
+            `[install-rw] job=${jobId} ANTI-DUP: placa "${plateReal}" reconfirmou vehicle_id=${confirmVid} ` +
+            `(Path B usaria o placeholder ${vid}) — usando ${confirmVid} para não duplicar o cadastro`
+          );
+          return { vehicleId: confirmVid, resolvedBy: "plate", clientIdFound: null, clientMismatch: false };
+        }
+      }
+
       const tag = byInner?.vehicleId ? "INNER_ID" : "LICENSE_NMBR";
       console.log(`[install-rw] job=${jobId} Caminho B (${tag}): serial="${serial}" → vehicle_id=${vid} plate="${match?.licensePlate||"?"}"`);
 
@@ -568,6 +586,18 @@ async function processJob(job: any): Promise<void> {
     } else {
       console.log(`[install-rw] job=${jobId} CHANGE_COMPANY pós-SAVE → executando`);
       const vhclsData = (payload._vhclsData && typeof payload._vhclsData === "object") ? payload._vhclsData as Record<string, string> : {};
+      // O CHANGE_COMPANY (ASSET_BASIC_SAVE) regrava o veículo usando vhclsData.ASSET_TYPE.
+      // Como vhclsData vem do PLACEHOLDER (asset NA), sem isto ele DESFAZ o asset que o SAVE
+      // acabou de gravar — o técnico seleciona (ex.) Scania e o veículo volta a NA. Sobrescreve
+      // com o asset do cadastro (payload.assetType) para o ASSET_BASIC_SAVE preservá-lo.
+      const selectedAsset = String(payload.assetType ?? payload.asset_type ?? payload.ASSET_TYPE ?? "").trim();
+      if (selectedAsset) {
+        vhclsData.ASSET_TYPE = selectedAsset;
+        const veh = (payload.vehicle && typeof payload.vehicle === "object") ? payload.vehicle : null;
+        if (veh?.manufacturer) vhclsData.MANUFACTURER_DESCR = String(veh.manufacturer);
+        if (veh?.model)        vhclsData.MODEL              = String(veh.model);
+        delete vhclsData.ASSET_TYPE_DESCR; // deixa o ASSET_BASIC_SAVE derivar de MANUFACTURER_DESCR+MODEL
+      }
       const ccResult = await executeChangeCompany(cfg, vehicleId, clientIdDest, clientDescr, jobId, vhclsData)
         .catch((e: any) => ({ ok: false as const, error: String(e?.message || e) }));
       if (!ccResult.ok) {
