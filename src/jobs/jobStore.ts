@@ -108,6 +108,35 @@ export function createJob<TPayload = any>(typeOrJob: any, maybePayload?: TPayloa
 
 export function getNextJob(type: string, workerId: string): BaseJob | null {
   loadOnce();
+  // === SB_CLIENT_SERIALIZE_V1 ===
+  // O "processo de review" do scheme_builder no Traffilog é um slot ÚNICO por
+  // client_id (review_process_attributes/get_vcls_action_review_opr são
+  // chaveados só por client_id). Dois SB do mesmo cliente em paralelo colidem:
+  // o 2º recebe associate av=8 + review vazio → process_id ausente → abort.
+  // Serializa por client_id no despacho: não entrega um SB de um cliente
+  // enquanto outro SB do mesmo cliente está `processing`. SB de clientes
+  // distintos seguem paralelos, e installs paralelos (app) ficam livres — só o
+  // SB é encadeado. Órfãos presos em `processing` são liberados por reclaimOrphans.
+  if (type === "scheme_builder") {
+    const busyClients = new Set(
+      jobs
+        .filter((j) => j.type === "scheme_builder" && j.status === "processing")
+        .map((j) => String(j.payload?.client_id ?? ""))
+    );
+    const job = jobs.find(
+      (j) =>
+        j.type === "scheme_builder" &&
+        j.status === "pending" &&
+        !busyClients.has(String(j.payload?.client_id ?? ""))
+    );
+    if (!job) return null;
+    job.status = "processing";
+    job.workerId = workerId;
+    job.updatedAt = new Date().toISOString();
+    save();
+    return job;
+  }
+  // === /SB_CLIENT_SERIALIZE_V1 ===
   const job = jobs.find((j) => j.type === type && j.status === "pending");
   if (!job) return null;
   job.status = "processing";
@@ -143,6 +172,32 @@ export function updateJob(id: string, patch: Partial<BaseJob>): BaseJob | null {
   save();
   return job;
 }
+
+// === ORPHAN_RECLAIM_V1 ===
+// Jobs em `processing` cujo worker morreu (restart) ou travou ficam presos para
+// sempre — getNextJob só pega `pending`. Reseta para `pending` os que estão em
+// `processing` há mais de ORPHAN_TIMEOUT_MS sem atualização de updatedAt.
+// Só toca `processing`: waiting_approval/completed/etc. são preservados.
+const ORPHAN_TIMEOUT_MS = 10 * 60 * 1000; // 10min
+
+export function reclaimOrphans(timeoutMs = ORPHAN_TIMEOUT_MS): number {
+  loadOnce();
+  const cutoff = Date.now() - timeoutMs;
+  let n = 0;
+  for (const j of jobs) {
+    if (j.status !== "processing") continue;
+    const ts = Date.parse(j.updatedAt);
+    if (!Number.isFinite(ts) || ts < cutoff) {
+      j.status = "pending";
+      j.workerId = null;
+      j.updatedAt = new Date().toISOString();
+      n++;
+    }
+  }
+  if (n) save();
+  return n;
+}
+// === /ORPHAN_RECLAIM_V1 ===
 
 export function getJob(id: string): BaseJob | null {
   loadOnce();
