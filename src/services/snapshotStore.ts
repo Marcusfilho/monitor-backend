@@ -6,12 +6,19 @@
 //     → INSERT service_snapshots (status='pending')
 //     → tenta driveExport() imediatamente
 //         OK  → UPDATE status='exported'  (ou DELETE, ver CLEANUP_MODE)
-//         FAIL → permanece 'pending'; cron das 6h retenta via retryPending()
+//         FAIL → permanece 'pending'; timer de 30min retenta via retryPending()
+//
+// HISTORY_V1: a tabela é a base histórica permanente de todos os serviços, lida
+// direto (SQLite, modo WAL) por outra repo da VM. Por isso o default do cleanup
+// é "mark" — env ausente nunca pode destruir dado.
 
 // better-sqlite3 é carregado dinamicamente — só disponível na VM
 let Database: any = null;
 try { Database = require("better-sqlite3"); } catch { /* Render: ignorar */ }
 import path from "path";
+// HISTORY_V1: reusa o mesmo resumo de CAN que vai para o SharePoint, para a coluna
+// can_summary. Import type-only do outro lado → sem ciclo em runtime.
+import { _formatCan as formatCan } from "./sharepointExporter";
 
 // ─── configuração ────────────────────────────────────────────────────────────
 
@@ -19,9 +26,9 @@ const DB_PATH =
   (process.env.SQLITE_DB_PATH || "").trim() ||
   path.join(process.cwd(), "data", "monitor.db");
 
-// "delete" → remove após export confirmado (padrão)
-// "mark"   → mantém registro com status='exported' (para auditoria)
-const CLEANUP_MODE = (process.env.SNAPSHOT_CLEANUP_MODE || "delete").trim() as "delete" | "mark";
+// "mark"   → mantém registro com status='exported' (padrão — base histórica)
+// "delete" → remove após export confirmado (opt-in explícito)
+const CLEANUP_MODE = (process.env.SNAPSHOT_CLEANUP_MODE || "mark").trim() as "delete" | "mark";
 
 // ─── tipos ───────────────────────────────────────────────────────────────────
 
@@ -62,28 +69,103 @@ function openDb(): any {
   return new Database(DB_PATH);
 }
 
+// HISTORY_V1: colunas adicionadas ao schema original. Migração idempotente via
+// ALTER TABLE para bases que já existem com o schema antigo.
+const _SCHEMA_SQL = `
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id             TEXT,
+  sp_item_id         INTEGER,
+  source             TEXT NOT NULL DEFAULT 'worker',
+  service            TEXT,
+  service_date       TEXT,
+  technician         TEXT,
+  plate              TEXT,
+  serial             TEXT,
+  vehicle_id         INTEGER,
+  asset_type         INTEGER,
+  vehicle_setting_id INTEGER,
+  client_id          INTEGER,
+  client_descr       TEXT,
+  manufacturer       TEXT,
+  model              TEXT,
+  year               INTEGER,
+  color              TEXT,
+  chassi             TEXT,
+  local_instalacao   TEXT,
+  etiqueta           TEXT,
+  chicote            TEXT,
+  comment            TEXT,
+  can_summary        TEXT,
+  status             TEXT NOT NULL DEFAULT 'pending',
+  snapshot_json      TEXT,
+  created_at         TEXT NOT NULL
+`;
+
+const _HISTORY_COLUMNS: Array<[string, string]> = [
+  ["sp_item_id",       "INTEGER"],
+  ["source",           "TEXT NOT NULL DEFAULT 'worker'"],
+  ["service_date",     "TEXT"],
+  ["manufacturer",     "TEXT"],
+  ["model",            "TEXT"],
+  ["year",             "INTEGER"],
+  ["color",            "TEXT"],
+  ["chassi",           "TEXT"],
+  ["local_instalacao", "TEXT"],
+  ["etiqueta",         "TEXT"],
+  ["chicote",          "TEXT"],
+  ["comment",          "TEXT"],
+  ["can_summary",      "TEXT"],
+];
+
 function _ensureSchema(): void {
   if (!Database) return;
   const db = openDb();
   try {
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS service_snapshots (
-        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_id             TEXT NOT NULL,
-        service            TEXT,
-        technician         TEXT,
-        plate              TEXT,
-        serial             TEXT,
-        vehicle_id         INTEGER,
-        asset_type         INTEGER,
-        vehicle_setting_id INTEGER,
-        client_id          INTEGER,
-        client_descr       TEXT,
-        status             TEXT NOT NULL DEFAULT 'pending',
-        snapshot_json      TEXT NOT NULL,
-        created_at         TEXT NOT NULL
-      )
-    `).run();
+    // WAL: leitor externo (outra repo) não bloqueia nem lê sujo durante a escrita.
+    // Persiste no header do arquivo — basta rodar uma vez.
+    db.pragma("journal_mode = WAL");
+
+    db.prepare(`CREATE TABLE IF NOT EXISTS service_snapshots (${_SCHEMA_SQL})`).run();
+
+    let info: any[] = db.prepare("PRAGMA table_info(service_snapshots)").all();
+    const existing = new Set<string>(info.map((c: any) => c.name));
+    for (const [name, decl] of _HISTORY_COLUMNS) {
+      if (!existing.has(name)) {
+        db.prepare(`ALTER TABLE service_snapshots ADD COLUMN ${name} ${decl}`).run();
+        console.log(`[SNAPSHOT_STORE_V1] migração: coluna ${name} adicionada`);
+        info = db.prepare("PRAGMA table_info(service_snapshots)").all();
+      }
+    }
+
+    // O schema antigo tinha job_id e snapshot_json NOT NULL — as linhas vindas do
+    // SharePoint não têm nenhum dos dois. ALTER TABLE não afrouxa constraint no
+    // SQLite, então é preciso reconstruir a tabela preservando as linhas.
+    const tooStrict = info.some(
+      (c: any) => (c.name === "job_id" || c.name === "snapshot_json") && c.notnull === 1,
+    );
+    if (tooStrict) {
+      const cols = info.map((c: any) => c.name).filter((n: string) => n !== "id").join(", ");
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        BEGIN;
+        CREATE TABLE service_snapshots__new (${_SCHEMA_SQL});
+        INSERT INTO service_snapshots__new (id, ${cols}) SELECT id, ${cols} FROM service_snapshots;
+        DROP TABLE service_snapshots;
+        ALTER TABLE service_snapshots__new RENAME TO service_snapshots;
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+      `);
+      console.log("[SNAPSHOT_STORE_V1] migração: tabela reconstruída (job_id/snapshot_json nullable)");
+    }
+
+    // UNIQUE só em sp_item_id (chave de dedup do backfill). job_id fica sem UNIQUE
+    // de propósito: violação de constraint no INSERT derrubaria um job ao vivo.
+    db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS ux_snapshots_sp_item
+                ON service_snapshots(sp_item_id) WHERE sp_item_id IS NOT NULL`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_snapshots_job    ON service_snapshots(job_id)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_snapshots_date   ON service_snapshots(service_date)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_snapshots_plate  ON service_snapshots(plate)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_snapshots_client ON service_snapshots(client_id)`).run();
   } finally {
     db.close();
   }
@@ -205,20 +287,41 @@ function _insertSnapshot(p: SnapshotPayload): number {
   try {
     const stmt = db.prepare(`
       INSERT INTO service_snapshots
-        (job_id, service, technician, plate, serial,
+        (job_id, sp_item_id, source, service, service_date, technician, plate, serial,
          vehicle_id, asset_type, vehicle_setting_id,
-         client_id, client_descr, status, snapshot_json, created_at)
+         client_id, client_descr,
+         manufacturer, model, year, color, chassi, local_instalacao,
+         etiqueta, chicote, comment, can_summary,
+         status, snapshot_json, created_at)
       VALUES
-        (@job_id, @service, @technician, @plate, @serial,
+        (@job_id, NULL, 'worker', @service, @service_date, @technician, @plate, @serial,
          @vehicle_id, @asset_type, @vehicle_setting_id,
-         @client_id, @client_descr, @status, @snapshot_json, @created_at)
+         @client_id, @client_descr,
+         @manufacturer, @model, @year, @color, @chassi, @local_instalacao,
+         @etiqueta, @chicote, @comment, @can_summary,
+         @status, @snapshot_json, @created_at)
     `);
+
+    // HISTORY_V1: colunas achatadas derivadas do próprio payload — o SnapshotPayload
+    // não muda, então saveSnapshotWorker e o exporter do SharePoint ficam intactos.
+    const c = p.snapshot_json.cadastro;
 
     const result = stmt.run({
       ...p,
-      snapshot_json: JSON.stringify(p.snapshot_json),
-      status:        "pending",
-      created_at:    new Date().toISOString(),
+      service_date:     new Date(p.snapshot_json.ts).toISOString(),
+      manufacturer:     c.vehicle?.manufacturer ?? null,
+      model:            c.vehicle?.model        ?? null,
+      year:             c.vehicle?.year         ?? null,
+      color:            c.cor                   ?? null,
+      chassi:           c.chassi                ?? null,
+      local_instalacao: c.localInstalacao       ?? null,
+      etiqueta:         c.gsensor?.label_pos    ?? null,
+      chicote:          c.gsensor?.harness_pos  ?? null,
+      comment:          c.comment               ?? null,
+      can_summary:      formatCan(p.snapshot_json.can) || null,
+      snapshot_json:    JSON.stringify(p.snapshot_json),
+      status:           "pending",
+      created_at:       new Date().toISOString(),
     });
 
     const id = Number(result.lastInsertRowid);

@@ -1,5 +1,9 @@
 node_modules/
 dist/
+data/
+*.db
+*.db-wal
+*.db-shm
 *.env
 worker_secrets_rw.env
 .cloudflared/

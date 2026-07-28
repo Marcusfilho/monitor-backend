@@ -37,7 +37,7 @@ let _listId   : string | null = null;
 
 // ─── OAuth2 Client Credentials ───────────────────────────────────────────────
 
-async function _getToken(): Promise<string> {
+export async function _getToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   if (_token && _tokenExp > now + 60) return _token;
 
@@ -64,7 +64,7 @@ async function _getToken(): Promise<string> {
 
 // ─── Graph API helpers ────────────────────────────────────────────────────────
 
-async function _graphGet(token: string, path: string): Promise<any> {
+export async function _graphGet(token: string, path: string): Promise<any> {
   const res  = await fetch(`${GRAPH_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -90,8 +90,8 @@ async function _graphPost(token: string, path: string, body: any): Promise<any> 
 
 // ─── descoberta de siteId e listId (1× por processo) ─────────────────────────
 
-async function _ensureIds(token: string): Promise<void> {
-  if (_siteId && _listId) return;
+export async function _ensureIds(token: string): Promise<{ siteId: string; listId: string }> {
+  if (_siteId && _listId) return { siteId: _siteId, listId: _listId };
 
   const siteData = await _graphGet(token, `/v1.0/sites/${SITE_HOST}:${SITE_PATH}`);
   _siteId = siteData.id;
@@ -103,6 +103,7 @@ async function _ensureIds(token: string): Promise<void> {
   _listId = listData.id;
 
   console.log(`[SP_EXPORT_V1] siteId=${_siteId} listId=${_listId} (${listData.displayName})`);
+  return { siteId: _siteId!, listId: _listId! };
 }
 
 // ─── mapeamento snapshot → campos SharePoint ─────────────────────────────────
@@ -151,7 +152,7 @@ function _buildFields(p: SnapshotPayload): Record<string, any> {
   };
 }
 
-function _formatCan(can: any): string {
+export function _formatCan(can: any): string {
   if (!can || typeof can !== "object") return "";
   const snap = Array.isArray(can.snapshots) && can.snapshots.length > 0 ? can.snapshots[0] : can;
   const parts: string[] = [];
