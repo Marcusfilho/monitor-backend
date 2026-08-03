@@ -108,35 +108,12 @@ export function createJob<TPayload = any>(typeOrJob: any, maybePayload?: TPayloa
 
 export function getNextJob(type: string, workerId: string): BaseJob | null {
   loadOnce();
-  // === SB_CLIENT_SERIALIZE_V1 ===
-  // O "processo de review" do scheme_builder no Traffilog é um slot ÚNICO por
-  // client_id (review_process_attributes/get_vcls_action_review_opr são
-  // chaveados só por client_id). Dois SB do mesmo cliente em paralelo colidem:
-  // o 2º recebe associate av=8 + review vazio → process_id ausente → abort.
-  // Serializa por client_id no despacho: não entrega um SB de um cliente
-  // enquanto outro SB do mesmo cliente está `processing`. SB de clientes
-  // distintos seguem paralelos, e installs paralelos (app) ficam livres — só o
-  // SB é encadeado. Órfãos presos em `processing` são liberados por reclaimOrphans.
-  if (type === "scheme_builder") {
-    const busyClients = new Set(
-      jobs
-        .filter((j) => j.type === "scheme_builder" && j.status === "processing")
-        .map((j) => String(j.payload?.client_id ?? ""))
-    );
-    const job = jobs.find(
-      (j) =>
-        j.type === "scheme_builder" &&
-        j.status === "pending" &&
-        !busyClients.has(String(j.payload?.client_id ?? ""))
-    );
-    if (!job) return null;
-    job.status = "processing";
-    job.workerId = workerId;
-    job.updatedAt = new Date().toISOString();
-    save();
-    return job;
-  }
-  // === /SB_CLIENT_SERIALIZE_V1 ===
+  // SB_CLIENT_SERIALIZE_V1 removido (03/08): o SB do mesmo client_id era encadeado
+  // no despacho por causa do slot de review por client_id. A internal-tools roda o
+  // mesmo fluxo (startSettings → associate/review/execute) sem serialização, com o
+  // Bench Setup disparando até 30 SB simultâneos do mesmo cliente em produção — o
+  // slot só é disputado nos ~3s entre associate e execute_action_opr, não durante o
+  // push-wait. Colisão residual é coberta pelo retry de fluxo completo do worker.
   const job = jobs.find((j) => j.type === type && j.status === "pending");
   if (!job) return null;
   job.status = "processing";
