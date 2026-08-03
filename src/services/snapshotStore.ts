@@ -293,6 +293,10 @@ export function markExported(id: number): void {
  * As travas do WHERE são deliberadamente redundantes: a tabela é base histórica e
  * tem ~4.969 linhas vindas do backfill do SharePoint (source='sharepoint', todas com
  * vehicle_id NULL). Uma varredura sem escopo dispararia reenvio de SB em massa.
+ *
+ * UNINSTALL fica de fora: o veículo acabou de ser desativado, o scheme atribuído
+ * diverge do alvo do cliente por construção e o reenvio gravaria scheme em veículo
+ * desinstalado (ocorreu em 03/08 com 4 veículos do lote das 13:49).
  */
 export function listUnverifiedForSchemeCheck(limit: number, maxAgeHours: number): any[] {
   const db = openDb();
@@ -307,6 +311,7 @@ export function listUnverifiedForSchemeCheck(limit: number, maxAgeHours: number)
            AND vehicle_id  IS NOT NULL
            AND client_id   IS NOT NULL
            AND sb_verified IS NULL
+           AND (service IS NULL OR service <> 'UNINSTALL')
            AND created_at >= ?
          ORDER BY id DESC
          LIMIT ?`,

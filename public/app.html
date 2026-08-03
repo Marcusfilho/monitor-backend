@@ -1574,7 +1574,12 @@ function renderAll(inst){
     const isUninstall=String(inst?.payload?.service||inst?.service||"").toUpperCase()==="UNINSTALL";
     const isNoSwap=String(inst?.payload?.service||inst?.service||"").toUpperCase()==="MAINT_NO_SWAP";
     $("completedPlate").textContent=plate!=="—"?plate:(inst?.payload?.plate||"—");
-    $("completedSerial").textContent=(isUninstall?"Placa: ":"Serial: ")+(isUninstall?plate:serial)+(model?" • "+model:"");
+    // UNINSTALL: a linha confirma o estado já verificado no HTML5 (postcheck do worker),
+    // não repete a placa — o job só fecha depois que o serial some da placa.
+    const serialOut=String(inst?.result?.serial_old||inst?.payload?.serial||"").replace(/^0+/,"");
+    $("completedSerial").textContent=isUninstall
+      ?(serialOut?`Serial ${serialOut} liberado — veículo desativado ✓`:"Veículo desativado no HTML5 ✓")
+      :"Serial: "+serial+(model?" • "+model:"");
     $("completedTitle").textContent=isUninstall?"Desinstalação concluída!":isNoSwap?"Manutenção realizada!":"Instalação concluída!";
     $("completedIcon").textContent=isUninstall?"🔴":isNoSwap?"🔧":"✅";
     $("btnNewFromCompletion").textContent=(isUninstall||isNoSwap)?"+ Nova operação":"+ Nova instalação";

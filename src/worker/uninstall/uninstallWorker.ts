@@ -5,6 +5,7 @@
  *  1. Normaliza payload (aliases de placa/vehicle_id)
  *  2. Resolve VEHICLE_ID via VHCLS (se não vier no payload)
  *  3. DEACTIVATE_VEHICLE_HIST — libera o serial da placa
+ *  3b. Postcheck MWS — confirma que o serial saiu da placa (3 tentativas)
  *  4. ORDER_SAVE — cria novo vehicle_id no estoque
  *  5. VHCLS por CLIENT_DESCR — localiza o novo vehicle_id via ORDERS_LIST (retry 3x)
  *  6. SAVE_VHCL_ACTIVATION_NEW — vincula serial ao novo vehicle_id com placa "CMDT"
@@ -15,7 +16,7 @@
 
 import { configFromEnv, ensureHtml5Session, readJarCookie, ensureCookieDefaults } from "../../core/html5Session";
 import { ensureVehicleId } from "../../core/vhclsService";
-import { mwsLoadBaseline, mwsSave } from "../../core/mwsService";
+import { mwsLoadBaseline, mwsSave, mwsPostcheck } from "../../core/mwsService";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -442,6 +443,44 @@ async function processJob(job: any): Promise<void> {
   }
 
   console.log(`[uninstall-rw] job=${jobId} DEACTIVATE OK vehicle_id=${vehicleId} plate=${plate}`);
+
+  // 2c. UNINSTALL_POSTCHECK_V1 — relê o veículo no HTML5 e confirma que o serial saiu.
+  //     Antes o job (e a tela de conclusão do app) fechava só com o aceite do DEACTIVATE;
+  //     agora "Desinstalação concluída" significa estado verificado no servidor.
+  //     Só barra o caso lido como "serial CONTINUA na placa" — postcheck que nunca
+  //     respondeu (rede/sessão) não reprova desinstalação boa: segue com aviso.
+  //     Custo: 1 MWS (~0,5s) num fluxo de ~6s.
+  let dialAfter = "";
+  let released  = false;
+  let checked   = false;
+  for (let attempt = 1; attempt <= 3 && !released; attempt++) {
+    if (attempt > 1) await new Promise(r => setTimeout(r, 1500));
+    try {
+      const pc  = await mwsPostcheck(cfg, vehicleId, "", `${jobId}_uninst`);
+      dialAfter = pc.dial;
+      released  = pc.applied;   // applied === (DIAL_NUMBER vazio)
+      checked   = true;
+      if (!released) console.log(`[uninstall-rw] job=${jobId} postcheck ${attempt}/3 — serial ainda na placa (dial=${dialAfter || "-"})`);
+    } catch (e: any) {
+      console.log(`[uninstall-rw] job=${jobId} postcheck tentativa ${attempt}/3 falhou: ${e?.message || e}`);
+    }
+  }
+
+  if (checked && !released) {
+    await failJob(jobId, "uninstall_not_applied", {
+      plate,
+      vehicle_id: vehicleId,
+      serial_old: serialOld,
+      dial_found: dialAfter,
+    });
+    return;
+  }
+
+  console.log(
+    checked
+      ? `[uninstall-rw] job=${jobId} POSTCHECK OK — serial liberado da placa ${plate}`
+      : `[uninstall-rw] job=${jobId} POSTCHECK indisponível — seguindo sem confirmação (placa=${plate})`
+  );
 
   // Se não temos serial_old ou client_id, não podemos fazer ORDER_SAVE → CMDT
   // Completa parcialmente (comportamento anterior) — não falha o job
