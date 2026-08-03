@@ -393,17 +393,24 @@ async function runSbFlow(params: {
     processId = String(findFirstKey(r2, ["process_id", "processId"]) ?? "");
     console.log(`[sb-rw] job=${jobId} review OK av=${av2} processId=${processId}`);
 
-    const mt3 = sendFrame("get_vcls_action_review_opr", {
-      client_id    : String(clientId),
-      client_name  : String(clientName),
-      action_source: "0",
-    });
-    const reviewRow = await waitRowByMtkn(mt3, 20000);
-    const av3 = String(findFirstKey(reviewRow, ["action_value"]) ?? "");
-    if (av3 === "403") throw new Error("403 action forbidden (get_vcls)");
-    if (av3 === "404") throw new Error("404 get_vcls — process_id não encontrado no Traffilog");
-    processId = processId || String(findFirstKey(reviewRow, ["process_id", "processId"]) ?? "");
-    console.log(`[sb-rw] job=${jobId} get_vcls OK av=${av3} processId=${processId}`);
+    // O process_id só materializa no servidor alguns instantes após o associate:
+    // av=0 com process_id vazio é corrida, não erro. Re-poll antes de desistir.
+    for (let tryGv = 1; tryGv <= 3; tryGv++) {
+      if (tryGv > 1) await sleep(1500);
+      const mt3 = sendFrame("get_vcls_action_review_opr", {
+        client_id    : String(clientId),
+        client_name  : String(clientName),
+        action_source: "0",
+      });
+      const reviewRow = await waitRowByMtkn(mt3, 20000);
+      const av3 = String(findFirstKey(reviewRow, ["action_value"]) ?? "");
+      if (av3 === "403") throw new Error("403 action forbidden (get_vcls)");
+      if (av3 === "404") throw new Error("404 get_vcls — process_id não encontrado no Traffilog");
+      processId = processId || String(findFirstKey(reviewRow, ["process_id", "processId"]) ?? "");
+      console.log(`[sb-rw] job=${jobId} get_vcls ${tryGv}/3 av=${av3} processId=${processId}`);
+      if (processId) break;
+      console.log(`[sb-rw] job=${jobId} get_vcls ${tryGv}/3 RAW=${JSON.stringify(reviewRow).slice(0,400)}`);
+    }
     if (!processId) {
       if (avAssoc1 === "1") {
         // av=1 = scheme já estava associado (retentativa); sem processo pendente = já aplicado
@@ -555,6 +562,17 @@ async function processJob(job: any): Promise<void> {
         console.log(`[sb-rw] job=${jobId} WS handshake timeout → token fresco + retry em 5s`);
         invalidateTrafflogToken();
         try { sessionToken = await getTrafflogToken(); } catch {}
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+
+      // O slot de review é único por client_id no Traffilog e às vezes ainda não
+      // materializou quando o fluxo consulta — refazer o fluxo INTEIRO resolve, o
+      // re-poll do get_vcls não (comprovado 31/07: veh 2000843 levou data:[] nos 3
+      // polls e o job seguinte do mesmo cliente, 4s depois, pegou process_id no 1º).
+      const isNoProcessId = msg.includes("process_id nao retornado");
+      if (isNoProcessId && attempt === 1) {
+        console.log(`[sb-rw] job=${jobId} sem process_id → refazendo o fluxo em 5s`);
         await new Promise(r => setTimeout(r, 5000));
         continue;
       }

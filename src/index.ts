@@ -5,8 +5,10 @@ import eventsRoutes        from "./routes/eventsRoutes";
 import authRoutes          from "./routes/authRoutes";
 import installationsRoutes from "./routes/installationsRoutes";
 import { requireSession }  from "./middleware/requireSession";
-import adminRoutes, { syncAssetTypesByClient } from "./routes/adminRoutes";
+import adminRoutes, { syncAssetTypesByClient, syncAssetTypes } from "./routes/adminRoutes";
 import photoRoutes from "./routes/photoRoutes";
+import { reclaimOrphans } from "./jobs/jobStore";
+import { sweepSchemeVerify } from "./services/schemeVerifyService";
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -41,6 +43,55 @@ setTimeout(() => {
   scheduleSyncByClient();
   setInterval(scheduleSyncByClient, SYNC_INTERVAL_MS);
 }, 30_000);
+
+// ─── Sync asset_types_active (catálogo de modelos) — a cada 3h ────────────────
+// Atualiza o catálogo que alimenta o dropdown E o realce por cliente. Como o
+// catálogo muda, refaz o by-client em seguida para o realce refletir novos modelos.
+const ASSET_TYPES_SYNC_MS = 3 * 60 * 60 * 1000; // 3 horas
+async function scheduleSyncAssetTypes() {
+  try {
+    await syncAssetTypes();
+    console.log("[index] syncAssetTypes OK");
+    await syncAssetTypesByClient();
+    console.log("[index] syncAssetTypesByClient (pós catálogo) OK");
+  } catch (e: any) {
+    console.error("[index] syncAssetTypes ERRO:", e.message);
+  }
+}
+// Primeira execução: 45s após o boot (escalonado após o by-client de 30s)
+setTimeout(() => {
+  scheduleSyncAssetTypes();
+  setInterval(scheduleSyncAssetTypes, ASSET_TYPES_SYNC_MS);
+}, 45_000);
+
+// ─── Reclaim de jobs órfãos — processing travado > 10min → pending ────────────
+// Roda no boot (recupera jobs presos por restart) e a cada 2min (workers travados).
+const ORPHAN_CHECK_MS = 2 * 60 * 1000; // 2min
+function reclaimOrphanJobs() {
+  try {
+    const n = reclaimOrphans();
+    if (n) console.log(`[index] reclaimOrphans: ${n} job(s) processing→pending`);
+  } catch (e: any) {
+    console.error("[index] reclaimOrphans ERRO:", e.message);
+  }
+}
+reclaimOrphanJobs();
+setInterval(reclaimOrphanJobs, ORPHAN_CHECK_MS);
+
+// ─── SB_VERIFY_V1 — confere scheme atribuído, a cada 5min ────────────────────
+// Fora do caminho do técnico: só varre serviços já finalizados (a linha do snapshot
+// nasce no save_snapshot). Primeira execução 90s após o boot, escalonada depois
+// dos syncs de asset_types (30s/45s).
+const SB_VERIFY_MS = 5 * 60 * 1000; // 5min
+function runSchemeVerify() {
+  sweepSchemeVerify().catch((e: any) =>
+    console.error("[index] sweepSchemeVerify ERRO:", e?.message || e),
+  );
+}
+setTimeout(() => {
+  runSchemeVerify();
+  setInterval(runSchemeVerify, SB_VERIFY_MS);
+}, 90_000);
 
 // ─── Worker heartbeat (path raiz, fora do jobRoutes) ─────────────────────────
 app.post("/api/worker/heartbeat", (req: any, res: any) => {

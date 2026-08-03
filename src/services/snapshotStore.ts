@@ -115,6 +115,11 @@ const _HISTORY_COLUMNS: Array<[string, string]> = [
   ["chicote",          "TEXT"],
   ["comment",          "TEXT"],
   ["can_summary",      "TEXT"],
+  // SB_VERIFY_V1 — conferência interna do scheme atribuído no Traffilog
+  ["sb_verified",            "TEXT"],     // null=não checado | 'ok' | 'mismatch' | 'unknown'
+  ["sb_assigned_setting_id", "INTEGER"],  // o que o servidor realmente tem
+  ["sb_verified_at",         "TEXT"],
+  ["sb_resend_job_id",       "TEXT"],     // job do reenvio automático (auditoria)
 ];
 
 function _ensureSchema(): void {
@@ -275,6 +280,57 @@ export function markExported(id: number): void {
       `UPDATE service_snapshots SET status = 'exported' WHERE id = ?`,
     ).run(id);
     console.log(`[SNAPSHOT_STORE_V1] marked exported id=${id}`);
+  } finally {
+    db.close();
+  }
+}
+
+// ─── SB_VERIFY_V1 — conferência do scheme atribuído ──────────────────────────
+
+/**
+ * Linhas candidatas à conferência de scheme.
+ *
+ * As travas do WHERE são deliberadamente redundantes: a tabela é base histórica e
+ * tem ~4.969 linhas vindas do backfill do SharePoint (source='sharepoint', todas com
+ * vehicle_id NULL). Uma varredura sem escopo dispararia reenvio de SB em massa.
+ */
+export function listUnverifiedForSchemeCheck(limit: number, maxAgeHours: number): any[] {
+  const db = openDb();
+  try {
+    const cutoff = new Date(Date.now() - maxAgeHours * 3600_000).toISOString();
+    return db
+      .prepare(
+        `SELECT id, job_id, service, plate, vehicle_id, vehicle_setting_id,
+                client_id, client_descr
+         FROM service_snapshots
+         WHERE source = 'worker'
+           AND vehicle_id  IS NOT NULL
+           AND client_id   IS NOT NULL
+           AND sb_verified IS NULL
+           AND created_at >= ?
+         ORDER BY id DESC
+         LIMIT ?`,
+      )
+      .all(cutoff, limit);
+  } finally {
+    db.close();
+  }
+}
+
+export function markSchemeVerified(
+  id: number,
+  v: { verdict: string; assignedSettingId: number | null; resendJobId: string | null },
+): void {
+  const db = openDb();
+  try {
+    db.prepare(
+      `UPDATE service_snapshots
+          SET sb_verified            = ?,
+              sb_assigned_setting_id = ?,
+              sb_verified_at         = ?,
+              sb_resend_job_id       = ?
+        WHERE id = ?`,
+    ).run(v.verdict, v.assignedSettingId, new Date().toISOString(), v.resendJobId, id);
   } finally {
     db.close();
   }
