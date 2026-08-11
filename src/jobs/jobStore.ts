@@ -75,7 +75,11 @@ function save() {
     const dir = path.dirname(STORE_PATH);
     if (dir && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const tmp = `${STORE_PATH}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(jobs, null, 2), "utf8");
+    // Sem indentação: `save()` é síncrono e reescreve o store INTEIRO em toda
+    // mutação (createJob/getNextJob/updateJob/completeJob + um updateJob por frame
+    // parcial do CAN), bloqueando o event loop que atende o poll de 2s do app e o
+    // /api/jobs/next dos workers. O pretty-print custava 40% do arquivo.
+    fs.writeFileSync(tmp, JSON.stringify(jobs), "utf8");
     fs.renameSync(tmp, STORE_PATH);
   } catch {
     // best effort
@@ -216,6 +220,42 @@ export function expireStaleApprovals(timeoutMs = APPROVAL_TIMEOUT_MS): number {
   return n;
 }
 // === /APPROVAL_TIMEOUT_V1 ===
+
+// === SNAPSHOT_PRUNE_V1 ===
+// O store é fila operacional, não arquivo histórico: o snapshot CAN tem guarda
+// permanente no SQLite (data/monitor.db) desde 28/07, e o retryPending do export
+// lê de lá, não daqui. No store ele aparece 3× por instalação
+// (monitor_can_snapshot.result.snapshot + gs_calibration.payload.can +
+// save_snapshot.payload.can) e responde por ~90% do arquivo — que o save() acima
+// reescreve inteiro a cada mutação. Limpar só o snapshot dos jobs já terminais
+// mantém a linha (cadeia, placa, status, timestamps, erros) para o painel da
+// internal-tools.
+//
+// Três travas: (1) `waiting_approval` nunca é tocado — o técnico valida horas
+// depois e o snapshot é o que ele vê na tela; (2) a janela de 24h protege o
+// approve-can e o refresh-can, que leem `canJob.result.snapshot`; (3) `error`
+// fica de fora — uma coleta que falhou nunca chegou ao save_snapshot, então o
+// store é a ÚNICA cópia, e o expireStaleApprovals preserva o result de propósito
+// para diagnóstico. Custa 4% do ganho.
+const SNAPSHOT_PRUNE_AGE_MS = Number(process.env.SNAPSHOT_PRUNE_AGE_MS) || 24 * 60 * 60 * 1000; // 24h
+
+export function pruneSnapshots(maxAgeMs = SNAPSHOT_PRUNE_AGE_MS): number {
+  loadOnce();
+  const cutoff = Date.now() - maxAgeMs;
+  let n = 0;
+  for (const j of jobs) {
+    if (j.status !== "completed" && j.status !== "cancelled") continue;
+    const ts = Date.parse(j.updatedAt);
+    if (Number.isFinite(ts) && ts >= cutoff) continue;
+    let hit = false;
+    if (j.payload?.can != null) { j.payload.can = null; hit = true; }
+    if (j.result?.snapshot != null) { j.result.snapshot = null; hit = true; }
+    if (hit) n++;
+  }
+  if (n) save();
+  return n;
+}
+// === /SNAPSHOT_PRUNE_V1 ===
 
 export function getJob(id: string): BaseJob | null {
   loadOnce();

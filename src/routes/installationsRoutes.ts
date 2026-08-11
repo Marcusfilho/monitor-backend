@@ -248,7 +248,27 @@ router.post("/:id/approve-can", (req: Request, res: Response) => {
     .filter((j: any) => j.type === "monitor_can_snapshot")
     .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   const canJob = canJobs.find((j: any) => (j.result?.snapshot?.parameters?.length ?? 0) > 0) ?? canJobs[0];
-  const canSnapshot = canJob?.result?.snapshot ?? null;
+  let canSnapshot = canJob?.result?.snapshot ?? null;
+
+  // A regra acima protege de um refresh VAZIO, mas não de um refresh POBRE. Em 11/08
+  // o veh 2000583 coletou 88 params na instalação e 73 no "Atualizar CAN" — subconjunto
+  // estrito, sem rpm, nível/consumo de combustível, coolant nem pressões —, e o registro
+  // exportado ficaria com o pior dos dois. Os parâmetros das coletas da cadeia são unidos
+  // por id, com o valor da coleta mais recente vencendo; header/moduleState/canSummary
+  // seguem os do `canJob`, que é o mais novo com dados. Cópia, nunca mutação: o snapshot
+  // original é o que o técnico validou e continua no job.
+  if (canSnapshot && canJobs.length > 1) {
+    const byId = new Map<string, any>();
+    for (const j of [...canJobs].reverse()) {               // do mais antigo p/ o mais novo
+      for (const p of (j.result?.snapshot?.parameters ?? [])) {
+        if (p?.id != null) byId.set(String(p.id), p);
+      }
+    }
+    if (byId.size > (canSnapshot.parameters?.length ?? 0)) {
+      console.log(`[approve-can] ${job.id} params unidos de ${canJobs.length} coletas: ${canSnapshot.parameters?.length ?? 0} → ${byId.size}`);
+      canSnapshot = { ...canSnapshot, parameters: Array.from(byId.values()) };
+    }
+  }
 
   const service = String(job.payload?.service ?? "").toUpperCase();
   const needsGs = ["INSTALL", "MAINT_WITH_SWAP"].includes(service);

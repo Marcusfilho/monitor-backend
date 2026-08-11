@@ -108,6 +108,9 @@ export type VmHeader = {
   configuration_key_db?: string | null;
   configuration_key_unit?: string | null;
   driver_code?: string | null;
+  // Sobrepõem os homônimos de `raw` quando há tráfego ao vivo — ver FIX_HEADER_LIVE_V1.
+  ignition?: string | null;
+  server_time?: string | null;
   raw?: JsonObj;
 };
 
@@ -327,6 +330,16 @@ async function pollModuleState(
   intervalMs: number,
 ): Promise<VmModuleStateRow[]> {
   const deadline = Date.now() + maxWaitMs;
+  // Aceitar o PRIMEIRO resultado não-vazio não bastava: o servidor materializa o
+  // registro de forma INCREMENTAL, e a leitura podia cair no meio. Em 11/08 o veh
+  // 2000583 devolveu 6 linhas — ALUKA, OW_ADC12CH e TEMP0-3, todas do próprio
+  // equipamento, sem CAN0/CAN1/J1708 — e o poll parou ali; o app mostrou
+  // "Aguardando módulos..." e can0_ok=false num veículo que estava entregando rpm,
+  // combustível e temperatura. A instalação irmã, 36s antes, pegou 38 módulos
+  // porque o 2º poll dela caiu depois do registro completar.
+  // Agora só encerra quando aparece módulo de barramento, guardando a melhor
+  // leitura parcial para não regredir a vazio se o deadline estourar.
+  let best: VmModuleStateRow[] = [];
 
   for (let attempt = 1; ; attempt++) {
     try {
@@ -340,19 +353,25 @@ async function pollModuleState(
         console.log(`[vm-ms] veh=${vehicleId} #${attempt} av=${av} ${desc.slice(0, 70)}`);
       } else {
         const rows = parseMsData(res?.data ?? []);
-        if (rows.length > 0) {
+        if (rows.length > best.length) best = rows;
+
+        if (rows.some((r) => r.module === "CAN" || r.module === "J1708")) {
           console.log(`[vm-ms] veh=${vehicleId} #${attempt} OK data=${rows.length}`);
           return rows;
         }
-        console.log(`[vm-ms] veh=${vehicleId} #${attempt} data=0 av=0 — registro ainda não existe`);
+        if (rows.length > 0) {
+          console.log(`[vm-ms] veh=${vehicleId} #${attempt} parcial data=${rows.length} — sem CAN/J1708, insistindo`);
+        } else {
+          console.log(`[vm-ms] veh=${vehicleId} #${attempt} data=0 av=0 — registro ainda não existe`);
+        }
       }
     } catch (e: any) {
       console.log(`[vm-ms] veh=${vehicleId} #${attempt} ERRO: ${e?.message || String(e)}`);
     }
 
     if (Date.now() + intervalMs >= deadline) {
-      console.log(`[vm-ms] veh=${vehicleId} desiste após ${Math.round(maxWaitMs / 1000)}s — module state vazio`);
-      return [];
+      console.log(`[vm-ms] veh=${vehicleId} desiste após ${Math.round(maxWaitMs / 1000)}s — melhor leitura: ${best.length} módulo(s)`);
+      return best;
     }
     await sleep(intervalMs);
   }
@@ -696,8 +715,24 @@ export async function collectVehicleMonitorSnapshot(opts: {
   // FIX_IS_CONNECTED_LIVE_V1: tráfego real ao vivo supera o snapshot único do redis (t≈0).
   const isConnectedLive = unitParametersEvents > 0 ? 1 : isConnected;
 
+  // FIX_HEADER_LIVE_V1: o header vem do get_vehicle_info da seção 1 — leitura única,
+  // feita ANTES da janela. Em instalação nova o registro do servidor ainda é o estado
+  // anterior do equipamento: em 11/08 o veh 2000583 trouxe server_time de 21/07 e
+  // ignition="0" enquanto o veículo transmitia com a ignição ligada, e o app pintou
+  // "Desligada" + comunicação de 21 dias atrás. Mesmo princípio do
+  // FIX_IS_CONNECTED_LIVE_V1: tráfego ao vivo supera a leitura única. Vão no TOPO do
+  // header porque o app faz Object.assign({}, header.raw, header) — o topo vence.
+  const capturedAt = new Date().toISOString();
+  if (unitParametersEvents > 0) {
+    const ignRaw = (latest.get("00002710") ?? latest.get("00002711"))?.raw_value ?? "";
+    if (String(ignRaw) !== "") {
+      header.ignition = Number.parseInt(String(ignRaw), 16) > 0 ? "1" : "0";
+    }
+    header.server_time = capturedAt;
+  }
+
   return {
-    capturedAt:  new Date().toISOString(),
+    capturedAt,
     vehicleId:   opts.vehicleId,
     isConnected: isConnectedLive,
     header,

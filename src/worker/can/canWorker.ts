@@ -10,7 +10,6 @@
 
 import WebSocket from "ws";
 import { getTrafflogToken, invalidateTrafflogToken } from "../../core/traffilogAuth.js";
-import { updateJob } from "../../jobs/jobStore.js";
 import {
   collectVehicleMonitorSnapshot,
   buildCanSummary,
@@ -141,15 +140,20 @@ async function processJob(job: any): Promise<void> {
   }
 
   // Partial update helper
+  // Via HTTP, como todo o resto deste worker — NÃO pelo jobStore direto. Este
+  // worker também roda como processo separado (monitor-can-worker-rw), e o store
+  // é um arquivo que cada processo carrega inteiro em memória e reescreve inteiro:
+  // escrever daqui sobrescrevia o array do servidor com uma cópia velha e, pior,
+  // deixava o `updatedAt` congelado do ponto de vista dele — então o reclaimOrphans
+  // (10min) declarava órfão um CAN vivo e reentregava o job a um segundo ator.
+  // Visto em 11/08: job e156db4c02ccebc3 (veh 1998709) coletado pelo standalone às
+  // 08:23:45 e pelo inline às 08:34:29, os dois abrindo WS no mesmo equipamento.
   const onPartialParams = (params: any, counts: any, header: any, moduleState: any) => {
-    updateJob(jobId, {
-      result: {
-        ok: false,
-        partial: true,
-        snapshot: { vehicleId, header, parameters: params, moduleState,
-          isConnected: null, canSummary: buildCanSummary(moduleState), counts },
-      },
-    });
+    apiFetch(`/api/jobs/${jobId}/progress`, {
+      partial: true,
+      snapshot: { vehicleId, header, parameters: params, moduleState,
+        isConnected: null, canSummary: buildCanSummary(moduleState), counts },
+    }).catch((e: any) => console.error(`[can-rw] progress falhou job=${jobId}: ${e?.message || e}`));
   };
 
   // Loop de tentativas: se não chegar nenhum UNIT_PARAMETERS, reabre WS com token fresco

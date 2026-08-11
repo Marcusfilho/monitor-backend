@@ -259,11 +259,18 @@ router.post("/:id/retry", (req: Request, res: Response) => {
 router.post("/:id/progress", (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { progress, message, partial } = req.body ?? {};
+    // `snapshot`: coleta parcial do CAN. O canWorker gravava isso chamando o
+    // jobStore direto, mas ele roda como processo separado — ver comentário em
+    // canWorker.onPartialParams.
+    const { progress, message, partial, snapshot } = req.body ?? {};
 
     const existing = getJob(id);
     const job = updateJob(id, {
-      result: { ...(existing?.result ?? {}), progress, message, ...(partial != null ? { partial } : {}) },
+      result: {
+        ...(existing?.result ?? {}), progress, message,
+        ...(partial != null ? { partial } : {}),
+        ...(snapshot != null ? { snapshot } : {}),
+      },
     });
     if (!job) {
       res.status(404).json({ error: "job_not_found" });
