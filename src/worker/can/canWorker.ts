@@ -134,7 +134,8 @@ async function processJob(job: any): Promise<void> {
   }
 
   // Warmup: aguarda o dispositivo reconectar após aplicar o scheme
-  if (fromJob && POST_SB_WARMUP_MS > 0) {
+  // CAN_REFRESH_V1: no refresh manual o equipamento já está de pé há minutos — a espera é pura latência.
+  if (fromJob && !p._refresh && POST_SB_WARMUP_MS > 0) {
     console.log(`[can-rw] job=${jobId} POST_SB_WARMUP ${POST_SB_WARMUP_MS}ms`);
     await new Promise(r => setTimeout(r, POST_SB_WARMUP_MS));
   }

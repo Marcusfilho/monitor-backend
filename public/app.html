@@ -1192,15 +1192,16 @@ $("btnRefresh").addEventListener("click",async()=>{
   const inst=state.inst;
   const id=inst?.installation_id||inst?.id||"";
   const tok=inst?.installation_token||inst?.token||"";
-  if(!id||!tok){showToast("Sem instalação ativa","bad");return}
-  $("btnRefresh").disabled=true;setSubline("Solicitando refresh...");
+  if(!id){showToast("Sem instalação ativa","bad");return}
+  $("btnRefresh").disabled=true;setSubline("Solicitando nova coleta CAN...");
   try{
     const token=sessionStorage.getItem("html5_session_token")||"";
     const r=await api(`/api/installations/${id}/refresh-can`,{method:"POST",
       json:{installation_token:tok},
       headers:token?{"X-Session-Token":token}:{}});
-    if(!r.ok)throw new Error(r.data?.error||"Falha no refresh");
-    showToast("Refresh solicitado","good");setTimeout(()=>{$("btnRefresh").disabled=false},5000);
+    if(!r.ok)throw new Error(r.data?.detail||r.data?.error||"Falha no refresh");
+    showToast("Nova coleta CAN solicitada","good");setSubline("Coletando CAN...");
+    fetchInst(id,tok);
   }catch(e){showToast(e.message||"Erro","bad");$("btnRefresh").disabled=false}
 });
 
@@ -1539,12 +1540,16 @@ function renderStepper(status){
 // ─── STATUS LABEL ─────────────────────────────────────────────────────────────
 function statusToLabel(s){
   const x=String(s||"").trim().toUpperCase();if(!x)return"criada";
-  const MAP={CREATED:"criada",HTML5_QUEUED:"aguardando cadastro…",HTML5_RUNNING:"cadastrando no sistema…",HTML5_DONE:"cadastrado",SB_QUEUED:"aguardando config.",SB_RUNNING:"configurando...",SB_DONE:"configurado",SB_DISCONNECTED:"⚠ comunicação perdida",CAN_RUNNING:"coletando CAN...",CAN_APPROVED:"CAN aprovado",GS_QUEUED:"aguardando envio GS",GS_RUNNING:"enviando GS...",GS_DONE:"GS enviado",COMPLETED:"concluído ✓",WAITING_REBOOT:"aguardando reboot",WAITING_APPROVAL:"aguardando aprovação CAN"};
+  const MAP={CREATED:"criada",HTML5_QUEUED:"aguardando cadastro…",HTML5_RUNNING:"cadastrando no sistema…",HTML5_DONE:"cadastrado",SB_QUEUED:"aguardando config.",SB_RUNNING:"configurando...",SB_DONE:"configurado",SB_DISCONNECTED:"⚠ comunicação perdida",CAN_RUNNING:"coletando CAN...",CAN_ERROR:"falha na coleta CAN",CAN_APPROVED:"CAN aprovado",GS_QUEUED:"aguardando envio GS",GS_RUNNING:"enviando GS...",GS_DONE:"GS enviado",COMPLETED:"concluído ✓",WAITING_REBOOT:"aguardando reboot",WAITING_APPROVAL:"aguardando aprovação CAN"};
   return MAP[x]||x.toLowerCase();
 }
 
 // ─── ERROS ───────────────────────────────────────────────────────────────────
 const ERROR_MESSAGES=[
+  {match:"can_sem_parametros",friendly:"Nenhum dado CAN recebido do equipamento. Ligue a ignição do veículo, aguarde alguns segundos e toque em Atualizar CAN."},
+  {match:"can_no_data",friendly:"Falha ao coletar o CAN. Toque em Atualizar CAN para tentar novamente."},
+  {match:"can_flow_error",friendly:"Falha ao coletar o CAN. Toque em Atualizar CAN para tentar novamente."},
+  {match:"approval_timeout",friendly:"Coleta expirou sem validação. Toque em Atualizar CAN para uma nova leitura."},
   {match:"vehicle_id_not_found",friendly:"Serial não cadastrado no Traffilog. Verifique se o equipamento está ativo na plataforma antes de instalar."},
   {match:"Editing unit number is not allowed",friendly:"Veículo já possui rastreador. Faça o UNINSTALL primeiro."},
   {match:"not found",friendly:"Veículo não encontrado no Monitor. Verifique o serial."},
@@ -1607,7 +1612,7 @@ function renderAll(inst){
   const id=inst?.installation_id||inst?.id||"",tok=inst?.installation_token||inst?.token||"";
   const canApprove=!!(id&&tok)&&(st==="SB_DONE"||st.includes("WAITING")||st.includes("CAN")||st.includes("GS"));
   $("btnApprove").disabled=!canApprove;
-  const canRefresh=!!(id&&tok)&&(st==="SB_DONE"||st.includes("CAN")||st.includes("WAITING_REBOOT")||st.includes("GS"))&&!(st.includes("CAN_RUNNING")||st.includes("SB_RUNNING"));
+  const canRefresh=!!(id&&tok)&&(st==="SB_DONE"||st==="WAITING_APPROVAL"||st.includes("CAN")||st.includes("WAITING_REBOOT")||st.includes("GS"))&&!(st.includes("CAN_RUNNING")||st.includes("SB_RUNNING"));
   $("btnRefresh").disabled=!canRefresh;
 
   // MAINT_NO_SWAP em HTML5_DONE → auto-avança baseado na escolha do modal

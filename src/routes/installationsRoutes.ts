@@ -178,7 +178,7 @@ router.get("/:id", (req: Request, res: Response) => {
     if (gsJob.status === "error")                                 status = "GS_ERROR";
     else                                                          status = "GS_RUNNING";
   } else if (canJob) {
-    if (canJob.status === "waiting_approval" as any)              status = "WAITING_APPROVAL";
+    if (canJob.status === "waiting_approval")                     status = "WAITING_APPROVAL";
     else if (canJob.status === "error")                           status = "CAN_ERROR";
     else                                                          status = "CAN_RUNNING";
   } else if (sbJob) {
@@ -241,9 +241,13 @@ router.post("/:id/approve-can", (req: Request, res: Response) => {
       .flatMap((j: any) => [j, ...collectChain(j.id)]);
   }
   const chain = [job, ...collectChain(job.id)];
-  const canJob = chain
+  // CAN_REFRESH_V1: a cadeia pode ter mais de uma coleta (botão "Atualizar CAN").
+  // Prefere a mais recente QUE TEM parâmetros — um refresh que voltou vazio é o
+  // job mais novo, mas salvar o snapshot dele apagaria a leitura boa anterior.
+  const canJobs = chain
     .filter((j: any) => j.type === "monitor_can_snapshot")
-    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const canJob = canJobs.find((j: any) => (j.result?.snapshot?.parameters?.length ?? 0) > 0) ?? canJobs[0];
   const canSnapshot = canJob?.result?.snapshot ?? null;
 
   const service = String(job.payload?.service ?? "").toUpperCase();
@@ -291,7 +295,18 @@ router.post("/:id/approve-can", (req: Request, res: Response) => {
     createJob("save_snapshot", base);
   }
 
-  updateJob(job.id, { status: "approved" as any });
+  // O CAN cumpriu seu papel ao ser validado — fechar aqui, senão fica em
+  // waiting_approval para sempre (nada mais no pipeline toca esse job).
+  // Também fecha o que já expirou/falhou (`error`): a aprovação é um ato humano
+  // explícito e segue mesmo assim, então deixar o CAN aberto só reabriria a
+  // cadeia na tela de jobs.
+  for (const j of canJobs) {
+    if (j.status === "waiting_approval" || j.status === "error") {
+      updateJob(j.id, { status: "completed" });
+    }
+  }
+
+  updateJob(job.id, { status: "approved" });
   res.json({ ok: true, job_id: job.id, status: "approved" });
 });
 
@@ -439,6 +454,79 @@ router.post("/:id/start-can", (req: Request, res: Response) => {
   });
 
   console.log(`[installations] start-can root=${rootId} → can=${canJob.id} vehicle_id=${vehicleId}`);
+  res.json({ ok: true, job_id: rootId, can_job_id: canJob.id });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/installations/:id/refresh-can  — técnico pediu nova coleta ("Atualizar CAN")
+// ---------------------------------------------------------------------------
+// CAN_REFRESH_V1: cria um monitor_can_snapshot NOVO na mesma cadeia. O job antigo
+// fica intacto (o snapshot parcial dele continua servindo para aprovação, ver
+// approve-can), e a escada de status do GET /:id ordena por updatedAt — então o
+// job novo passa a mandar sozinho e a tela volta para CAN_RUNNING.
+// A sessão WS nova sai de graça: `_from` presente faz o canWorker invalidar o
+// token e reabrir o WS antes de coletar.
+// ---------------------------------------------------------------------------
+
+router.post("/:id/refresh-can", (req: Request, res: Response) => {
+  const { listJobs } = require("../jobs/jobStore");
+  const { randomUUID } = require("crypto");
+
+  const rootId = String(req.params.id);
+  const root   = getJob(rootId);
+
+  if (!root) {
+    res.status(404).json({ ok: false, error: "job_not_found" });
+    return;
+  }
+
+  const allJobs: any[] = listJobs();
+  function collectChain(fromId: string): any[] {
+    return allJobs
+      .filter((j: any) => j.payload?._from === fromId)
+      .flatMap((j: any) => [j, ...collectChain(j.id)]);
+  }
+  const chain = [root, ...collectChain(rootId)];
+
+  if (chain.some((j: any) => j.type === "save_snapshot")) {
+    res.status(409).json({ ok: false, error: "fluxo_concluido", detail: "Instalação já finalizada — snapshot salvo" });
+    return;
+  }
+
+  const canJobs = chain
+    .filter((j: any) => j.type === "monitor_can_snapshot")
+    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const prev = canJobs[0] ?? null;
+
+  if (prev && (prev.status === "pending" || prev.status === "processing")) {
+    res.status(409).json({ ok: false, error: "can_em_andamento", detail: `Coleta ${prev.id} ainda em "${prev.status}"` });
+    return;
+  }
+
+  const vehicleId = String(
+    prev?.payload?.vehicle_id ??
+    (root.result as any)?.vehicle_id ??
+    root.payload?.vehicle_id ??
+    root.payload?.vehicleId ??
+    ""
+  ).trim();
+
+  if (!vehicleId) {
+    res.status(422).json({ ok: false, error: "vehicle_id_ausente", detail: "Worker ainda não resolveu o vehicle_id" });
+    return;
+  }
+
+  const basePayload = prev?.payload ?? { ...root.payload, ...((root.result as any) ?? {}) };
+
+  const canJob = createJob("monitor_can_snapshot", {
+    ...basePayload,
+    vehicle_id:         vehicleId,
+    _from:              rootId,
+    _refresh:           true,
+    installation_token: randomUUID(),
+  });
+
+  console.log(`[installations] refresh-can root=${rootId} → can=${canJob.id} vehicle_id=${vehicleId} prev=${prev?.id ?? "none"}`);
   res.json({ ok: true, job_id: rootId, can_job_id: canJob.id });
 });
 
