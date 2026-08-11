@@ -2,7 +2,18 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
-export type JobStatus = "pending" | "processing" | "completed" | "error" | "cancelled";
+// waiting_approval/approved são estados do pipeline de instalação (CAN aguardando
+// o técnico validar / raiz liberada pelo approve-can). Ficavam fora do union e
+// gravados com `as any`, então nenhum switch era cobrado pelo compilador a
+// fechá-los — foi assim que 61 jobs travaram nesses dois estados.
+export type JobStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "error"
+  | "cancelled"
+  | "waiting_approval"
+  | "approved";
 
 export interface BaseJob<TPayload = any, TResult = any> {
   id: string;
@@ -16,8 +27,11 @@ export interface BaseJob<TPayload = any, TResult = any> {
 }
 
 // === PERSIST_JOBS_V1 ===
-// Path separado do monolito para não colidir com monitor-backend-dev
-const STORE_PATH = process.env.JOBS_STORE_PATH || "/tmp/jobs_store_rw.json";
+// Path separado do monolito para não colidir com monitor-backend-dev.
+// Default em data/ (junto do monitor.db) e não em /tmp: o histórico de jobs não
+// pode sumir num reboot da VM.
+const STORE_PATH =
+  process.env.JOBS_STORE_PATH || path.resolve(__dirname, "../../data/jobs_store_rw.json");
 let jobs: BaseJob[] = [];
 let loaded = false;
 
@@ -175,6 +189,33 @@ export function reclaimOrphans(timeoutMs = ORPHAN_TIMEOUT_MS): number {
   return n;
 }
 // === /ORPHAN_RECLAIM_V1 ===
+
+// === APPROVAL_TIMEOUT_V1 ===
+// `waiting_approval` não tinha nenhuma saída automática: aprovação que o técnico
+// nunca faz mantinha o job aberto para sempre (reclaimOrphans, acima, só toca
+// `processing` — de propósito). Vira `error`, que é o único estado aceito pelo
+// retry (jobRoutes/adminRoutes) — logo o job continua recuperável, não sumido.
+// O `result` é preservado: o snapshot serve de diagnóstico para o admin.
+const APPROVAL_TIMEOUT_MS = Number(process.env.APPROVAL_TIMEOUT_MS) || 12 * 60 * 60 * 1000; // 12h
+
+export function expireStaleApprovals(timeoutMs = APPROVAL_TIMEOUT_MS): number {
+  loadOnce();
+  const cutoff = Date.now() - timeoutMs;
+  let n = 0;
+  for (const j of jobs) {
+    if (j.status !== "waiting_approval") continue;
+    const ts = Date.parse(j.updatedAt);
+    if (!Number.isFinite(ts) || ts < cutoff) {
+      j.status = "error";
+      j.result = { ...(j.result ?? {}), ok: false, reason: "approval_timeout" };
+      j.updatedAt = new Date().toISOString();
+      n++;
+    }
+  }
+  if (n) save();
+  return n;
+}
+// === /APPROVAL_TIMEOUT_V1 ===
 
 export function getJob(id: string): BaseJob | null {
   loadOnce();

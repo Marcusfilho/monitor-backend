@@ -292,10 +292,9 @@ let allModels = [], filteredModels = [];
 // allClients: [{client_id, client_descr, schemes:[], selected_scheme_id, _loaded:bool}]
 let allClients = [], filteredClients = [];
 
-const ACTIVE_JOB  = ['queued','processing','pending'];
-const ACTIVE_INST = ['HTML5_QUEUED','HTML5_RUNNING','SB_QUEUED','SB_RUNNING',
-                     'CAN_QUEUED','CAN_RUNNING','WAITING_REBOOT_CAN',
-                     'GS_QUEUED','GS_RUNNING','HTML5_DONE','SB_DONE'];
+// Instalações são jobs html5_*, então usam os mesmos status reais (minúsculos).
+const ACTIVE_JOB  = ['pending','processing','waiting_approval'];
+const ACTIVE_INST = ACTIVE_JOB;
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 const TAB_NAMES = ['jobs','models','schemes'];
@@ -328,7 +327,7 @@ async function loadAll() {
       fetch(BASE + '/api/admin/installations').then(r=>r.json())
     ]);
     allJobs = (rj.jobs || []).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-    allInst = (ri.installations || []).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
+    allInst = (ri.installations || []).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
     renderJobs(); renderInst();
     setStatus('atualizado ' + new Date().toLocaleTimeString('pt-BR'));
   } catch(e) {
@@ -355,8 +354,9 @@ function renderJobs() {
     const progressHtml = pct !== null
       ? `<div class="progress-bar"><span style="width:${Math.min(100,pct)}%"></span></div>${pct}%`
       : `<span style="color:#333">—</span>`;
-    const canCancel = ACTIVE_JOB.includes(j.status);
     const stClass = (j.status||'').replace(/_/g,'-').toLowerCase();
+    const retryBtn = j.status==='error'
+      ? `<button class="primary" style="padding:3px 8px;font-size:11px" title="Re-enfileirar" onclick="retryJob('${j.id}')">↺</button> ` : '';
     return `<tr>
       <td class="id-cell" title="${j.id}">${j.id}</td>
       <td class="type-cell">${j.type||'—'}</td>
@@ -365,17 +365,15 @@ function renderJobs() {
       <td><span class="badge ${stClass}">${j.status}</span></td>
       <td>${progressHtml}</td>
       <td style="color:#444">${fmtDate(j.createdAt)}</td>
-      <td>${canCancel
-        ? `<button class="danger" style="padding:3px 8px;font-size:11px" onclick="cancelJob('${j.id}')">✕</button>`
-        : `<button disabled style="padding:3px 8px;font-size:11px">✕</button>`}</td>
+      <td>${retryBtn}<button class="danger" style="padding:3px 8px;font-size:11px" title="Encerrar" onclick="cancelJob('${j.id}')">✕</button></td>
     </tr>`;
   }).join('');
 }
 
 function renderInst() {
   const list = instFilter === 'active'
-    ? allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase())) : allInst;
-  const active = allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+    ? allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toLowerCase())) : allInst;
+  const active = allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toLowerCase()));
   const badge = document.getElementById('inst-count');
   badge.textContent = active.length + ' ativa' + (active.length!==1?'s':'');
   badge.className = 'count-badge' + (active.length?' active':'');
@@ -389,16 +387,15 @@ function renderInst() {
     const plate  = i.payload?.plate_real || i.payload?.plateReal || i.payload?.plate || '—';
     const serial = i.payload?.serial || i.serial || '—';
     const stClass = String(i.status||'').toLowerCase().replace(/_/g,'-');
-    const isActive = ACTIVE_INST.includes(String(i.status||'').toUpperCase());
+    const retryBtn = String(i.status||'').toLowerCase()==='error'
+      ? `<button class="primary" style="padding:3px 8px;font-size:11px" title="Re-enfileirar" onclick="retryJob('${id}')">↺</button> ` : '';
     return `<tr>
       <td class="id-cell" title="${id}">${id}</td>
       <td class="plate-cell">${plate}</td>
       <td style="color:#666">${serial}</td>
       <td><span class="badge ${stClass}">${i.status||'—'}</span></td>
-      <td style="color:#444">${fmtDate(i.updated_at)}</td>
-      <td>${isActive
-        ? `<button class="danger" style="padding:3px 8px;font-size:11px" onclick="cancelInst('${id}')">✕</button>`
-        : `<button disabled style="padding:3px 8px;font-size:11px">✕</button>`}</td>
+      <td style="color:#444">${fmtDate(i.updatedAt)}</td>
+      <td>${retryBtn}<button class="danger" style="padding:3px 8px;font-size:11px" title="Encerrar" onclick="cancelInst('${id}')">✕</button></td>
     </tr>`;
   }).join('');
 }
@@ -419,9 +416,17 @@ async function cancelInst(id) {
     await loadAll();
   } catch(e) { toast('Erro: '+e.message, true); }
 }
+async function retryJob(id) {
+  try {
+    const r = await fetch(`${BASE}/api/admin/jobs/${id}/retry`, {method:'POST'});
+    const d = await r.json();
+    d.ok ? toast('Job re-enfileirado') : toast('Erro: '+(d.error||JSON.stringify(d)), true);
+    await loadAll();
+  } catch(e) { toast('Erro: '+e.message, true); }
+}
 async function killAll() {
   const aj = allJobs.filter(j=>ACTIVE_JOB.includes(j.status));
-  const ai = allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+  const ai = allInst.filter(i=>ACTIVE_INST.includes(String(i.status||'').toLowerCase()));
   if (!aj.length && !ai.length) { toast('Nada ativo para cancelar'); return; }
   if (!confirm(`Cancelar ${aj.length} job(s) e ${ai.length} instalação(ões)?`)) return;
   let ok=0, fail=0;
@@ -770,7 +775,7 @@ function esc(s) {
 // Auto-refresh jobs a cada 8s quando há ativos
 setInterval(() => {
   const hasActive = allJobs.some(j=>ACTIVE_JOB.includes(j.status))
-                 || allInst.some(i=>ACTIVE_INST.includes(String(i.status||'').toUpperCase()));
+                 || allInst.some(i=>ACTIVE_INST.includes(String(i.status||'').toLowerCase()));
   if (hasActive && document.getElementById('tab-jobs').classList.contains('active')) loadAll();
 }, 8000);
 

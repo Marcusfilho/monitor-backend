@@ -81,7 +81,7 @@ function httpGet(url: string, reqHeaders: Record<string, string> = {}): Promise<
   });
 }
 
-function httpPost(url: string, body: string, reqHeaders: Record<string, string> = {}): Promise<HttpResult> {
+function httpPost(url: string, body: string, reqHeaders: Record<string, string> = {}, timeoutMs = 45000): Promise<HttpResult> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
@@ -110,7 +110,7 @@ function httpPost(url: string, body: string, reqHeaders: Record<string, string> 
         res.on("error", reject);
       }
     );
-    req.setTimeout(45000, () => { req.destroy(); reject(new Error("POST timeout")); });
+    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error("POST timeout")); });
     req.on("error", reject);
     req.write(buf);
     req.end();
@@ -282,6 +282,22 @@ router.post("/jobs/:id/cancel", (req, res) => {
   }
 });
 
+// Re-enfileira um job em error: status→pending, limpa result/workerId.
+// O worker do tipo correspondente repega no próximo poll.
+router.post("/jobs/:id/retry", (req, res) => {
+  try {
+    const job = getJob(req.params.id);
+    if (!job) return res.status(404).json({ ok: false, error: "Job não encontrado" });
+    if (job.status !== "error") {
+      return res.status(409).json({ ok: false, error: `Job não está em error (status atual: ${job.status})` });
+    }
+    const updated = updateJobStore(req.params.id, { status: "pending", result: null, workerId: null });
+    res.json({ ok: true, job: updated });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // ── INSTALAÇÕES ─────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
@@ -327,72 +343,70 @@ router.get("/asset-types", (_req, res) => {
   }
 });
 
+// syncAssetTypes — faz match entre ASSET_TYPES (catálogo completo) e os
+// manufacturer|model em uso no VHCLS, salvando o resultado em
+// config/asset_types_active.json. Usado pela rota e pelo agendador (index.ts).
+async function syncAssetTypes(): Promise<any> {
+  const loginName = (process.env.HTML5_LOGIN_NAME || "").trim();
+  const loginPass = (process.env.HTML5_PASSWORD   || "").trim();
+  if (!loginName || !loginPass) throw new Error("HTML5_LOGIN_NAME/HTML5_PASSWORD não configurados");
+
+  // 1. Login para obter cookie
+  const cookie = await loginHtml5(loginName, loginPass);
+  if (!cookie) throw new Error("Falha no login HTML5");
+
+  // 2. Buscar catálogo completo de ASSET_TYPES (payload ~1.7MB; o HTML5 leva ~3min)
+  const r = await httpPost(HTML5_ACTION_URL, "action=ASSET_TYPES&VERSION_ID=2", { cookie }, 300000);
+  const catalog = parseAssetTypesXml(r.body);
+  if (!catalog.length) throw new Error("Catálogo ASSET_TYPES vazio ou parse falhou");
+
+  // 3. Buscar VHCLS completo para descobrir quais manufacturer|model estão em uso
+  const rVhcls = await httpPost(
+    HTML5_ACTION_URL,
+    "action=VHCLS&VERSION_ID=2&REFRESH_FLG=1&LICENSE_NMBR=&CLIENT_DESCR=&OWNER_DESCR=&DIAL_NMBR=&INNER_ID=",
+    { cookie }
+  );
+  const allVehicles = parseVhclsXml(rVhcls.body);
+  console.log(`[admin] asset-types sync: ${allVehicles.length} veículos no VHCLS`);
+
+  // 4. Montar Set de pares manufacturer|model em uso (trim + lowercase para tolerar espaços do VHCLS)
+  const usedPairs = new Set<string>();
+  for (const v of allVehicles) {
+    if (v.manufacturer_descr && v.model)
+      usedPairs.add(v.manufacturer_descr.trim().toLowerCase() + "|" + v.model.trim().toLowerCase());
+  }
+  console.log(`[admin] asset-types sync: ${usedPairs.size} pares distintos`);
+
+  // 5. Filtrar catálogo pelos pares em uso (mesma normalização) e normalizar campos
+  const matched = catalog
+    .filter(c => usedPairs.has(c.manufacturer.trim().toLowerCase() + "|" + c.model.trim().toLowerCase()))
+    .map(c => ({ ...c, manufacturer: c.manufacturer.trim(), model: c.model.trim() }));
+  const finalList = matched.sort((a, b) => {
+    const mfg = a.manufacturer.localeCompare(b.manufacturer);
+    return mfg !== 0 ? mfg : a.model.localeCompare(b.model);
+  });
+
+  // 6. Salvar
+  ensureConfigDir();
+  const output = {
+    ok: true,
+    generated_at:    new Date().toISOString(),
+    total_matched:   finalList.length,
+    total_vhcls_ids: usedPairs.size,
+    total_catalog:   catalog.length,
+    asset_types:     finalList,
+  };
+  fs.writeFileSync(ASSET_TYPES_PATH, JSON.stringify(output, null, 2), "utf8");
+  console.log(`[admin] asset-types sync: ${finalList.length} modelos salvos`);
+  return output;
+}
+
 // POST /api/admin/asset-types/sync
 // Faz match entre catalog_vehicle_type.json (modelos usados) e ASSET_TYPES (catálogo completo)
 // Salva resultado em config/asset_types_active.json
 router.post("/asset-types/sync", async (_req, res) => {
-  const loginName = (process.env.HTML5_LOGIN_NAME || "").trim();
-  const loginPass = (process.env.HTML5_PASSWORD   || "").trim();
-
-  if (!loginName || !loginPass) {
-    return res.status(500).json({ ok: false, error: "HTML5_LOGIN_NAME/HTML5_PASSWORD não configurados" });
-  }
-
   try {
-    // 1. Login para obter cookie
-    const cookie = await loginHtml5(loginName, loginPass);
-    if (!cookie) return res.status(502).json({ ok: false, error: "Falha no login HTML5" });
-
-    // 2. Buscar catálogo completo de ASSET_TYPES
-    const r = await httpPost(
-      HTML5_ACTION_URL,
-      "action=ASSET_TYPES&VERSION_ID=2",
-      { cookie }
-    );
-    const catalog = parseAssetTypesXml(r.body);
-    if (!catalog.length) {
-      return res.status(502).json({ ok: false, error: "Catálogo ASSET_TYPES vazio ou parse falhou" });
-    }
-    // 3. Buscar VHCLS completo para descobrir quais manufacturer|model estão em uso
-    const rVhcls = await httpPost(
-      HTML5_ACTION_URL,
-      "action=VHCLS&VERSION_ID=2&REFRESH_FLG=1&LICENSE_NMBR=&CLIENT_DESCR=&OWNER_DESCR=&DIAL_NMBR=&INNER_ID=",
-      { cookie }
-    );
-    const allVehicles = parseVhclsXml(rVhcls.body);
-    console.log(`[admin] asset-types sync: ${allVehicles.length} veículos no VHCLS`);
-
-    // 4. Montar Set de pares manufacturer|model em uso (trim + lowercase para tolerar espaços do VHCLS)
-    const usedPairs = new Set<string>();
-    for (const v of allVehicles) {
-      if (v.manufacturer_descr && v.model)
-        usedPairs.add(v.manufacturer_descr.trim().toLowerCase() + "|" + v.model.trim().toLowerCase());
-    }
-    console.log(`[admin] asset-types sync: ${usedPairs.size} pares distintos`);
-
-    // 5. Filtrar catálogo pelos pares em uso (mesma normalização) e normalizar campos
-    const matched = catalog
-      .filter(c => usedPairs.has(c.manufacturer.trim().toLowerCase() + "|" + c.model.trim().toLowerCase()))
-      .map(c => ({ ...c, manufacturer: c.manufacturer.trim(), model: c.model.trim() }));
-    const fallback: typeof matched = [];
-    const finalList = [...matched, ...fallback].sort((a, b) => {
-      const mfg = a.manufacturer.localeCompare(b.manufacturer);
-      return mfg !== 0 ? mfg : a.model.localeCompare(b.model);
-    });
-
-    // 6. Salvar
-    ensureConfigDir();
-    const output = {
-      ok: true,
-      generated_at:   new Date().toISOString(),
-      total_matched:  finalList.length,
-      total_vhcls_ids: usedPairs.size,
-      total_catalog:  catalog.length,
-      asset_types:    finalList,
-    };
-    fs.writeFileSync(ASSET_TYPES_PATH, JSON.stringify(output, null, 2), "utf8");
-
-    console.log(`[admin] asset-types sync: ${finalList.length} modelos salvos`);
+    const output = await syncAssetTypes();
     res.json(output);
   } catch (e: any) {
     console.error("[admin] asset-types sync error:", e);
@@ -594,7 +608,11 @@ async function syncAssetTypesByClient(): Promise<void> {
   }
 
   // 4. Agrupar asset_type_ids por client_id
-  //    - ignora veículos sem serial (INNER_ID vazio = placeholder/estoque sem rastreador)
+  //    - ignora veículos sem serial (INNER_ID vazio): são cadastros placeholder /
+  //      pré-registro / estoque, NÃO a frota realmente instalada do cliente.
+  //      Incluí-los gera falso-positivo no realce (ex.: JBS mostrava "NA|NA" e
+  //      modelos Constellation que só existem sem serial). Um modelo só conta
+  //      se ao menos um veículo instalado (com serial) o utiliza.
   //    - normaliza chave manufacturer|model (trim + lowercase) para tolerar espaços do VHCLS
   const byClient: Record<string, Set<number>> = {};
   let skippedNoSerial = 0;
@@ -642,5 +660,5 @@ router.post("/asset-types/sync-by-client", async (_req, res) => {
   }
 });
 
-export { syncAssetTypesByClient };
+export { syncAssetTypesByClient, syncAssetTypes };
 export default router;

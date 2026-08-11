@@ -1,9 +1,9 @@
 {
   "ok": true,
-  "generated_at": "2026-06-16T14:33:35.132Z",
-  "total_matched": 270,
-  "total_vhcls_ids": 265,
-  "total_catalog": 9464,
+  "generated_at": "2026-08-11T12:03:54.267Z",
+  "total_matched": 269,
+  "total_vhcls_ids": 264,
+  "total_catalog": 9477,
   "asset_types": [
     {
       "id": 23765,
@@ -46,18 +46,6 @@
       "manufacturer": "Caterpillar",
       "model": "320GC",
       "sub_model": "320GC"
-    },
-    {
-      "id": 24329,
-      "manufacturer": "Caterpillar",
-      "model": "950L",
-      "sub_model": "950L"
-    },
-    {
-      "id": 3363,
-      "manufacturer": "Caterpillar",
-      "model": "980",
-      "sub_model": "980"
     },
     {
       "id": 3428,
@@ -112,12 +100,6 @@
       "manufacturer": "DAF",
       "model": "DAF-XF530-R-FTT-6x4",
       "sub_model": "DAF-XF530-R-FTT-6x4-BRF"
-    },
-    {
-      "id": 21257,
-      "manufacturer": "DAF",
-      "model": "FAD-CF480-MX355-R-PTO2-8X4T",
-      "sub_model": "FAD-CF480-MX355-R-PTO2-8X4T"
     },
     {
       "id": 21256,
@@ -228,12 +210,6 @@
       "sub_model": "CARGO-1519-M-ISB4.5-4X2"
     },
     {
-      "id": 8580,
-      "manufacturer": "Ford",
-      "model": "Cargo-2422E-M-6x2",
-      "sub_model": "Cargo-2422E-M-6x2"
-    },
-    {
       "id": 6461,
       "manufacturer": "Ford",
       "model": "CARGO-2842-A-6X2",
@@ -280,12 +256,6 @@
       "manufacturer": "Iveco",
       "model": "Daily-30VAN-M-4x2-E6",
       "sub_model": "Daily-30VAN-M-4x2-E6"
-    },
-    {
-      "id": 24291,
-      "manufacturer": "Iveco",
-      "model": "Iveco Tector 170E30-M-4x2",
-      "sub_model": "Iveco Tector 170E30-M-4x2"
     },
     {
       "id": 23385,
@@ -348,10 +318,22 @@
       "sub_model": "Tector 170E21-M-4x2-E5"
     },
     {
+      "id": 24291,
+      "manufacturer": "Iveco",
+      "model": "Tector 170E30-M-4x2",
+      "sub_model": "Tector 170E30-M-4x2"
+    },
+    {
       "id": 24290,
       "manufacturer": "Iveco",
       "model": "Tector 24.280-M-6x2-E5",
       "sub_model": "Tector 24.280-M-6x2-E5"
+    },
+    {
+      "id": 24367,
+      "manufacturer": "Iveco",
+      "model": "Tector 24.320 R 6x2 E6",
+      "sub_model": "Tector 24.320 R 6x2 E6"
     },
     {
       "id": 23832,
@@ -408,6 +390,12 @@
       "sub_model": "JAC EJVCC 3.5"
     },
     {
+      "id": 24366,
+      "manufacturer": "JAC",
+      "model": "Q7 JJP 560 R GAS 6x4",
+      "sub_model": "Q7 JJP 560 R GAS 6x4"
+    },
+    {
       "id": 102,
       "manufacturer": "KIA",
       "model": "Seltos",
@@ -424,12 +412,6 @@
       "manufacturer": "Komatsu",
       "model": "PC200",
       "sub_model": "PC200"
-    },
-    {
-      "id": 2462,
-      "manufacturer": "Liebherr",
-      "model": "580",
-      "sub_model": "580"
     },
     {
       "id": 6323,
@@ -450,6 +432,18 @@
       "sub_model": "Accelo-815-OM924LA-M-4x2"
     },
     {
+      "id": 23148,
+      "manufacturer": "Mercedes",
+      "model": "Actros 2548S R 6x2",
+      "sub_model": "Actros 2548S R 6x2"
+    },
+    {
+      "id": 8975,
+      "manufacturer": "Mercedes",
+      "model": "Actros 2651 LS R 6x4",
+      "sub_model": "Actros 2651 LS R 6x4"
+    },
+    {
       "id": 23863,
       "manufacturer": "Mercedes",
       "model": "Actros-2546-OM460-R-6x4-E6",
@@ -460,18 +454,6 @@
       "manufacturer": "Mercedes",
       "model": "Actros-2546LS-OM460LA-R-6X4-E5",
       "sub_model": "Actros-2546LS-OM460LA-R-6X4-E5"
-    },
-    {
-      "id": 23148,
-      "manufacturer": "Mercedes",
-      "model": "ACTROS-2548S-OM460LA-R-6x2-UP",
-      "sub_model": "ACTROS-2548S-OM460LA-R-6x2-UP"
-    },
-    {
-      "id": 8975,
-      "manufacturer": "Mercedes",
-      "model": "ACTROS-2651-OM460LA-R-6x4",
-      "sub_model": "ACTROS-2651-OM460LA-R-6x4"
     },
     {
       "id": 8844,
@@ -572,8 +554,8 @@
     {
       "id": 8242,
       "manufacturer": "Mercedes",
-      "model": "AXOR-2545S-6X4-E6",
-      "sub_model": "AXOR-2545S-6X4-E6"
+      "model": "AXOR-2545S-R-6X4-E6",
+      "sub_model": "AXOR-2545S-R-6X4-E6"
     },
     {
       "id": 5753,
@@ -618,16 +600,16 @@
       "sub_model": "L1620-M-6X2-E3"
     },
     {
+      "id": 8932,
+      "manufacturer": "Mercedes",
+      "model": "LO916-OM924LA-M-4x2-E5",
+      "sub_model": "LO916-OM924LA-M-4x2-E5"
+    },
+    {
       "id": 6638,
       "manufacturer": "Mercedes",
       "model": "LS1938-M-4x2",
       "sub_model": "LS1938-M-4x2"
-    },
-    {
-      "id": 9053,
-      "manufacturer": "Mercedes",
-      "model": "New Sprinter 2019 Activation",
-      "sub_model": "New Sprinter 2019 Activation"
     },
     {
       "id": 19125,
@@ -640,6 +622,12 @@
       "manufacturer": "Mercedes",
       "model": "O500RSD-2441-M-6x2-E5",
       "sub_model": "O500RSD-2441-M-6x2-E5"
+    },
+    {
+      "id": 8712,
+      "manufacturer": "Mercedes",
+      "model": "O500UA-2836-R-6x2-E5",
+      "sub_model": "O500UA-2836-R-6x2-E5"
     },
     {
       "id": 3997,
@@ -682,6 +670,12 @@
       "manufacturer": "Mercedes",
       "model": "Sprinter 320 VIPK AMB EV",
       "sub_model": "Sprinter 320 VIPK AMB EV"
+    },
+    {
+      "id": 8592,
+      "manufacturer": "Mercedes",
+      "model": "Sprinter-417-CD-M-4X2",
+      "sub_model": "Sprinter-417-CD-M-4X2"
     },
     {
       "id": 24273,
@@ -756,6 +750,12 @@
       "sub_model": "Tangjun RD6 Luxury"
     },
     {
+      "id": 24361,
+      "manufacturer": "Rucker",
+      "model": "TT-40",
+      "sub_model": "TT-40"
+    },
+    {
       "id": 24340,
       "manufacturer": "Sany",
       "model": "HQC42503SWEV11",
@@ -814,18 +814,6 @@
       "manufacturer": "Scania",
       "model": "G460-DC9GNV-R-UP-6X2-E6",
       "sub_model": "G460-DC9GNV-R-UP-6X2-E6"
-    },
-    {
-      "id": 23692,
-      "manufacturer": "Scania",
-      "model": "G460-R-6x2",
-      "sub_model": "G460-R-6x2"
-    },
-    {
-      "id": 24328,
-      "manufacturer": "Scania",
-      "model": "G500-B8X4-XT-CS-R-E6",
-      "sub_model": "G500-B8X4-XT-CS-R-E6"
     },
     {
       "id": 8718,
@@ -1086,10 +1074,40 @@
       "sub_model": "Constellation 17.190-M-4X2"
     },
     {
+      "id": 8706,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 19.330 R 4x2",
+      "sub_model": "Constellation 19.330 R 4x2"
+    },
+    {
+      "id": 23393,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 19.380 CTC R 4x2",
+      "sub_model": "Constellation 19.380 CTC R 4x2"
+    },
+    {
       "id": 23481,
       "manufacturer": "Volkswagen",
       "model": "Constellation 24.250-M-6x2",
       "sub_model": "Constellation 24.250-M-6x2"
+    },
+    {
+      "id": 24364,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 25.360 CTC R 6x2",
+      "sub_model": "Constellation 25.360 CTC R 6x2"
+    },
+    {
+      "id": 9048,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 25.360 ISL R 6x2",
+      "sub_model": "Constellation 25.360 ISL R 6x2"
+    },
+    {
+      "id": 24352,
+      "manufacturer": "Volkswagen",
+      "model": "Constellation 25.380 CTC R 6x2",
+      "sub_model": "Constellation 25.380 CTC R 6x2"
     },
     {
       "id": 23861,
@@ -1142,8 +1160,8 @@
     {
       "id": 6011,
       "manufacturer": "Volkswagen",
-      "model": "Constellation-17.280-M-PTO2-6x",
-      "sub_model": "Constellation-17.280-M-PTO2-6x"
+      "model": "Constellation-17.280-M-6x2",
+      "sub_model": "Constellation-17.280-M-6x2"
     },
     {
       "id": 24299,
@@ -1162,12 +1180,6 @@
       "manufacturer": "Volkswagen",
       "model": "Constellation-19.360-R-4x2-E5",
       "sub_model": "Constellation-19.360-R-4x2-E5"
-    },
-    {
-      "id": 23393,
-      "manufacturer": "Volkswagen",
-      "model": "Constellation-19.380-CTC-4x2-R",
-      "sub_model": "Constellation-19.380-CTC-4x2-R"
     },
     {
       "id": 24298,
@@ -1218,22 +1230,10 @@
       "sub_model": "Constellation-24.330-M-6X2"
     },
     {
-      "id": 9048,
-      "manufacturer": "Volkswagen",
-      "model": "Constellation-25.360-R-6x2",
-      "sub_model": "Constellation-25.360-R-6x2"
-    },
-    {
       "id": 24351,
       "manufacturer": "Volkswagen",
       "model": "Constellation-25.380-Prime-M-6",
       "sub_model": "Constellation-25.380-Prime-M-6"
-    },
-    {
-      "id": 24352,
-      "manufacturer": "Volkswagen",
-      "model": "Constellation-25.380-Prime-R-6",
-      "sub_model": "Constellation-25.380-Prime-R-6"
     },
     {
       "id": 8547,
@@ -1374,6 +1374,12 @@
       "sub_model": "Titan-18.310-M-4x2"
     },
     {
+      "id": 24376,
+      "manufacturer": "Volkswagen",
+      "model": "Volksbus 17.260 M E6",
+      "sub_model": "Volksbus 17.260 M E6"
+    },
+    {
       "id": 8687,
       "manufacturer": "Volkswagen",
       "model": "Volksbus-11.180-M-4x2-E6",
@@ -1396,12 +1402,6 @@
       "manufacturer": "Volkswagen",
       "model": "Volksbus-17.260-M-4x2",
       "sub_model": "Volksbus-17.260-M-4x2"
-    },
-    {
-      "id": 24308,
-      "manufacturer": "Volkswagen",
-      "model": "Volksbus-22.260-M-4x2-E6",
-      "sub_model": "Volksbus-22.260-M-4x2-E6"
     },
     {
       "id": 8957,
@@ -1452,10 +1452,16 @@
       "sub_model": "B270F-MWM7B-M-4X2"
     },
     {
+      "id": 23667,
+      "manufacturer": "Volvo",
+      "model": "FH 420 R 6x2T",
+      "sub_model": "FH 420 R 6x2T"
+    },
+    {
       "id": 23695,
       "manufacturer": "Volvo",
-      "model": "FH 460-6x2-D13KE-R-UP-T",
-      "sub_model": "FH 460-6x2-D13KE-R-UP-T"
+      "model": "FH 460 D13KE R 6x2 T",
+      "sub_model": "FH 460 D13KE R 6x2 T"
     },
     {
       "id": 23794,
@@ -1474,12 +1480,6 @@
       "manufacturer": "Volvo",
       "model": "FH 540-6X4-D13KE-R-UP-T",
       "sub_model": "FH 540-6X4-D13KE-R-UP-T"
-    },
-    {
-      "id": 23667,
-      "manufacturer": "Volvo",
-      "model": "FH-420-R-6x2T",
-      "sub_model": "FH-420-R-6x2T"
     },
     {
       "id": 8914,
@@ -1516,12 +1516,6 @@
       "manufacturer": "Volvo",
       "model": "FM-370-R-4x2T",
       "sub_model": "FM-370-R-4x2T"
-    },
-    {
-      "id": 24327,
-      "manufacturer": "Volvo",
-      "model": "FMX-8x4-D13K-R-E5",
-      "sub_model": "FMX-8x4-D13K-R-E5"
     },
     {
       "id": 7164,

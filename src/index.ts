@@ -7,7 +7,7 @@ import installationsRoutes from "./routes/installationsRoutes";
 import { requireSession }  from "./middleware/requireSession";
 import adminRoutes, { syncAssetTypesByClient, syncAssetTypes } from "./routes/adminRoutes";
 import photoRoutes from "./routes/photoRoutes";
-import { reclaimOrphans } from "./jobs/jobStore";
+import { reclaimOrphans, expireStaleApprovals } from "./jobs/jobStore";
 import { sweepSchemeVerify } from "./services/schemeVerifyService";
 
 const app  = express();
@@ -73,6 +73,12 @@ function reclaimOrphanJobs() {
     if (n) console.log(`[index] reclaimOrphans: ${n} job(s) processing→pending`);
   } catch (e: any) {
     console.error("[index] reclaimOrphans ERRO:", e.message);
+  }
+  try {
+    const n = expireStaleApprovals();
+    if (n) console.log(`[index] expireStaleApprovals: ${n} job(s) waiting_approval→error`);
+  } catch (e: any) {
+    console.error("[index] expireStaleApprovals ERRO:", e.message);
   }
 }
 reclaimOrphanJobs();

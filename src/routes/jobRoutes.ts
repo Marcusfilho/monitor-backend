@@ -29,6 +29,25 @@ const router = Router();
 // ─────────────────────────────────────────────────────────────────────────────
 
 
+// Sobe a cadeia `_from` até a raiz (html5_*) e a fecha se ainda estiver em
+// `approved`. O Set guarda contra ciclo: `_from` é gravado pelo próprio pipeline,
+// mas um store corrompido não pode virar loop infinito no callback do worker.
+function closeApprovedRoot(job: BaseJob): void {
+  const seen = new Set<string>([job.id]);
+  let cur: BaseJob = job;
+  while (cur.payload?._from && !seen.has(String(cur.payload._from))) {
+    const parentId = String(cur.payload._from);
+    seen.add(parentId);
+    const parent = getJob(parentId);
+    if (!parent) break;
+    cur = parent;
+  }
+  if (cur.status === "approved") {
+    updateJob(cur.id, { status: "completed" });
+    console.log(`[pipeline] save_snapshot → raiz ${cur.type} ${cur.id} approved → completed`);
+  }
+}
+
 // CHANGE_COMPANY centralizada no installWorker — removida daqui para evitar duplicação.
 function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void {
   if (finalStatus !== "completed") return;
@@ -95,7 +114,23 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
       const needsApproval = needsGs || service === "MAINT_NO_SWAP";
 
       if (needsApproval) {
-        updateJob(job.id, { status: "waiting_approval" as any });
+        // Coleta sem nenhum parâmetro não é snapshot para o técnico validar — é
+        // falha de coleta. Vira `error`, único estado que o retry aceita.
+        // O critério é só `parameters` vazio: canSummary/moduleState NÃO servem,
+        // porque vêm vazios quando a leitura do module state falha mesmo com a
+        // CAN entregando dados (visto em produção: 137 parâmetros com
+        // can0_ok=false). Usá-los reprovaria instalação boa.
+        const params = result?.snapshot?.parameters;
+        if (!Array.isArray(params) || params.length === 0) {
+          updateJob(job.id, {
+            status: "error",
+            result: { ...(result ?? {}), ok: false, reason: "can_sem_parametros" },
+          });
+          console.log(`[pipeline] monitor_can_snapshot sem parâmetros → error plate=${plate} service=${service}`);
+          break;
+        }
+
+        updateJob(job.id, { status: "waiting_approval" });
         console.log(`[pipeline] monitor_can_snapshot → waiting_approval plate=${plate} service=${service}`);
         break;
       }
@@ -112,7 +147,9 @@ function dispatchPipeline(job: BaseJob, result: any, finalStatus: string): void 
       break;
 
     case "save_snapshot":
-      // fim da cadeia
+      // Fim da cadeia: `approved` na raiz é transitório ("aprovado, seguindo"),
+      // e sem isto nada o converte — a instalação terminava com a raiz aberta.
+      closeApprovedRoot(job);
       break;
 
     default:
